@@ -1,0 +1,5 @@
+altair
+bdi-kit
+bokeh
+datamart_profiler
+panel!=1.4.3
