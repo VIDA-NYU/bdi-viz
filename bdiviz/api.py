@@ -2,7 +2,8 @@ import hashlib
 import json
 import logging
 from datetime import datetime
-from os.path import dirname, exists, join
+from os import getenv, makedirs
+from os.path import dirname, exists, expanduser, join
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import altair as alt
@@ -10,7 +11,6 @@ import datamart_profiler
 import numpy as np
 import pandas as pd
 import panel as pn
-from bdikit.download import BDIKIT_CACHE_DIR
 from bdikit.mapping_algorithms.column_mapping.topk_matchers import (
     CLTopkColumnMatcher,
     ColumnScore,
@@ -27,6 +27,9 @@ from sklearn.neighbors import NearestNeighbors
 from bdiviz.utils import LLMAssistant
 
 GDC_DATA_PATH = join(dirname(__file__), "resource/gdc_table.csv")
+default_os_cache_dir = getenv("XDG_CACHE_HOME", join(expanduser("~"), ".cache"))
+BDIVIZ_CACHE_DIR = getenv("BDIVIZ_CACHE", join(default_os_cache_dir, "bdiviz"))
+makedirs(BDIVIZ_CACHE_DIR, exist_ok=True)
 
 # Schema.org types
 SCHEMA_ENUMERATION = "http://schema.org/Enumeration"
@@ -49,9 +52,6 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
     def __init__(
         self,
         source: pd.DataFrame,
-        additional_sources: Optional[
-            Dict[str, pd.DataFrame]
-        ] = None,  # {"Dou": dou_df, ...}
         target: Union[pd.DataFrame, str] = "gdc",
         top_k: int = 10,
         heatmap_recommendations: Optional[List[Dict]] = None,
@@ -72,24 +72,15 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
         ]
 
         # Source and target data
-        self.source = source.sample(min(1000, len(source))).reset_index(drop=True)
-        self.additional_sources = (
-            {
-                name: df.sample(min(1000, len(df))).reset_index(drop=True)
-                for name, df in additional_sources.items()
-            }
-            if additional_sources
-            else None
-        )
+        self.source = source.sample(
+            min(1000, len(source)), random_state=42
+        ).reset_index(drop=True)
         self.target = target
 
         # Source columns lookup
         self.source_columns = [
             (column, self.source_prefix) for column in source.columns
         ]
-        if self.additional_sources:
-            for name, df in self.additional_sources.items():
-                self.source_columns.extend([(column, name) for column in df.columns])
 
         self.top_k = max(1, min(top_k, 40))
 
@@ -101,18 +92,15 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
         self.selected_row = None
 
         # Embeddings
-        self.l_features: Dict[str, List[np.ndarray]] = {}
-        self.r_features = None
+        self.l_features = self._load_cached_features("l")
+        self.r_features = self._load_cached_features("r")
 
         # Load cached results
         cached_heatmap_recommendations = self._load_cached_results()
         if cached_heatmap_recommendations is not None:
             self.heatmap_recommendations = cached_heatmap_recommendations
         else:
-            if heatmap_recommendations is None:
-                self.heatmap_recommendations = self._generate_top_k_matches()
-            else:
-                self.heatmap_recommendations = heatmap_recommendations
+            self.heatmap_recommendations = self._generate_top_k_matches()
             self._cache_results(self.heatmap_recommendations)
 
         self._write_json(self.heatmap_recommendations)
@@ -156,13 +144,15 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
         topk_matcher = CLTopkColumnMatcher(model_name=DEFAULT_CL_MODEL)
 
         # Cache features
-        self.l_features[self.source_prefix] = topk_matcher.api.get_embeddings(
-            self.source
-        )
-        self.r_features = topk_matcher.api.get_embeddings(target_df)
+        if self.l_features is None:
+            self.l_features = topk_matcher.api.get_embeddings(self.source)
+            self._cache_features("l")
+        if self.r_features is None:
+            self.r_features = topk_matcher.api.get_embeddings(target_df)
+            self._cache_features("r")
 
         top_k_matches = self._generate_top_k_matches_from_embeddings(
-            self.source, target_df, self.l_features[self.source_prefix], self.r_features
+            self.source, target_df, self.l_features, self.r_features
         )
 
         output_json = []
@@ -177,24 +167,6 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
                     [column.column_name, float(column.score)]
                 )
             output_json.append(source_dict)
-
-        if self.additional_sources:
-            for name, df in self.additional_sources.items():
-                self.l_features[name] = topk_matcher.api.get_embeddings(df)
-                additional_top_k_matches = self._generate_top_k_matches_from_embeddings(
-                    df, target_df, self.l_features[name], self.r_features
-                )
-                for match in additional_top_k_matches:
-                    source_dict = {
-                        "source_column": match["source_column"],
-                        "top_k_columns": [],
-                        "source_dataset": name,
-                    }
-                    for column in match["top_k_columns"]:
-                        source_dict["top_k_columns"].append(  # type: ignore
-                            [column.column_name, float(column.score)]
-                        )
-                    output_json.append(source_dict)
 
         return output_json
 
@@ -317,7 +289,7 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
 
     def _load_json(self) -> "List[Dict] | None":
         cache_path = join(
-            BDIKIT_CACHE_DIR,
+            BDIVIZ_CACHE_DIR,
             f"reducings_{self._get_ground_truth_checksum()}_{self._get_data_checksum()}_{self.top_k}.tmp.json",
         )
         if exists(cache_path):
@@ -330,7 +302,7 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
         self.heatmap_recommendations = data
 
         # cache_path = join(
-        #     BDIKIT_CACHE_DIR,
+        #     BDIVIZ_CACHE_DIR,
         #     f"reducings_{self._get_ground_truth_checksum()}_{self._get_data_checksum()}_{self.top_k}.tmp.json",
         # )
 
@@ -386,13 +358,11 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
         knn = NearestNeighbors(
             n_neighbors=min(10, len(self.source.columns)), metric="cosine"
         )
-        l_features_flat = []
-        for _, l_features in self.l_features.items():
-            l_features_flat.extend(l_features)
+        l_features_flat = self.l_features
         knn.fit(np.array(l_features_flat))
         clusters_idx = [
             knn.kneighbors([l_feature], return_distance=False)[0]  # type: ignore
-            for l_feature in self.l_features[self.source_prefix]
+            for l_feature in self.l_features
         ]
 
         clusters = {}
@@ -457,20 +427,6 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
                 source_values = list(
                     self.source[source_column].dropna().unique().astype(str)
                 )[:20]
-
-            elif self.additional_sources and source_df in self.additional_sources:
-                if pd.api.types.is_numeric_dtype(
-                    self.additional_sources[source_df][source_column]
-                ):
-                    continue
-
-                source_values = list(
-                    self.additional_sources[source_df][source_column]
-                    .dropna()
-                    .unique()
-                    .astype(str)
-                )[:20]
-
             else:
                 continue
 
@@ -579,10 +535,7 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
             tooltip.append(alt.Tooltip("Subschema", title="Subschema"))
         # facet = alt.Facet(alt.Undefined)
 
-        if self.additional_sources:
-            source_transformation = alt.datum["DataFrame"] + ">" + alt.datum["Column"]
-        else:
-            source_transformation = alt.datum["Column"]
+        source_transformation = alt.datum["Column"]
 
         size_expr = alt.expr(f"datam.value == {single.name} ? 20 : 10")
         weight_expr = alt.expr(f"datam.value == {single.name} ? 800 : 300")
@@ -633,51 +586,7 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
         background = base.mark_rect()
 
         box_sources = []
-        if self.additional_sources:
-            y_source = heatmap_rec_list[
-                heatmap_rec_list["DataFrame"] == self.source_prefix
-            ]
-            box_source_base = (
-                alt.Chart(y_source)
-                .transform_calculate(Column=source_transformation)
-                .encode(
-                    text=alt.condition(
-                        alt.datum["DataFrame"] == self.source_prefix,
-                        alt.value("source"),
-                        alt.TextDatum("DataFrame"),
-                    ),  # type: ignore
-                    y="Column:O",
-                )
-            )
-            box_source = box_source_base.mark_rect(
-                color="", stroke="gray", strokeWidth=1
-            )
-            box_source_text = box_source.mark_text(baseline="middle", color="gray")
-            box_sources.append(box_source)
-            box_sources.append(box_source_text)
-
-            for idx, (name, _) in enumerate(self.additional_sources.items()):
-                color = self.source_colors[idx]
-
-                y_source = heatmap_rec_list[heatmap_rec_list["DataFrame"] == name]
-                box_source_base = (
-                    alt.Chart(y_source)
-                    .transform_calculate(Column=source_transformation)
-                    .encode(
-                        text="DataFrame:O",
-                        y="Column:O",
-                    )
-                )
-                box_source = box_source_base.mark_rect(
-                    color="", stroke=color, strokeWidth=1
-                )
-                box_source_text = box_source.mark_text(baseline="middle", color=color)
-                box_sources.append(box_source)
-                box_sources.append(box_source_text)
-
-            return pn.pane.Vega(alt.layer(background, *box_sources))
-        else:
-            return pn.pane.Vega(background)
+        return pn.pane.Vega(background)
 
     def _update_column_selection(
         self, heatmap_rec_list: pd.DataFrame, selection: List[int]
@@ -840,10 +749,6 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
 
         if source_df == self.source_prefix:
             return self._plot_column_histogram(column, self.source)
-        elif self.additional_sources and source_df in self.additional_sources:
-            return self._plot_column_histogram(
-                column, self.additional_sources[source_df]
-            )
         else:
             return pn.pane.Markdown("No source data found.")
 
@@ -1305,12 +1210,12 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
 
     # For caching purposes
     def _get_data_checksum(self) -> str:
-        return hashlib.sha1(pd.util.hash_pandas_object(self.source).values).hexdigest()  # type: ignore
+        return hashlib.sha1(pd.util.hash_pandas_object(self.source, index=False).values).hexdigest()  # type: ignore
 
     def _get_ground_truth_checksum(self) -> str:
         if isinstance(self.target, pd.DataFrame):
             gt_checksum = hashlib.sha1(
-                pd.util.hash_pandas_object(self.target).values  # type: ignore
+                pd.util.hash_pandas_object(self.target, index=False).values  # type: ignore
             ).hexdigest()
         else:
             gt_checksum = self.target
@@ -1318,16 +1223,55 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
 
     def _cache_results(self, reducings: List[Dict]) -> None:
         cache_path = join(
-            BDIKIT_CACHE_DIR,
+            BDIVIZ_CACHE_DIR,
             f"reducings_{self._get_ground_truth_checksum()}_{self._get_data_checksum()}_{self.top_k}.json",
         )
         if not exists(cache_path):
             with open(cache_path, "w") as f:
                 json.dump(reducings, f)
 
+    def _cache_features(self, feature_type: str) -> None:
+        if feature_type == "l":
+            features = self.l_features
+            checksum = self._get_data_checksum()
+        elif feature_type == "r":
+            features = self.r_features
+            checksum = self._get_ground_truth_checksum()
+        else:
+            raise ValueError("Invalid feature type.")
+        features_cache_path = join(
+            BDIVIZ_CACHE_DIR,
+            f"features_{checksum}.ft",
+        )
+        if not exists(features_cache_path):
+            with open(features_cache_path, "w") as f:
+                for vec in features:
+                    f.write(",".join([str(val) for val in vec]) + "\n")
+
+    def _load_cached_features(self, feature_type: str) -> Optional[Dict]:
+        if feature_type == "l":
+            features_cache_path = join(
+                BDIVIZ_CACHE_DIR,
+                f"features_{self._get_data_checksum()}.ft",
+            )
+        elif feature_type == "r":
+            features_cache_path = join(
+                BDIVIZ_CACHE_DIR,
+                f"features_{self._get_ground_truth_checksum()}.ft",
+            )
+        if exists(features_cache_path):
+            with open(features_cache_path) as f:
+                features = [
+                    [float(val) for val in vec.split(",")]
+                    for vec in f.read().split("\n")
+                    if vec.strip()
+                ]
+                return features
+        return None
+
     def _load_cached_results(self) -> Optional[List[Dict]]:
         cache_path = join(
-            BDIKIT_CACHE_DIR,
+            BDIVIZ_CACHE_DIR,
             f"reducings_{self._get_ground_truth_checksum()}_{self._get_data_checksum()}_{self.top_k}.json",
         )
         if exists(cache_path):
