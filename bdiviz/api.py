@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import warnings
 from datetime import datetime
 from os import getenv, makedirs
 from os.path import dirname, exists, expanduser, join
@@ -40,6 +41,9 @@ SCHEMA_BOOLEAN = "http://schema.org/Boolean"
 
 
 logger = logging.getLogger("bdiviz")
+warnings.filterwarnings("ignore")
+logger_datamart = logging.getLogger("datamart_profiler")
+logger_datamart.setLevel(logging.CRITICAL)
 
 pn.extension("tabulator")  # type: ignore
 pn.extension("mathjax")  # type: ignore
@@ -701,7 +705,7 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
             text_color = "transparent"
         else:
             values = list(dataset[column].unique())
-            if len(values) == len(dataset[column]):
+            if len(values) == len(dataset[column]) or len(values) >= 30:
                 string = f"""Values are unique. 
                 Some samples: {values[:5]}"""
                 return pn.pane.Markdown(string)
@@ -1283,14 +1287,16 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
         self, source: pd.DataFrame, target: pd.DataFrame, top_k: int
     ) -> List[TopkMatching]:
         recommendations = []
-        for reducings in self.heatmap_recommendations:
-            recommendations.append(
-                {
-                    "source_column": reducings["source_column"],
-                    "top_k_columns": [
+        for source_column in source.columns:
+            top_k_columns = []
+            for reducings in self.heatmap_recommendations:
+                if reducings["source_column"] == source_column:
+                    top_k_columns = [
                         ColumnScore(column_name=column[0], score=column[1])
                         for column in reducings["top_k_columns"]
-                    ],
-                }
+                    ]
+                    break
+            recommendations.append(
+                TopkMatching(source_column=source_column, top_k_columns=top_k_columns)
             )
         return recommendations
