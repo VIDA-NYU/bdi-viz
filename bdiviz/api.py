@@ -53,6 +53,24 @@ pn.extension("jsoneditor")  # type: ignore
 
 
 class BDISchemaMatchingHeatMap(TopkColumnMatcher):
+    """
+    BDISchemaMatchingHeatMap is a class for generating and visualizing schema matching heatmaps between a source DataFrame and a target DataFrame or predefined dataset.
+    
+    :param source: The source DataFrame containing the columns to be matched.
+    :type source: pd.DataFrame
+    :param target: The target DataFrame or a string identifier for a predefined dataset (default is "gdc").
+    :type target: Union[pd.DataFrame, str]
+    :param top_k: The number of top matches to consider for each source column (default is 10).
+    :type top_k: int
+    :param heatmap_recommendations: Optional precomputed heatmap recommendations (default is None).
+    :type heatmap_recommendations: Optional[List[Dict]]
+    :param max_chars_samples: Maximum number of characters for sample values (default is 150).
+    :type max_chars_samples: int
+    :param height: Height of the heatmap visualization (default is 600).
+    :type height: int
+    :param ai_assitant: Flag to enable AI assistant for recommendations (default is False).
+    :type ai_assitant: bool
+    """
     def __init__(
         self,
         source: pd.DataFrame,
@@ -1028,6 +1046,9 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
         return pn.chat.ChatInterface(callback=callback, scroll=True)
 
     def plot_heatmap(self) -> pn.Column:
+        """
+        Plot the heatmap for the user to interact with.
+        """
         select_column = pn.widgets.Select(
             name="Source Column",
             options=list(self.source.columns),
