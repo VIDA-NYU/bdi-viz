@@ -12,7 +12,7 @@ copyright = "2024, NYU VIDA Lab"
 author = "Eden Wu"
 
 release = "0.1"
-version = "0.1.0"
+version = "0.1.0dev"
 
 # -- General configuration
 
