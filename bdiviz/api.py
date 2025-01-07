@@ -65,7 +65,7 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
     ) -> None:
         """
         BDISchemaMatchingHeatMap is a class for generating and visualizing schema matching heatmaps between a source DataFrame and a target DataFrame or predefined dataset.
-        
+
         :param source: The source DataFrame containing the columns to be matched.
         :type source: pd.DataFrame
         :param target: The target DataFrame or a string identifier for a predefined dataset (default is "gdc").

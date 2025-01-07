@@ -15,12 +15,14 @@ how to :ref:`installation` the project.
 
    This project is under active development.
 
-.. disclaimer::
+
+Disclaimer
+----------
 
    This project is part of the ASKEM ARPA-H initiative and is funded by DARPA. It is a property of the NYU VIDA Lab.
 
 Contents
---------
+-----------
 
 .. toctree::
 

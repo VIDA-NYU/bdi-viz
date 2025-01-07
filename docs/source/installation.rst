@@ -1,5 +1,5 @@
 Installation
-=====
+==============
 
 
 To use ``BDI-Viz``, install it using pip:
