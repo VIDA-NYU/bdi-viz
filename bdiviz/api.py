@@ -599,7 +599,7 @@ class BDISchemaMatchingHeatMap(TopkColumnMatcher):
                         alt.expr.regexp(search_input, "i"), alt.datum.Recommendation
                     ),
                     alt.value(1),
-                    alt.value(0.5),
+                    alt.value(0.2),
                 ),  # type: ignore
                 tooltip=tooltip,
             )
