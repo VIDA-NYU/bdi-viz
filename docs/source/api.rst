@@ -1,7 +1,7 @@
 API
 ===
 
-.. module:: bdiviz.api
+.. module:: bdiviz
 
 .. autoclass:: BDISchemaMatchingHeatMap
    :members:

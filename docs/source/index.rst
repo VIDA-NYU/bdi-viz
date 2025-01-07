@@ -1,5 +1,5 @@
 Welcome to BDI-Viz 1.0 's documentation!
-===================================
+===========================================
 
 **BDI-Viz** (Biomedical Data Integration Visualization) is a powerful, interactive tool 
 designed as an extension to [BDIKit](https://github.com/VIDA-NYU/bdi-kit) to assist 

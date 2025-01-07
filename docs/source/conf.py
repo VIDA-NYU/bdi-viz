@@ -1,5 +1,10 @@
 # Configuration file for the Sphinx documentation builder.
 
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath('../../'))
+
 # -- Project information
 
 project = 'BDI-Viz'
@@ -17,6 +22,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
+    "nbsphinx",
 ]
 
 intersphinx_mapping = {
@@ -33,3 +39,33 @@ html_theme = 'sphinx_rtd_theme'
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
+
+autodoc_member_order = 'bysource'
+
+autoclass_content = 'both'
+
+add_module_names = False
+
+autodoc_mock_imports = [
+    "bdi-kit",
+    "bdikit", 
+    "bokeh", 
+    "datamart_profiler", 
+    "sklearn",
+    "pandas",
+    "numpy",
+    "IPython",
+    "torch",
+    "transformers",
+    "matplotlib",
+    "openai",
+    "polyfuzz",
+    "flair",
+    "autofj",
+    "Levenshtein",
+    "valentine",
+    "altair",
+    "panel",
+    "tqdm",
+    "rapidfuzz",
+]
