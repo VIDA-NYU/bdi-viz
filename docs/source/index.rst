@@ -1,4 +1,4 @@
-Welcome to BDI-Viz 1.0 's documentation!
+Welcome to BDI-Viz 1.0!
 ===========================================
 
 **BDI-Viz** (Biomedical Data Integration Visualization) is a powerful, interactive tool 

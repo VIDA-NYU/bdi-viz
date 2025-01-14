@@ -36,6 +36,11 @@ version = read_version()
 requires = get_requires()
 extra_requires = {}
 
+project_urls = {
+  'Documentation': 'https://bdi-viz.readthedocs.io/en/latest/',
+  'Project Link': 'https://vida-nyu.github.io/BDF'
+}
+
 setuptools.setup(
     name=package_name,
     version=version,
@@ -46,6 +51,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/VIDA-NYU/bdi-viz",
+    project_urls=project_urls,
     include_package_data=True,
     author="Eden Wu",
     author_email="eden.wu@nyu.edu",
