@@ -25,7 +25,15 @@ Contents
 -----------
 
 .. toctree::
+   :maxdepth: 2
+   :caption: Getting Started
 
    installation
-   getting-started
    api
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Use Cases
+
+   getting-started
+   arpa-h-demo
