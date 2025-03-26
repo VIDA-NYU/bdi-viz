@@ -57,10 +57,10 @@ class Agent:
     Your role is to assist with schema matching operations and provide responses in a strict JSON schema format.
     Do not include any reasoning, apologies, or explanations in your responses.
 
-    **Criteria for matching columns:**
-    1. Column names and values do not need to be identical.
+    **Criteria for matching attributes:**
+    1. Attribute names and values do not need to be identical.
     2. Ignore case, special characters, and spaces.
-    3. Columns should be considered a match if they are semantically similar and their datatype and values are comparable.
+    3. Attributes should be considered a match if they are semantically similar and their datatype and values are comparable.
     4. Approach the task with the mindset of a biomedical expert.
             """,
         ]
@@ -120,8 +120,8 @@ class Agent:
         prompt = f"""
     Analyze the following user operation details:
 
-    - Source Column: {candidate["sourceColumn"]}
-    - Target Column: {candidate["targetColumn"]}
+    - Source Attribute: {candidate["sourceColumn"]}
+    - Target Attribute: {candidate["targetColumn"]}
     - Source Sample Values: {candidate["sourceValues"]}
     - Target Sample Values: {target_values}
     - Target Description: {target_description}
@@ -133,10 +133,10 @@ class Agent:
 
     Instructions:
     1. Review the operation details alongside the historical data.
-    2. Provide up to four possible explanations that justify whether the columns are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
+    2. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
     3. Conclude if the current candidate is a valid match based on:
         a. Your explanations,
-        b. Similarity between the column names,
+        b. Similarity between the attribute names,
         c. Consistency of the sample values, and descriptions provide
         d. The history of false positives and negatives.
     4. Include any additional context or keywords that might support or contradict the current mapping.
