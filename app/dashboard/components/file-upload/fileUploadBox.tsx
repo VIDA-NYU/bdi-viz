@@ -65,7 +65,7 @@ export function Dropzone(props: DropzoneProps) {
                 }}>Drag &apos;n&apos; drop a CSV file here</Typography>
             </Box>
             <Box sx={{ mt: 1 }}>
-                <SectionLabel>Files</SectionLabel>
+                <SectionLabel>{name}</SectionLabel>
                 <List>{files}</List>
             </Box>
         </Box>

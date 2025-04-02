@@ -15,11 +15,16 @@ from .utils import (
     extract_data_from_request,
     extract_session_name,
     load_gdc_property,
+    load_property,
+    parse_llm_generated_ontology,
     read_candidate_explanation_json,
     write_candidate_explanation_json,
 )
 
 GDC_DATA_PATH = os.path.join(os.path.dirname(__file__), "./resources/cptac-3.csv")
+GDC_JSON_PATH = os.path.join(
+    os.path.dirname(__file__), "./resources/gdc_ontology_flat.json"
+)
 
 app = Flask("bdiviz_flask")
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
@@ -30,10 +35,24 @@ app.logger.setLevel(logging.INFO)
 def matcher():
     matching_task = SESSION_MANAGER.get_session("default").matching_task
 
-    target = pd.read_csv(GDC_DATA_PATH)
+    source, target, target_json = extract_data_from_request(request)
+    if target is None:
+        # GDC
+        target = pd.read_csv(GDC_DATA_PATH)
+        target_json = json.load(open(GDC_JSON_PATH, "r"))
+    else:
+        if target_json is None:
+            app.logger.info("[AGENT] Generating ontology...")
+            response = AGENT.infer_ontology(target)
+            target_json = response.model_dump()
+        target_json = parse_llm_generated_ontology(target_json)
 
-    source, _ = extract_data_from_request(request)
+    # cache csvs
     source.to_csv(".source.csv", index=False)
+    target.to_csv(".target.csv", index=False)
+    # cache json
+    with open(".target.json", "w") as f:
+        json.dump(target_json, f)
 
     app.logger.info("Matching task started!")
 
@@ -52,9 +71,11 @@ def get_exact_matches():
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
             source = pd.read_csv(".source.csv")
-            matching_task.update_dataframe(
-                source_df=source, target_df=pd.read_csv(GDC_DATA_PATH)
-            )
+            if os.path.exists(".target.csv"):
+                target = pd.read_csv(".target.csv")
+            else:
+                target = pd.read_csv(GDC_DATA_PATH)
+            matching_task.update_dataframe(source_df=source, target_df=target)
         _ = matching_task.get_candidates()
     results = matching_task.update_exact_matches()
 
@@ -69,9 +90,11 @@ def get_results():
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
             source = pd.read_csv(".source.csv")
-            matching_task.update_dataframe(
-                source_df=source, target_df=pd.read_csv(GDC_DATA_PATH)
-            )
+            if os.path.exists(".target.csv"):
+                target = pd.read_csv(".target.csv")
+            else:
+                target = pd.read_csv(GDC_DATA_PATH)
+            matching_task.update_dataframe(source_df=source, target_df=target)
         candidates = matching_task.get_candidates()
         # AGENT.remember_candidates(candidates)
 
@@ -88,9 +111,11 @@ def get_unique_values():
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
             source = pd.read_csv(".source.csv")
-            matching_task.update_dataframe(
-                source_df=source, target_df=pd.read_csv(GDC_DATA_PATH)
-            )
+            if os.path.exists(".target.csv"):
+                target = pd.read_csv(".target.csv")
+            else:
+                target = pd.read_csv(GDC_DATA_PATH)
+            matching_task.update_dataframe(source_df=source, target_df=target)
         _ = matching_task.get_candidates()
     results = matching_task.unique_values_to_frontend_json()
 
@@ -105,9 +130,11 @@ def get_value_matches():
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
             source = pd.read_csv(".source.csv")
-            matching_task.update_dataframe(
-                source_df=source, target_df=pd.read_csv(GDC_DATA_PATH)
-            )
+            if os.path.exists(".target.csv"):
+                target = pd.read_csv(".target.csv")
+            else:
+                target = pd.read_csv(GDC_DATA_PATH)
+            matching_task.update_dataframe(source_df=source, target_df=target)
         _ = matching_task.get_candidates()
     results = matching_task.value_matches_to_frontend_json()
 
@@ -131,6 +158,26 @@ def get_gdc_ontology():
     return {"message": "success", "results": results}
 
 
+@app.route("/api/ontology", methods=["POST"])
+def get_ontology():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    if matching_task.source_df is None or matching_task.target_df is None:
+        if os.path.exists(".source.csv"):
+            source = pd.read_csv(".source.csv")
+            if os.path.exists(".target.csv"):
+                target = pd.read_csv(".target.csv")
+            else:
+                target = pd.read_csv(GDC_DATA_PATH)
+            matching_task.update_dataframe(source_df=source, target_df=target)
+        _ = matching_task.get_candidates()
+
+    results = matching_task._generate_ontology()
+
+    return {"message": "success", "results": results}
+
+
 @app.route("/api/gdc/property", methods=["POST"])
 def get_gdc_property():
     session = extract_session_name(request)
@@ -139,6 +186,18 @@ def get_gdc_property():
     target_col = request.json["targetColumn"]
 
     property = load_gdc_property(target_col)
+
+    return {"message": "success", "property": property}
+
+
+@app.route("/api/property", methods=["POST"])
+def get_property():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    target_col = request.json["targetColumn"]
+
+    property = load_property(target_col)
 
     return {"message": "success", "property": property}
 

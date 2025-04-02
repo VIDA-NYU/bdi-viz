@@ -192,7 +192,7 @@ const getTargetOntology = (prop: targetOntologyProps) => {
     return new Promise<void>((resolve, reject) => {
         const httpAgent = new http.Agent({ keepAlive: true });
         const httpsAgent = new https.Agent({ keepAlive: true });
-        axios.post("/api/gdc/ontology", {
+        axios.post("/api/ontology", {
             httpAgent,
             httpsAgent,
             timeout: 600000, // 10 minutes in milliseconds
@@ -340,7 +340,7 @@ const getGDCAttribute = (prop: getGDCAttributeProps) => {
     return new Promise<void>((resolve, reject) => {
         const httpAgent = new http.Agent({ keepAlive: true });
         const httpsAgent = new https.Agent({ keepAlive: true });
-        axios.post("/api/gdc/property", {
+        axios.post("/api/property", {
             targetColumn: prop.targetColumn,
         }, {
             httpAgent,
@@ -354,14 +354,7 @@ const getGDCAttribute = (prop: getGDCAttributeProps) => {
                     category: property.category,
                     node: property.node,
                     type: property.type,
-                    description: property.description.map((desc: object) => {
-                        try {
-                            return desc as GDCDescription;
-                        } catch (error) {
-                            console.error("Error parsing result to GDCDescription:", error);
-                            return null;
-                        }
-                    }).filter((desc: GDCDescription | null) => desc !== null),
+                    description: property.description,
                     enum: property.enum,
                     minimum: property.minimum,
                     maximum: property.maximum,

@@ -172,3 +172,37 @@ class RelatedSources(BaseModel):
     """Related sources from the agent."""
 
     sources: List[RelatedSource] = Field(description="The related sources")
+
+
+class AttributeProperties(BaseModel):
+    """Attribute properties from the agent."""
+
+    column_name: str = Field(description="The name of the column")
+    category: str = Field(description="The category of the column, grandparent level")
+    node: str = Field(description="The node of the column, parent level")
+    type: str = Field(
+        description="""The type of the column, e.g.
+- enum: categorical value
+- number: numerical value
+- string: string value
+- boolean: boolean value
+- other: other types"""
+    )
+    description: str = Field(description="The description of the column")
+    enum: Optional[List[str]] = Field(
+        default=None, description="The enum values of the column, if applicable"
+    )
+    maximum: Optional[Union[float, int]] = Field(
+        default=None, description="The maximum value of the column, if applicable"
+    )
+    minimum: Optional[Union[float, int]] = Field(
+        default=None, description="The minimum value of the column, if applicable"
+    )
+
+
+class Ontology(BaseModel):
+    """Ontology information from the agent."""
+
+    properties: List[AttributeProperties] = Field(
+        description="The properties of the ontology, including column name, category, node, type, description, enum, maximum, minimum"
+    )

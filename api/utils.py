@@ -37,6 +37,7 @@ def extract_session_name(request) -> str:
 def extract_data_from_request(request):
     source_df = None
     target_df = None
+    target_json = None
 
     if request.form is None:
         return None
@@ -49,7 +50,17 @@ def extract_data_from_request(request):
         source_csv_string_io = StringIO(source_csv)
         source_df = pd.read_csv(source_csv_string_io, sep=",")
 
-    return source_df, target_df
+        if "target_csv" in form:
+            target_csv = form["target_csv"]
+            target_csv_string_io = StringIO(target_csv)
+            target_df = pd.read_csv(target_csv_string_io, sep=",")
+
+        if "target_json" in form:
+            target_json = form["target_json"]
+            target_json_string_io = StringIO(target_json)
+            target_json = parse_llm_generated_ontology(json.load(target_json_string_io))
+
+    return source_df, target_df, target_json
 
 
 @check_cache_dir
@@ -192,3 +203,82 @@ def is_candidate_for_category(
     if unique_count <= unique_threshold or unique_ratio < ratio_threshold:
         return True
     return False
+
+
+def parse_llm_generated_ontology(ontology: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Cache the generated ontology to a JSON file.
+
+    Parameters:
+        ontology (Dict[str, Any]): The ontology to cache.
+    """
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR)
+
+    # Parse the ontology to ensure it's in the correct format
+    if "properties" not in ontology:
+        return
+
+    properties = ontology["properties"]
+    json_dict = {}
+    for property in properties:
+        if "column_name" not in property:
+            continue
+        column_name = property["column_name"]
+        json_dict[column_name] = property
+
+    return json_dict
+
+
+def load_ontology(candidates: List[Dict[str, Any]]) -> List[Dict]:
+    """
+    Load the ontology from a JSON file.
+
+    Returns:
+        List[Dict]: The loaded ontology.
+    """
+    with open(".target.json", "r") as f:
+        ontology_flat = json.load(f)
+
+    hiarchies = {}
+    target_columns = set()
+    for candidate in candidates:
+        target_columns.add(candidate["targetColumn"])
+
+    for target_column in list(target_columns):
+        if target_column not in ontology_flat:
+            continue
+        ontology = ontology_flat[target_column]
+        category = ontology["category"]
+        node = ontology["node"]
+        if category not in hiarchies:
+            hiarchies[category] = {"level": 0, "children": {}}
+        if node not in hiarchies[category]["children"]:
+            hiarchies[category]["children"][node] = {"level": 1, "children": {}}
+        hiarchies[category]["children"][node]["children"][target_column] = {
+            "level": 2,
+            "children": [],
+        }
+
+    ret = []
+    for category, category_info in hiarchies.items():
+        for node, node_info in category_info["children"].items():
+            for target_column in node_info["children"].keys():
+                target_column_obj = {
+                    "name": target_column,
+                    "parent": node,
+                    "grandparent": category,
+                }
+                ret.append(target_column_obj)
+    return ret
+
+
+def load_property(target_column: str) -> Optional[Dict[str, Any]]:
+    with open(".target.json", "r") as f:
+        ontology_flat = json.load(f)
+
+    property = None
+    if target_column in ontology_flat:
+        property = ontology_flat[target_column]
+
+    return property

@@ -22,6 +22,7 @@ type DashboardCandidateState = {
     handleUserOperationsUpdate: (newUserOperations: UserOperation[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
     setGdcAttribute: (attribute: GDCAttribute | undefined) => void;
+    handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
 }
 
 export type { DashboardCandidateState };
@@ -128,6 +129,7 @@ export const {
             handleUserOperationsUpdate,
             handleValueMatches,
             setGdcAttribute,
+            handleTargetOntology,
         };
     }
 };

@@ -63,6 +63,7 @@ export default function Dashboard() {
         handleUserOperationsUpdate,
         handleValueMatches,
         setGdcAttribute,
+        handleTargetOntology,
     } = useDashboardCandidates();
 
     const {
@@ -277,6 +278,7 @@ export default function Dashboard() {
                     state={{ sourceColumn, candidateType, similarSources, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleFileUpload}
+                    handleTargetOntology={handleTargetOntology}
                 />
 
                     {/* <DualScatter

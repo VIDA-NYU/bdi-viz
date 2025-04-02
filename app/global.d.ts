@@ -131,7 +131,7 @@ declare interface GDCAttribute {
     category: string;
     node: string;
     type: string;
-    description: GDCDescription[];
+    description: GDCDescription[] | string;
     enum?: string[];
     minimum?: number;
     maximum?: number;

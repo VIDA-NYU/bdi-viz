@@ -2,6 +2,10 @@ import logging
 import random
 from typing import Any, Dict, Generator, List, Optional
 
+import pandas as pd
+
+pd.set_option("display.max_columns", None)
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,12 +24,13 @@ from pydantic import BaseModel
 from ..tools.candidate_butler import CandidateButler
 from ..tools.rag_researcher import retrieve_from_rag
 from ..tools.source_scraper import scraping_websource
-from ..utils import load_gdc_property
+from ..utils import load_gdc_property, load_property
 from .memory import MemoryRetriver
 from .pydantic import (
     ActionResponse,
     AgentSuggestions,
     CandidateExplanation,
+    Ontology,
     RelatedSources,
     SearchResponse,
     SuggestedValueMappings,
@@ -103,7 +108,7 @@ class Agent:
             f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
         )
 
-        target_description = load_gdc_property(candidate["targetColumn"])
+        target_description = load_property(candidate["targetColumn"])
         target_values = candidate["targetValues"]
         if "enum" in target_description:
             target_enum = target_description["enum"]
@@ -258,6 +263,29 @@ Diagnosis:
             output_structure=RelatedSources,
         )
 
+        return response
+
+    def infer_ontology(self, target_df: pd.DataFrame) -> Ontology:
+        logger.info(f"[Agent] Inferring ontology...")
+
+        prompt = f"""
+    You are given a pandas DataFrame containing target data.
+    Review the preview below and determine the ontology for each column.
+
+    DataFrame Preview:
+    {target_df.head()}
+
+    Instructions:
+    1. For EVERY column, create an AttributeProperties object that describes its ontology FOR EACH OF THEM.
+    2. Return your answer strictly as a JSON object following the Ontology schema, with no extra text.
+    """
+
+        logger.info(f"[INFER-ONTOLOGY] Prompt: {prompt}")
+        response = self.invoke(
+            prompt=prompt,
+            tools=[],
+            output_structure=Ontology,
+        )
         return response
 
     def apply(

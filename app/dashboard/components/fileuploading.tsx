@@ -2,7 +2,7 @@
 
 import { useContext, useState } from "react";
 import axios from "axios";
-import { getCachedResults } from "@/app/lib/heatmap/heatmap-helper";
+import { getCachedResults, getTargetOntology } from "@/app/lib/heatmap/heatmap-helper";
 
 import { Box, Paper, IconButton } from "@mui/material";
 import { BasicButton } from "../layout/components";
@@ -13,9 +13,10 @@ import { Dropzone } from "./file-upload/fileUploadBox";
 
 interface FileUploadingProps {
     callback: (candidates: Candidate[], sourceCluster: SourceCluster[]) => void;
+    ontologyCallback: (targetOntology: TargetOntology[]) => void;
 }
 
-const FileUploading: React.FC<FileUploadingProps> = ({ callback }) => {
+const FileUploading: React.FC<FileUploadingProps> = ({ callback, ontologyCallback }) => {
     const { setIsLoadingGlobal } = useContext(SettingsGlobalContext);
     const [isVisible, setIsVisible] = useState(false);
 
@@ -25,16 +26,18 @@ const FileUploading: React.FC<FileUploadingProps> = ({ callback }) => {
         },
     };
 
-    const handleFileRead = (file: File | null, onLoadCallback: (result: string) => void) => {
-        if (file) {
+    const readFileAsync = (file: File | null): Promise<string | null> => {
+        return new Promise((resolve) => {
+            if (!file) {
+                resolve(null);
+                return;
+            }
             const reader = new FileReader();
             reader.onloadend = (e) => {
-                if (e.target?.result) {
-                    onLoadCallback(e.target.result as string);
-                }
+                resolve(e.target?.result as string | null);
             };
             reader.readAsText(file);
-        }
+        });
     };
 
     const handleOnSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -53,27 +56,29 @@ const FileUploading: React.FC<FileUploadingProps> = ({ callback }) => {
         const uploadData = new FormData();
         uploadData.append("type", "csv_input");
 
-        handleFileRead(sourceFile, (sourceCsv) => {
-            uploadData.append("source_csv", sourceCsv);
-
-            handleFileRead(targetCsvFile, (targetCsv) => {
-                uploadData.append("target_csv", targetCsv);
-            });
-
-            handleFileRead(targetJsonFile, (targetJson) => {
-                uploadData.append("target_json", targetJson);
-            });
-
+        try {
             setIsLoadingGlobal(true);
-            axios.post("/api/matching", uploadData, { ...customHeader, timeout: 600000 })
-                .then((response) => {
-                    if (response.status === 200) {
-                        getCachedResults({ callback });
-                    }
-                })
-                .catch(console.error)
-                .finally(() => setIsLoadingGlobal(false));
-        });
+
+            const [sourceCsv, targetCsv, targetJson] = await Promise.all([
+                readFileAsync(sourceFile),
+                readFileAsync(targetCsvFile),
+                readFileAsync(targetJsonFile),
+            ]);
+
+            if (sourceCsv) uploadData.append("source_csv", sourceCsv);
+            if (targetCsv) uploadData.append("target_csv", targetCsv);
+            if (targetJson) uploadData.append("target_json", targetJson);
+
+            const response = await axios.post("/api/matching", uploadData, { ...customHeader, timeout: 600000 });
+            if (response.status === 200) {
+                getCachedResults({ callback });
+                getTargetOntology({ callback: ontologyCallback });
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsLoadingGlobal(false);
+        }
     };
 
     return (

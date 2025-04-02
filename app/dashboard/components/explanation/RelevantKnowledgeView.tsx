@@ -78,11 +78,19 @@ const RelevantKnowledgeView = ({
                     <strong>Maximum:</strong> {gdcAttribute.maximum}
                 </Typography>
                 )}
-                {gdcAttribute.description && gdcAttribute.description.map((desc, i) => (
-                <Typography key={i} variant="body2" color="textSecondary" gutterBottom sx={{ fontSize: '0.7rem' }}>
-                    <strong>Description:</strong> {desc.description}
-                </Typography>
-                ))}
+                {gdcAttribute.description && (
+                    typeof gdcAttribute.description === 'string' ? (
+                        <Typography variant="body2" color="textSecondary" gutterBottom sx={{ fontSize: '0.7rem' }}>
+                            <strong>Description:</strong> {gdcAttribute.description}
+                        </Typography>
+                    ) : (
+                        gdcAttribute.description.map((desc, i) => (
+                            <Typography key={i} variant="body2" color="textSecondary" gutterBottom sx={{ fontSize: '0.7rem' }}>
+                                <strong>Description:</strong> {desc.description}
+                            </Typography>
+                        ))
+                    )
+                )}
                 {gdcAttribute.enum && (
                 <Box display="flex" flexWrap="wrap" gap={0.5}>
                     <Typography variant="body2" sx={{ fontSize: '0.7rem' }}>

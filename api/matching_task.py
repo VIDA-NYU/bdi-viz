@@ -20,7 +20,13 @@ from .matcher.magneto import MagnetoMatcher
 from .matcher.rapidfuzz import RapidFuzzMatcher
 from .matcher.valentine import ValentineMatcher
 from .matcher_weight.weight_updater import WeightUpdater
-from .utils import is_candidate_for_category, load_gdc_ontology, load_gdc_property
+from .utils import (
+    is_candidate_for_category,
+    load_gdc_ontology,
+    load_gdc_property,
+    load_ontology,
+    load_property,
+)
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
@@ -275,6 +281,10 @@ class MatchingTask:
     def _generate_gdc_ontology(self) -> List[Dict]:
         candidates = self.get_cached_candidates()
         return load_gdc_ontology(candidates)
+
+    def _generate_ontology(self) -> List[Dict]:
+        candidates = self.get_cached_candidates()
+        return load_ontology(candidates)
 
     def _initialize_value_matches(self) -> None:
         self.cached_candidates["value_matches"] = {}

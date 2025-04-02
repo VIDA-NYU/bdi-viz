@@ -17,6 +17,7 @@ import { SectionHeader, SectionLabel } from "../layout/components";
 
 interface ShortcutPanelProps {
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
+    handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
     acceptMatch: () => void;
     rejectMatch: () => void;
     discardColumn: () => void;
@@ -27,6 +28,7 @@ interface ShortcutPanelProps {
 
 const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
     handleFileUpload,
+    handleTargetOntology,
     acceptMatch,
     rejectMatch,
     discardColumn,
@@ -59,7 +61,7 @@ const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
               <RedoButton onClick={redo} />
             </Box>
             <ExportMatchingResultsButton onClick={exportMatchingResults} />
-            <FileUploading callback={handleFileUpload} />
+            <FileUploading callback={handleFileUpload} ontologyCallback={handleTargetOntology} />
         </Box>
     </>
   );

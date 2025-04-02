@@ -41,6 +41,7 @@ interface LeftPanelProps {
 
     // File Uploading Props
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
+    handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
 }
 
 const LeftPanel = ({
@@ -67,12 +68,14 @@ const LeftPanel = ({
     userOperations,
     // File Uploading Props
     handleFileUpload,
+    handleTargetOntology,
 }: LeftPanelProps) => {
 
     return (
         <LeftColumn>
             <ShortcutPanel
                 handleFileUpload={handleFileUpload}
+                handleTargetOntology={handleTargetOntology}
                 acceptMatch={acceptMatch}
                 rejectMatch={rejectMatch}
                 discardColumn={discardColumn}
