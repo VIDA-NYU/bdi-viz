@@ -20,6 +20,7 @@ type DashboardCandidateState = {
     setSelectedCandidate: (candidate: Candidate | undefined) => void;
     setMatchers: (matchers: Matcher[]) => void;
     handleUserOperationsUpdate: (newUserOperations: UserOperation[]) => void;
+    handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
     setGdcAttribute: (attribute: GDCAttribute | undefined) => void;
     handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
@@ -127,6 +128,7 @@ export const {
             setSelectedCandidate: handleSelectedCandidate,
             setMatchers,
             handleUserOperationsUpdate,
+            handleUniqueValues,
             handleValueMatches,
             setGdcAttribute,
             handleTargetOntology,

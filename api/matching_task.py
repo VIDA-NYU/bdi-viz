@@ -17,8 +17,6 @@ from .candidate_quadrants import CandidateQuadrants
 from .clusterer.embedding_clusterer import EmbeddingClusterer
 from .matcher.bdikit import BDIKitMatcher
 from .matcher.magneto import MagnetoMatcher
-from .matcher.rapidfuzz import RapidFuzzMatcher
-from .matcher.valentine import ValentineMatcher
 from .matcher_weight.weight_updater import WeightUpdater
 from .utils import (
     is_candidate_for_category,
@@ -59,7 +57,7 @@ class MatchingTask:
             # "jaccard_distance_matcher": ValentineMatcher("jaccard_distance_matcher"),
             "ct_learning": BDIKitMatcher("ct_learning"),
             "magneto_ft": MagnetoMatcher("magneto_ft"),
-            "magneto_zs": MagnetoMatcher("magneto_zs"),
+            "magneto_zs": BDIKitMatcher("magneto_zs_bp"),
         }
 
         self.clustering_model = clustering_model
@@ -324,22 +322,24 @@ class MatchingTask:
             "From": [],
             "To": [],
         }
-        for source_v in source_values:
-            match_results["From"].append(source_v)
-            best_matches = difflib.get_close_matches(
-                source_v.lower(),
-                [val.lower() for val in target_values],
-                n=1,
-                cutoff=0.1,
-            )
-            if best_matches:
-                best_match_index = [val.lower() for val in target_values].index(
-                    best_matches[0]
-                )
-                best_norm = target_values[best_match_index]
-                match_results["To"].append(best_norm)
-            else:
-                match_results["To"].append("")
+        # matcher = DiffLibMatcher("diff_matcher")
+        matcher_results = BDIKitMatcher.top_value_matches(
+            source_values, target_values, top_k=1
+        )
+
+        # re-order as per source_values
+        matcher_results = sorted(
+            matcher_results,
+            key=lambda x: source_values.index(x["sourceValue"])
+            if x["sourceValue"] in source_values
+            else len(source_values),
+        )
+
+        for result in matcher_results:
+            source_value = result["sourceValue"]
+            target_value = result["targetValue"]
+            match_results["From"].append(source_value)
+            match_results["To"].append(target_value)
 
         self.cached_candidates["value_matches"][source_column]["targets"][
             target_column
@@ -629,7 +629,7 @@ class MatchingTask:
         #     return []
 
         target_values = []
-        target_description = load_gdc_property(target_col)
+        target_description = load_property(target_col)
         if target_description is None:
             logger.warning(f"Target column {target_col} not found in GDC properties.")
         else:
@@ -671,7 +671,8 @@ class MatchingTask:
 
     def get_matchers(self) -> List[Dict[str, any]]:
         return [
-            {"name": key, "weight": item.weight} for key, item in self.matchers.items()
+            {"name": item.name, "weight": item.weight}
+            for key, item in self.matchers.items()
         ]
 
     def get_accepted_candidates(self) -> pd.DataFrame:

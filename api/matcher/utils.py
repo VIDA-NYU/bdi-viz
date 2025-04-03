@@ -24,3 +24,26 @@ class BaseMatcher:
             {"sourceColumn": "source_column_1", "targetColumn": "target_column_15", "score": 0.7, "matcher": "magneto_zs_bp", "status": "idle"}, ...]
         """
         pass
+
+    def top_value_matches(
+        self,
+        source_values: List[str],
+        target_values: List[str],
+        top_k: int = 20,
+        **kwargs
+    ) -> List[Dict[str, Any]]:
+        """
+        Finds the top matching values between two lists of strings based on a similarity metric.
+
+        Args:
+            source_values (List[str]): A list of source strings to compare.
+            target_values (List[str]): A list of target strings to compare against.
+            top_k (int, optional): The maximum number of top matches to return. Defaults to 20.
+            **kwargs: Additional keyword arguments for customization or to pass to the similarity function.
+
+        Returns:
+            List[Dict[str, Any]]: A list of dictionaries containing the top matches, e.g.
+            [{"sourceValue": "source_value_1", "targetValue": "target_value_1", "score": 0.9},
+             {"sourceValue": "source_value_2", "targetValue": "target_value_2", "score": 0.8}, ...]
+        """
+        pass

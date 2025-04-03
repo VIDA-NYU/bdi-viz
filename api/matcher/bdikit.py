@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 
 import bdikit as bdi
+import numpy as np
 import pandas as pd
 
 from .utils import BaseMatcher
@@ -45,6 +46,46 @@ class BDIKitMatcher(BaseMatcher):
         )
         matcher_candidates = self._layer_candidates_bdi(embedding_candidates, self.name)
         return matcher_candidates
+
+    @staticmethod
+    def top_value_matches(
+        source_values: List[str], target_values: List[str], top_k: int = 20, **kwargs
+    ) -> List[Dict[str, Any]]:
+        """
+        Finds the top matching values between two lists of strings based on a similarity metric."
+        """
+
+        ret = []
+        best_matches = bdi.match_values(
+            source=pd.DataFrame({"source": source_values}),
+            target=pd.DataFrame({"target": target_values}),
+            column_mapping=("source", "target"),
+        )
+
+        for source_v in source_values:
+            source_top_k = []
+            source_matches = best_matches[best_matches["source"] == source_v]
+            for _, row in source_matches.iterrows():
+                target_v = row["target"]
+                similarity = row["similarity"]
+                source_top_k.append(
+                    {
+                        "sourceValue": source_v,
+                        "targetValue": "" if pd.isna(target_v) else target_v,
+                        "score": similarity,
+                    }
+                )
+            if not source_top_k:
+                source_top_k.append(
+                    {
+                        "sourceValue": source_v,
+                        "targetValue": "",
+                        "score": 0,
+                    }
+                )
+            ret.extend(source_top_k[:top_k])
+
+        return ret
 
     def _layer_candidates_bdi(
         self, top_candidates: pd.DataFrame, matcher: str

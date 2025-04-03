@@ -119,8 +119,9 @@ class Agent:
                 target_values = target_enum
         if target_description is not None:
             target_description = target_description["description"]
-            if len(target_description) >= 1:
-                target_description = target_description[0]["description"]
+            if not isinstance(target_description, str):
+                if len(target_description) >= 1:
+                    target_description = target_description[0]["description"]
 
         prompt = f"""
     Analyze the following user operation details:
