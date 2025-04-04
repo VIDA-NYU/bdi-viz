@@ -1,5 +1,5 @@
 altair
-bdi-kit
+bdi-kit==0.4.0
 bokeh
 datamart_profiler
 panel!=1.4.3
