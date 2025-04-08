@@ -91,7 +91,7 @@ const HistogramCell: FC<ExpandedCellProps> = ({
                   fontStyle="normal"
                   fill={theme.palette.text.primary}
                 >
-                  {bin.value}
+                    {bin.value.length > 36 ? `${bin.value.substring(0, 36)}...` : bin.value}
                 </StyledText>
               </g>
             ))
@@ -131,7 +131,7 @@ const HistogramCell: FC<ExpandedCellProps> = ({
                 fontStyle={'italic'}
                 fill={theme.palette.common.black}
                 >
-                {bin.value}
+                {bin.value.length > 36 ? `${bin.value.substring(0, 36)}...` : bin.value}
                 </StyledText>
               </g>
               ))

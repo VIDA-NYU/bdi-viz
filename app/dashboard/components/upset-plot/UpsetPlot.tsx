@@ -71,7 +71,7 @@ const UpsetPlot: React.FC<UpsetPlotProps> = ({ aggData, matchers, selectedCandid
         height: dimensions.height,
         margin: { top: 30, right: 78, bottom: 0, left: 200 },
         config: {
-            colorScheme: "blues",
+            colorScheme: "YlGnBu",
             colorScalePadding: 10,
             maxScore: 1,
             minScore: 0,
@@ -207,6 +207,10 @@ function lowerBarChart(matchers: Matcher[], developerMode: boolean) {
         }
     );
 
+    const maxWeight = Math.max(...matchers.map(m => m.weight));
+    const tickStep = 0.1;
+    const ticks = d3.range(0, maxWeight, tickStep);
+
     return Plot.plot({
         marks: [
             matcherData
@@ -214,8 +218,9 @@ function lowerBarChart(matchers: Matcher[], developerMode: boolean) {
         x: {
             axis: 'top',
             line: developerMode,
-            ticks: developerMode ? undefined : [],
+            ticks: developerMode ? ticks : [],
             reverse: true,
+            tickFormat: (d) => d3.format(".1f")(d),
         },
         y: {
             axis: 'right',

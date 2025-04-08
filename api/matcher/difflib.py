@@ -8,12 +8,9 @@ class DiffLibMatcher(BaseMatcher):
     def __init__(self, name: str, weight: int = 1) -> None:
         super().__init__(name, weight)
 
+    @staticmethod
     def top_value_matches(
-        self,
-        source_values: List[str],
-        target_values: List[str],
-        top_k: int = 20,
-        **kwargs
+        source_values: List[str], target_values: List[str], top_k: int = 20, **kwargs
     ) -> List[Dict[str, Any]]:
         """
         Returns:

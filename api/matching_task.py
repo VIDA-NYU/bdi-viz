@@ -16,7 +16,9 @@ from torch import Tensor
 from .candidate_quadrants import CandidateQuadrants
 from .clusterer.embedding_clusterer import EmbeddingClusterer
 from .matcher.bdikit import BDIKitMatcher
+from .matcher.difflib import DiffLibMatcher
 from .matcher.magneto import MagnetoMatcher
+from .matcher.rapidfuzz_value import RapidFuzzValueMatcher
 from .matcher_weight.weight_updater import WeightUpdater
 from .utils import (
     is_candidate_for_category,
@@ -57,7 +59,7 @@ class MatchingTask:
             # "jaccard_distance_matcher": ValentineMatcher("jaccard_distance_matcher"),
             "ct_learning": BDIKitMatcher("ct_learning"),
             "magneto_ft": MagnetoMatcher("magneto_ft"),
-            "magneto_zs": BDIKitMatcher("magneto_zs_bp"),
+            "magneto_zs": MagnetoMatcher("magneto_zs"),
         }
 
         self.clustering_model = clustering_model
@@ -323,7 +325,7 @@ class MatchingTask:
             "To": [],
         }
         # matcher = DiffLibMatcher("diff_matcher")
-        matcher_results = BDIKitMatcher.top_value_matches(
+        matcher_results = RapidFuzzValueMatcher.top_value_matches(
             source_values, target_values, top_k=1
         )
 
@@ -627,6 +629,9 @@ class MatchingTask:
             )
         # if pd.api.types.is_numeric_dtype(self.target_df[target_col].dtype):
         #     return []
+        target_unique_values = self.target_df[target_col].dropna().unique()
+        if len(target_unique_values) > 0:
+            return list(target_unique_values.astype(str)[:n])
 
         target_values = []
         target_description = load_property(target_col)
@@ -641,7 +646,7 @@ class MatchingTask:
                     # else:
                     target_values = target_enum
         return [str(target_value) for target_value in target_values] or list(
-            self.target_df[target_col].dropna().unique().astype(str)[:n]
+            target_unique_values.astype(str)[:n]
         )
 
     def get_cached_candidates(self) -> List[Dict[str, Any]]:

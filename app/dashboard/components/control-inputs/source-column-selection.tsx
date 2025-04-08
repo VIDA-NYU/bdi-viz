@@ -40,9 +40,11 @@ const SourceColumnSelection: React.FC<SourceColumnSelectionProps> = ({ sourceCol
                     label="Source Attribute"
                     onChange={(e) => handleChange(e.target.value as string)}
                     sx={{
+                        whiteSpace: "normal",
+                        wordBreak: "break-all",
                         '& .MuiSelect-select': {
                             fontSize: 12,
-                            whiteSpace: "normal",
+                            whiteSpace: "normal !important",
                             wordBreak: "break-all",
                         },
                     }}

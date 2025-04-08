@@ -278,7 +278,8 @@ Diagnosis:
 
     Instructions:
     1. For EVERY column, create an AttributeProperties object that describes its ontology FOR EACH OF THEM.
-    2. Return your answer strictly as a JSON object following the Ontology schema, with no extra text.
+    2. There should be **no more than 3 categories and 10 nodes**.
+    3. Return your answer strictly as a JSON object following the Ontology schema, with no extra text.
     """
 
         logger.info(f"[INFER-ONTOLOGY] Prompt: {prompt}")
