@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useContext } from 'react';
 import type { Candidate } from '../types';
-import { getCachedResults, getValueBins, getValueMatches, getUserOperationHistory, getTargetOntology, getGDCAttribute } from '@/app/lib/heatmap/heatmap-helper';
+import { getCachedResults, getValueBins, getValueMatches, getUserOperationHistory, getTargetOntology, getGDCAttribute, getPDCAttribute } from '@/app/lib/heatmap/heatmap-helper';
 import { getMockData } from '../components/utils/mock';
+import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 
 
 type DashboardCandidateState = {
@@ -15,6 +16,7 @@ type DashboardCandidateState = {
     userOperations: UserOperation[];
     targetOntologies: TargetOntology[];
     gdcAttribute: GDCAttribute | undefined;
+    pdcAttribute: GDCAttribute | undefined;
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
     handleChatUpdate: (candidates: Candidate[]) => void;
     setSelectedCandidate: (candidate: Candidate | undefined) => void;
@@ -33,6 +35,7 @@ export const {
 } = {
     useDashboardCandidates: (): DashboardCandidateState => {
 
+        const { globalCandidateHighlight } = useContext(HighlightGlobalContext);
         const [candidates, setCandidates] = useState<Candidate[]>(getMockData());
         const [sourceClusters, setSourceClusters] = useState<SourceCluster[]>([]);
         const [matchers, setMatchers] = useState<Matcher[]>([]);
@@ -43,6 +46,7 @@ export const {
         const [userOperations, setUserOperations] = useState<UserOperation[]>([]);
         const [targetOntologies, setTargetOntologies] = useState<TargetOntology[]>([]);
         const [gdcAttribute, setGdcAttribute] = useState<GDCAttribute | undefined>(undefined);
+        const [pdcAttribute, setPdcAttribute] = useState<GDCAttribute | undefined>(undefined);
 
         const handleFileUpload = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => {
             setCandidates(newCandidates.sort((a, b) => b.score - a.score));
@@ -93,6 +97,18 @@ export const {
             });
         }, [selectedCandidate]);
 
+        useEffect(() => {
+            if (!globalCandidateHighlight) {
+                return;
+            }
+            getPDCAttribute({
+                targetColumn: globalCandidateHighlight.sourceColumn,
+                callback: (attribute: GDCAttribute) => {
+                    setPdcAttribute(attribute);
+                }
+            });
+        }, [globalCandidateHighlight]);
+
 
         useEffect(() => {
             getCachedResults({
@@ -123,6 +139,7 @@ export const {
             userOperations,
             targetOntologies,
             gdcAttribute,
+            pdcAttribute,
             handleFileUpload,
             handleChatUpdate,
             setSelectedCandidate: handleSelectedCandidate,

@@ -1,5 +1,5 @@
 'use client';
-import { useContext, useState, useCallback } from "react";
+import { useContext, useState } from "react";
 import { Box, CircularProgress, Typography, Switch } from "@mui/material";
 import { toastify } from "@/app/lib/toastify/toastify-helper";
 
@@ -57,6 +57,7 @@ export default function Dashboard() {
         userOperations,
         targetOntologies,
         gdcAttribute,
+        pdcAttribute,
         handleFileUpload,
         setSelectedCandidate,
         setMatchers,
@@ -312,6 +313,7 @@ export default function Dashboard() {
                         highlightTargetColumns={highlightedTargetColumns}
                         status={status}
                         updateStatus={updateStatus}
+                        pdcAttribute={pdcAttribute}
                     />
                     {/* Show Paginator when sourceColumn is "all" */}
                     <Paginator setSelectedCandidate={setSelectedCandidate}  isShow={sourceColumn === "all"} />

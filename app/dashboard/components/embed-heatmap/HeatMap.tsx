@@ -31,6 +31,7 @@ interface HeatMapProps {
   targetUniqueValues: TargetUniqueValues[];
   highlightSourceColumns: Array<string>;
   highlightTargetColumns: Array<string>;
+  pdcAttribute?: GDCAttribute;
   sx?: Record<string, any>;
 }
 
@@ -48,6 +49,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
   targetUniqueValues,
   highlightSourceColumns,
   highlightTargetColumns,
+  pdcAttribute,
   sx,
 }) => {
   const theme = useTheme();
@@ -242,7 +244,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
                       handleCellClick(d);
                     }}
                     onMouseMove={(event: React.MouseEvent) => {
-                      showTooltip(event, d);
+                      showTooltip(event, d, pdcAttribute);
                     }}
                     onMouseLeave={() => {
                       hideTooltip();
@@ -270,7 +272,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
                     }
                   }}
                   onMouseMove={(event: React.MouseEvent) => {
-                    showTooltip(event, d);
+                    showTooltip(event, d, pdcAttribute);
                   }}
                   onLeave={() => {}}
                   onClick={() => {

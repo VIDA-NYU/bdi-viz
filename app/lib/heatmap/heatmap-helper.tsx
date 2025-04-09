@@ -373,6 +373,43 @@ const getGDCAttribute = (prop: getGDCAttributeProps) => {
     });
 }
 
+const getPDCAttribute = (prop: getGDCAttributeProps) => {
+    return new Promise<void>((resolve, reject) => {
+        const httpAgent = new http.Agent({ keepAlive: true });
+        const httpsAgent = new https.Agent({ keepAlive: true });
+        axios.post("/api/pdc/property", {
+            targetColumn: prop.targetColumn,
+        }, {
+            httpAgent,
+            httpsAgent,
+            timeout: 600000, // 10 minutes in milliseconds
+        }).then((response) => {
+            const property = response.data?.property;
+            if (property) {
+                const gdcAttribute = {
+                    name: property.column_name,
+                    category: property.category,
+                    node: property.node,
+                    type: property.type,
+                    description: property.description,
+                    enum: property.enum,
+                    minimum: property.minimum,
+                    maximum: property.maximum,
+                } as GDCAttribute;
+
+                prop.callback(gdcAttribute);
+                resolve();
+            } else {
+                console.error("Invalid results format");
+                reject(new Error("Invalid results format"));
+            }
+        }).catch((error) => {
+            console.error("Error getting PDC attribute:", error);
+            reject(error);
+        });
+    });
+}
+
 interface getCandidatesResultProps {
     format: string;
     callbackCsv: (candidates: string) => void;
@@ -447,4 +484,4 @@ const updateSourceValue = ({ column, value, newValue, valueMatchesCallback }: up
 
 
 
-export { getCachedResults, getValueBins, getValueMatches, getUserOperationHistory, getTargetOntology, applyUserOperation, undoUserOperation, redoUserOperation, getExactMatches, getGDCAttribute, getCandidatesResult, updateSourceValue };
+export { getCachedResults, getValueBins, getValueMatches, getUserOperationHistory, getTargetOntology, applyUserOperation, undoUserOperation, redoUserOperation, getExactMatches, getGDCAttribute, getPDCAttribute, getCandidatesResult, updateSourceValue };

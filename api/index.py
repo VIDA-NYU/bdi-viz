@@ -15,6 +15,7 @@ from .utils import (
     extract_data_from_request,
     extract_session_name,
     load_gdc_property,
+    load_pdc_property,
     load_property,
     parse_llm_generated_ontology,
     read_candidate_explanation_json,
@@ -186,6 +187,17 @@ def get_gdc_property():
     target_col = request.json["targetColumn"]
 
     property = load_gdc_property(target_col)
+
+    return {"message": "success", "property": property}
+
+@app.route("/api/pdc/property", methods=["POST"])
+def get_pdc_property():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    target_col = request.json["targetColumn"]
+
+    property = load_pdc_property(target_col)
 
     return {"message": "success", "property": property}
 

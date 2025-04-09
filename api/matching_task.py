@@ -18,6 +18,7 @@ from .clusterer.embedding_clusterer import EmbeddingClusterer
 from .matcher.bdikit import BDIKitMatcher
 from .matcher.difflib import DiffLibMatcher
 from .matcher.magneto import MagnetoMatcher
+from .matcher.magneto_bio import MagnetoBioMatcher
 from .matcher.rapidfuzz_value import RapidFuzzValueMatcher
 from .matcher_weight.weight_updater import WeightUpdater
 from .utils import (
@@ -57,9 +58,10 @@ class MatchingTask:
         self.candidate_quadrants = None
         self.matchers = {
             # "jaccard_distance_matcher": ValentineMatcher("jaccard_distance_matcher"),
-            "ct_learning": BDIKitMatcher("ct_learning"),
-            "magneto_ft": MagnetoMatcher("magneto_ft"),
-            "magneto_zs": MagnetoMatcher("magneto_zs"),
+            # "ct_learning": BDIKitMatcher("ct_learning"),
+            # "magneto_ft": MagnetoMatcher("magneto_ft"),
+            # "magneto_zs": MagnetoMatcher("magneto_zs"),
+            "magneto_bio": MagnetoBioMatcher("magneto_bio"),
         }
 
         self.clustering_model = clustering_model
@@ -178,10 +180,10 @@ class MatchingTask:
 
         layered_candidates = []
         # numeric_columns = []
-        for source_column in self.source_df.columns:
-            layered_candidates.extend(
-                self.candidate_quadrants.get_easy_target_json(source_column)
-            )
+        # for source_column in self.source_df.columns:
+            # layered_candidates.extend(
+            #     self.candidate_quadrants.get_easy_target_json(source_column)
+            # )
 
             # if pd.api.types.is_numeric_dtype(self.source_df[source_column].dtype):
             #     numeric_columns.append(source_column)

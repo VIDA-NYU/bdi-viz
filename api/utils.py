@@ -128,6 +128,9 @@ def download_model_pt(url: str, model_name: str) -> str:
 GDC_ONTOLOGY_FLAT_PATH = os.path.join(
     os.path.dirname(__file__), "./resources/gdc_ontology_flat.json"
 )
+PDC_ONTOLOGY_FLAT_PATH = os.path.join(
+    os.path.dirname(__file__), "./resources/pdc_ontology_flat.json"
+)
 
 
 def load_gdc_ontology(candidates: List[Dict[str, Any]]) -> List[Dict]:
@@ -174,6 +177,17 @@ def load_gdc_property(target_column: str) -> Optional[Dict[str, Any]]:
     property = None
     if target_column in gdc_ontology_flat:
         property = gdc_ontology_flat[target_column]
+
+    return property
+
+
+def load_pdc_property(target_column: str) -> Optional[Dict[str, Any]]:
+    with open(PDC_ONTOLOGY_FLAT_PATH, "r") as f:
+        pdc_ontology_flat = json.load(f)
+
+    property = None
+    if target_column in pdc_ontology_flat:
+        property = pdc_ontology_flat[target_column]
 
     return property
 
@@ -282,3 +296,6 @@ def load_property(target_column: str) -> Optional[Dict[str, Any]]:
         property = ontology_flat[target_column]
 
     return property
+
+
+
