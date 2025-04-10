@@ -16,9 +16,9 @@ from torch import Tensor
 from .candidate_quadrants import CandidateQuadrants
 from .clusterer.embedding_clusterer import EmbeddingClusterer
 from .matcher.bdikit import BDIKitMatcher
-from .matcher.difflib import DiffLibMatcher
-from .matcher.magneto import MagnetoMatcher
-from .matcher.rapidfuzz_value import RapidFuzzValueMatcher
+
+# from .matcher.difflib import DiffLibMatcher
+# from .matcher.rapidfuzz_value import RapidFuzzValueMatcher
 from .matcher_weight.weight_updater import WeightUpdater
 from .utils import (
     is_candidate_for_category,
@@ -58,8 +58,8 @@ class MatchingTask:
         self.matchers = {
             # "jaccard_distance_matcher": ValentineMatcher("jaccard_distance_matcher"),
             "ct_learning": BDIKitMatcher("ct_learning"),
-            "magneto_ft": MagnetoMatcher("magneto_ft"),
-            "magneto_zs": MagnetoMatcher("magneto_zs"),
+            "magneto_ft": BDIKitMatcher("magneto_ft"),
+            "magneto_zs": BDIKitMatcher("magneto_zs"),
         }
 
         self.clustering_model = clustering_model
@@ -325,7 +325,7 @@ class MatchingTask:
             "To": [],
         }
         # matcher = DiffLibMatcher("diff_matcher")
-        matcher_results = RapidFuzzValueMatcher.top_value_matches(
+        matcher_results = BDIKitMatcher.top_value_matches(
             source_values, target_values, top_k=1
         )
 
