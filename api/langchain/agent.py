@@ -119,8 +119,9 @@ class Agent:
                 target_values = target_enum
         if target_description is not None:
             target_description = target_description["description"]
-            if len(target_description) >= 1:
-                target_description = target_description[0]["description"]
+            if not isinstance(target_description, str):
+                if len(target_description) >= 1:
+                    target_description = target_description[0]["description"]
 
         prompt = f"""
     Analyze the following user operation details:
@@ -277,7 +278,8 @@ Diagnosis:
 
     Instructions:
     1. For EVERY column, create an AttributeProperties object that describes its ontology FOR EACH OF THEM.
-    2. Return your answer strictly as a JSON object following the Ontology schema, with no extra text.
+    2. There should be **no more than 3 categories and 10 nodes**.
+    3. Return your answer strictly as a JSON object following the Ontology schema, with no extra text.
     """
 
         logger.info(f"[INFER-ONTOLOGY] Prompt: {prompt}")

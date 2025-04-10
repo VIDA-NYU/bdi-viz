@@ -24,7 +24,8 @@ export function Dropzone(props: DropzoneProps) {
             }
         },
         accept: {
-            'text/csv': ['.csv']
+            'text/csv': ['.csv'],
+            'application/json': ['.json']
         },
         maxFiles: 1
     });

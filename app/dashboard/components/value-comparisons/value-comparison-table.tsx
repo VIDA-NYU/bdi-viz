@@ -76,7 +76,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                 const rowObj: Record<string, any> = {
                     id: index,
                     // Use our helper component to display both original and edited values on the source column
-                    [`${valueMatch.sourceColumn}(source)`]:  valueMatch.sourceMappedValues[index],
+                    [`${valueMatch.sourceColumn}(source)`.replace(/\./g, "")]:  valueMatch.sourceMappedValues[index],
                     "SourceOriginalValues": sourceValue,
                     // (
                     //     <SourceValueDisplay
@@ -108,33 +108,34 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
             .map((key) => ({
                 accessorKey: key,
                 header: key,
+                maxSize: 50,
             } as MRT_ColumnDef<any>))
             .filter((column) => column.accessorKey !== "id");
 
-        cols.push({
-                header: "Changes",
-                accessorKey: "changes",
-                Cell: ({ row }) => {
-                    return (
-                        <div style={{ fontSize: "0.75rem", color: "#757575" }}>
-                            <SourceValueDisplay
-                                original={row.original[`SourceOriginalValues`]}
-                                edited={row.original[`${candidate.sourceColumn}(source)`]}
-                            />
-                        </div>
-                    );
-                },
-                Header: () => {
-                    return (
-                        <div style={{ display: "flex", alignItems: "center", fontSize: "0.75rem", color: "#757575" }}>
-                            <span>Changes</span>
-                        </div>
-                    );
-                },
-                enableEditing: false,
-                enableColumnActions: false,
-                maxSize: 30,
-        });
+        // cols.push({
+        //         header: "Changes",
+        //         accessorKey: "changes",
+        //         Cell: ({ row }) => {
+        //             return (
+        //                 <div style={{ display: "inline-block", fontSize: "0.75rem", color: "#757575" }}>
+        //                     <SourceValueDisplay
+        //                         original={row.original[`SourceOriginalValues`]}
+        //                         edited={row.original[`${candidate.sourceColumn}(source)`.replace(/\./g, "")]}
+        //                     />
+        //                 </div>
+        //             );
+        //         },
+        //         Header: () => {
+        //             return (
+        //                 <div style={{ display: "flex", alignItems: "center", fontSize: "0.75rem", color: "#757575" }}>
+        //                     <span>Changes</span>
+        //                 </div>
+        //             );
+        //         },
+        //         enableEditing: false,
+        //         enableColumnActions: false,
+        //         maxSize: 30,
+        // });
         return cols;
     }, [rows, candidate]);
 
@@ -148,14 +149,14 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         enableBottomToolbar: false,
         initialState: {
             columnPinning: {
-                left: candidate?.sourceColumn ? [`changes`, `${candidate.sourceColumn}(source)`] : [],
+                left: candidate?.sourceColumn ? [`changes`, `${candidate.sourceColumn}(source)`.replace(/\./g, "")] : [],
             },
             columnVisibility: {
                 SourceOriginalValues: false,
             },
         },
         muiTableBodyCellProps: ({ cell, column, table }) => {
-            const isSourceColumn = cell.column.id === `${candidate?.sourceColumn}(source)`;
+            const isSourceColumn = cell.column.id === `${candidate?.sourceColumn}(source)`.replace(/\./g, "");
             const isTargetColumn = cell.column.id === candidate?.targetColumn;
             const isChangesColumn = cell.column.id === "changes";
             const cellValue = cell.getValue();
@@ -179,7 +180,6 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
             ) {
                 cellStyle = {
                     ...cellStyle,
-                    fontWeight: "800",
                     color: theme.palette.primary.main,
                 };
             }
@@ -192,7 +192,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                         if (candidate && column.id !== "changes") {
                             updateSourceValue({
                                 column: candidate.sourceColumn,
-                                value: cell.row.original[`${candidate?.sourceColumn}(source)`],
+                                value: cell.row.original[`${candidate?.sourceColumn}(source)`.replace(/\./g, "")],
                                 newValue: cell.row.original[column.id],
                                 valueMatchesCallback: handleValueMatches,
                             });
@@ -204,7 +204,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                     if (event.key === "Enter" && isSourceColumn && candidate) {
                         updateSourceValue({
                             column: candidate.sourceColumn,
-                            value: cell.row.original[`${candidate?.sourceColumn}(source)`],
+                            value: cell.row.original[`${candidate?.sourceColumn}(source)`.replace(/\./g, "")],
                             newValue: cell.getValue(),
                             valueMatchesCallback: handleValueMatches,
                         });
@@ -223,9 +223,9 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     }, [columns]);
 
     useMemo(() => {
-        const columnPinning = [`changes`];
+        const columnPinning = [];
         if (candidate?.sourceColumn) {
-            columnPinning.push(`${candidate.sourceColumn}(source)`);
+            columnPinning.push(`${candidate.sourceColumn}(source)`.replace(/\./g, ""));
         }
         if (candidate?.targetColumn) {
             columnPinning.push(candidate.targetColumn);
@@ -242,6 +242,9 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                     }
                     tr td {
                         height: auto !important;
+                    }
+                    .MuiTableCell-head {
+                        max-width: 300px !important;
                     }
                 `}
             </style>

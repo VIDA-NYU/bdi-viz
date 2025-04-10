@@ -549,7 +549,7 @@ const ParallelCoordinatesVisualization: React.FC<ParallelCoordinatesProps> = ({
           {/* Target axis label positioned BELOW the axis */}
           <text 
             x={width / 2} 
-            y={targetAxisY + 40} 
+            y={targetAxisY + 60} 
             textAnchor="middle" 
             fontWeight="bold"
             fontSize="16"
@@ -681,7 +681,7 @@ const ParallelCoordinatesVisualization: React.FC<ParallelCoordinatesProps> = ({
                   {width > 80 && (
                     <text
                       x={rectX + width / 2}
-                      y={targetAxisY + rectHeight / 2 + 25}
+                      y={targetAxisY + rectHeight / 2 + 15}
                       textAnchor="middle"
                       fontSize="10"
                       fill={theme.palette.text.secondary}

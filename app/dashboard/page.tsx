@@ -61,6 +61,7 @@ export default function Dashboard() {
         setSelectedCandidate,
         setMatchers,
         handleUserOperationsUpdate,
+        handleUniqueValues,
         handleValueMatches,
         setGdcAttribute,
         handleTargetOntology,
@@ -279,6 +280,8 @@ export default function Dashboard() {
                     userOperations={userOperations}
                     handleFileUpload={handleFileUpload}
                     handleTargetOntology={handleTargetOntology}
+                    handleUniqueValues={handleUniqueValues}
+                    handleValueMatches={handleValueMatches}
                 />
 
                     {/* <DualScatter

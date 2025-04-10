@@ -135,7 +135,7 @@ const YAxis = ({ y, getHeight, sourceColumn, sourceColumns }: YAxisProps) => {
   return (
     <g>
       {/* Title */}
-      <g>
+      {/* <g>
         <StyledText
           transform={`translate(-110, ${y.range()[1] / 2 + 10}) rotate(-90)`}
           textAnchor="middle"
@@ -143,7 +143,7 @@ const YAxis = ({ y, getHeight, sourceColumn, sourceColumns }: YAxisProps) => {
         >
           Source Attributes
         </StyledText>
-      </g>
+      </g> */}
 
       {/* Arrow marker definition */}
       <defs>

@@ -15,6 +15,47 @@ class RapidFuzzValueMatcher(BaseMatcher):
     def __init__(self, name: str, weight: int = 1) -> None:
         super().__init__(name, weight)
 
+    @staticmethod
+    def top_value_matches(
+        source_values: List[str], target_values: List[str], top_k: int = 20, **kwargs
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns:
+            List[Dict[str, Any]]: A list of dictionaries containing the top matches, e.g.
+            [{"sourceValue": "source_value_1", "targetValue": "target_value_1", "score": 0.9},
+             {"sourceValue": "source_value_2", "targetValue": "target_value_2", "score": 0.8}, ...]
+        """
+
+        ret = []
+        for source_v in source_values:
+            source_top_k = []
+            best_matches = process.extract(
+                source_v,
+                target_values,
+                scorer=fuzz.WRatio,
+                processor=utils.default_process,
+                limit=top_k,
+            )
+            if best_matches:
+                for index, (target_v, similarity, _) in enumerate(best_matches):
+                    source_top_k.append(
+                        {
+                            "sourceValue": source_v,
+                            "targetValue": target_v,
+                            "score": similarity,
+                        }
+                    )
+            else:
+                source_top_k.append(
+                    {
+                        "sourceValue": source_v,
+                        "targetValue": "",
+                        "score": 0,
+                    }
+                )
+            ret.extend(source_top_k)
+        return ret
+
     def top_matches(
         self, source: pd.DataFrame, target: pd.DataFrame, top_k: int = 20, **kwargs
     ) -> List[Dict[str, Any]]:

@@ -46,11 +46,12 @@ export const {
 
         const weightedCandidates = useMemo(() => {
             const aggregatedCandidates = Array.from(d3.group(candidates, d => d.sourceColumn + d.targetColumn), ([_, items]) => {
+                const score = d3.sum(items, d => d.score * (matchers.find(m => m.name === d.matcher)?.weight ?? 1));
                 return {
                     sourceColumn: items[0].sourceColumn,
                     targetColumn: items[0].targetColumn,
                     matchers: items.map(d => d.matcher).filter((m): m is string => m !== undefined),
-                    score: d3.sum(items, d => d.score * (matchers.find(m => m.name === d.matcher)?.weight ?? 1)),
+                    score: score,
                     status: items.some(item => item.status === 'accepted') ? 'accepted' : items.some(item => item.status === 'rejected') ? 'rejected' : (items.every(item => item.status === 'discarded') ? 'discarded' : 'idle'),
                 };
             }).flat().sort((a, b) => b.score - a.score);
