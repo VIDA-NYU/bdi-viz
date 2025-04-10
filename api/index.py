@@ -41,6 +41,7 @@ def matcher():
         target = pd.read_csv(GDC_DATA_PATH)
         target_json = json.load(open(GDC_JSON_PATH, "r"))
     else:
+        app.logger.info(target_json)
         if target_json is None:
             app.logger.info("[AGENT] Generating ontology...")
             response = AGENT.infer_ontology(target)

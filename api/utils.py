@@ -58,7 +58,8 @@ def extract_data_from_request(request):
         if "target_json" in form:
             target_json = form["target_json"]
             target_json_string_io = StringIO(target_json)
-            target_json = parse_llm_generated_ontology(json.load(target_json_string_io))
+            target_json = json.load(target_json_string_io)
+            target_json = parse_llm_generated_ontology(target_json)
 
     return source_df, target_df, target_json
 
@@ -217,7 +218,7 @@ def parse_llm_generated_ontology(ontology: Dict[str, Any]) -> Dict[str, Any]:
 
     # Parse the ontology to ensure it's in the correct format
     if "properties" not in ontology:
-        return
+        return ontology
 
     properties = ontology["properties"]
     json_dict = {}
