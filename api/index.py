@@ -37,15 +37,20 @@ def matcher():
 
     source, target, target_json = extract_data_from_request(request)
     if target is None:
-        # GDC
-        target = pd.read_csv(GDC_DATA_PATH)
-        target_json = json.load(open(GDC_JSON_PATH, "r"))
-    else:
-        if target_json is None:
+        if os.path.exists(".target.csv"):
+            target = pd.read_csv(".target.csv")
+        else:
+            # GDC
+            target = pd.read_csv(GDC_DATA_PATH)
+            target_json = json.load(open(GDC_JSON_PATH, "r"))
+    if target_json is None:
+        if os.path.exists(".target.json"):
+            target_json = json.load(open(".target.json", "r"))
+        else:
             app.logger.info("[AGENT] Generating ontology...")
             response = AGENT.infer_ontology(target)
             target_json = response.model_dump()
-        target_json = parse_llm_generated_ontology(target_json)
+            target_json = parse_llm_generated_ontology(target_json)
 
     # cache csvs
     source.to_csv(".source.csv", index=False)
