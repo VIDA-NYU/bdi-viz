@@ -14,6 +14,7 @@ interface HierarchicalColumnVizProps {
   targetTreeData: TreeNode[];
   currentExpanding?: any; // Using any to match your existing code
   transform: string;
+  hideTooltip: () => void;
 }
 
 const MARGIN = { top: 40, right: 70, bottom: 20, left: 70 };
@@ -21,7 +22,8 @@ const MARGIN = { top: 40, right: 70, bottom: 20, left: 70 };
 const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({ 
   targetTreeData, 
   currentExpanding,
-  transform
+  transform,
+  hideTooltip,
 }) => {
   const theme = useTheme();
   const { globalQuery } = useContext(HighlightGlobalContext);
@@ -151,7 +153,7 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
   ]);
 
   return (
-    <div>
+    <div onMouseMove={hideTooltip}>
       <svg 
         width="100%" 
         height="100%" 

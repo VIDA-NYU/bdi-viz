@@ -3,12 +3,14 @@ import { useTheme } from "@mui/material";
 
 import { StyledText } from "@/app/dashboard/layout/components";
 import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
+import { useTooltip } from "../hooks/useTooltip";
 
 interface YAxisProps {
   y: any; // (scale) function with domain() and range() methods
   getHeight: (d: Candidate) => number;
   sourceColumn: string;
   sourceColumns: SourceColumn[];
+  hideTooltip: () => void;
 }
 
 interface LabelProps {
@@ -128,12 +130,12 @@ const AxisLabel = ({
   );
 };
 
-const YAxis = ({ y, getHeight, sourceColumn, sourceColumns }: YAxisProps) => {
+const YAxis = ({ y, getHeight, sourceColumn, sourceColumns, hideTooltip }: YAxisProps) => {
   const theme = useTheme();
   const { globalQuery } = useContext(HighlightGlobalContext);
 
   return (
-    <g>
+    <g onMouseMove={hideTooltip}>
       {/* Title */}
       {/* <g>
         <StyledText

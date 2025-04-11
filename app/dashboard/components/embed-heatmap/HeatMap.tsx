@@ -272,7 +272,9 @@ const HeatMap: React.FC<HeatMapProps> = ({
                   onMouseMove={(event: React.MouseEvent) => {
                     showTooltip(event, d);
                   }}
-                  onLeave={() => {}}
+                  onLeave={() => {
+                    hideTooltip();
+                  }}
                   onClick={() => {
                     handleCellClick(d);
                   }}
@@ -297,6 +299,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
               getHeight={getHeight}
               sourceColumn={sourceColumn}
               sourceColumns={sourceColumns}
+              hideTooltip={hideTooltip}
             />
           </g>
         </svg>
@@ -313,6 +316,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
               border: "1px solid black",
               borderRadius: "4px",
               pointerEvents: "none",
+              zIndex: 1000,
             }}
             dangerouslySetInnerHTML={{ __html: tooltip.content }}
           />
@@ -330,7 +334,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
         <HierarchicalColumnViz
           targetTreeData={targetTreeData} currentExpanding={currentExpanding as AggregatedCandidate}
           transform={`translate(${MARGIN.left},${0})`}
-
+          hideTooltip={hideTooltip}
         />
         {/* <IndentedTreeAxis targetTreeData={targetTreeData} currentExpanding={currentExpanding as AggregatedCandidate} /> */}
       </Box>

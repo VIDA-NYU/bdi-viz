@@ -45,7 +45,7 @@ const CombinedView = ({
             <Split mode="vertical" 
                 renderBar={({ onMouseDown, ...props }) => {
                     return (
-                    <div {...props} style={{ boxShadow: 'none', background: 'transparent' }}>
+                    <div {...props} style={{ boxShadow: 'none', background: 'transparent', zIndex: 2 }}>
                         <div onMouseDown={onMouseDown} style={{ boxShadow: '0 -2px 4px rgba(0, 0, 0, 0.2)', borderTop: '1px solid rgba(0, 0, 0, 0.2)' }} />
                     </div>
                     );

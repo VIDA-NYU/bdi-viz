@@ -200,7 +200,7 @@ const SchemaExplanation = ({
                     {/* Current Explanations */}
                     {currentExplanations.length > 0 && (
                             <Box>
-                                <List sx={{ margin: 0.5 }}>
+                                <List sx={{ margin: 0.5, zIndex: 1 }}>
                                     {currentExplanations.map(explanation => (
                                         <ExplanationItem
                                             key={explanation.id}
