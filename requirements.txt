@@ -20,4 +20,4 @@ duckduckgo-search
 python-dotenv
 pydantic
 rapidfuzz
-bdi-kit
+bdi-kit==0.4.0
