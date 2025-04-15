@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 import bdikit as bdi
 import numpy as np
 import pandas as pd
-from bdikit.schema_matching.magneto import MagnetoBase
+from bdikit.schema_matching.topk.magneto import MagnetoBase
 
 from ..utils import download_model_pt
 from .utils import BaseMatcher
