@@ -301,6 +301,7 @@ export default function Dashboard() {
                     <UpperTabs
                         weightedAggregatedCandidates={weightedAggregatedCandidates}
                         sourceColumn={sourceColumn}
+                        setSourceColumn={handleUpdateSourceColumn}
                         sourceColumns={filteredSourceColumns}
                         sourceCluster={filteredSourceCluster}
                         targetOntologies={targetOntologies}

@@ -54,7 +54,7 @@ const RelevantKnowledgeView = ({
             {gdcAttribute && (
             <Box>
                 <SectionHeader>
-                GDC Attribute
+                Target Attribute
                 </SectionHeader>
                 <Typography variant="body1" sx={{ fontSize: '0.7rem' }}>
                 <strong>Name:</strong> {gdcAttribute.name}

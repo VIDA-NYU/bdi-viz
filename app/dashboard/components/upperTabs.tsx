@@ -11,6 +11,7 @@ interface UpperTabsProps {
   weightedAggregatedCandidates: AggregatedCandidate[];
   sourceColumn: string;
   sourceColumns: SourceColumn[];
+  setSourceColumn: (sourceColumn: string) => void;
   sourceCluster: string[];
   targetOntologies: TargetOntology[];
   selectedCandidate: Candidate | undefined;
@@ -26,6 +27,7 @@ interface UpperTabsProps {
 const UpperTabs: React.FC<UpperTabsProps> = ({
   weightedAggregatedCandidates,
   sourceColumn,
+  setSourceColumn,
   sourceColumns,
   sourceCluster,
   targetOntologies,
@@ -105,6 +107,7 @@ const UpperTabs: React.FC<UpperTabsProps> = ({
         <HeatMap
           data={weightedAggregatedCandidates}
           sourceColumn={sourceColumn}
+          setSourceColumn={setSourceColumn}
           sourceColumns={sourceColumns}
           sourceCluster={sourceCluster}
           targetOntologies={targetOntologies}

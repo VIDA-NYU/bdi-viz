@@ -23,6 +23,7 @@ interface HeatMapProps {
   data: AggregatedCandidate[];
   sourceColumn: string;
   sourceColumns: SourceColumn[];
+  setSourceColumn: (sourceColumn: string) => void;
   sourceCluster?: string[];
   targetOntologies?: TargetOntology[];
   selectedCandidate?: Candidate;
@@ -40,6 +41,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
   data,
   sourceCluster,
   sourceColumns,
+  setSourceColumn,
   sourceColumn,
   targetOntologies,
   selectedCandidate,
@@ -298,6 +300,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
               y={y}
               getHeight={getHeight}
               sourceColumn={sourceColumn}
+              setSourceColumn={setSourceColumn}
               sourceColumns={sourceColumns}
               hideTooltip={hideTooltip}
             />

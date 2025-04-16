@@ -9,6 +9,7 @@ interface YAxisProps {
   y: any; // (scale) function with domain() and range() methods
   getHeight: (d: Candidate) => number;
   sourceColumn: string;
+  setSourceColumn: (sourceColumn: string) => void;
   sourceColumns: SourceColumn[];
   hideTooltip: () => void;
 }
@@ -21,6 +22,7 @@ interface LabelProps {
   globalQuery: string;
   theme: any;
   status?: string;
+  onClick: () => void;
 }
 
 const highlightText = (
@@ -76,7 +78,8 @@ const AxisLabel = ({
   getHeight,
   globalQuery,
   theme,
-  status
+  status,
+  onClick
 }: LabelProps) => {
   const [hovered, setHovered] = useState(false);
   const [textWidth, setTextWidth] = useState(0);
@@ -98,6 +101,7 @@ const AxisLabel = ({
       transform={`translate(-5, ${yPos})`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
     >
       <rect
         x={-textWidth}
@@ -130,7 +134,7 @@ const AxisLabel = ({
   );
 };
 
-const YAxis = ({ y, getHeight, sourceColumn, sourceColumns, hideTooltip }: YAxisProps) => {
+const YAxis = ({ y, getHeight, sourceColumn, setSourceColumn, sourceColumns, hideTooltip }: YAxisProps) => {
   const theme = useTheme();
   const { globalQuery } = useContext(HighlightGlobalContext);
 
@@ -207,6 +211,7 @@ const YAxis = ({ y, getHeight, sourceColumn, sourceColumns, hideTooltip }: YAxis
             globalQuery={globalQuery || ""}
             theme={theme}
             status={status}
+            onClick={() => setSourceColumn(value)}
           />
         );
       })}

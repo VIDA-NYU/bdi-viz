@@ -31,6 +31,7 @@ interface UpsetPlotProps {
     aggData: AggregatedCandidate[];
     matchers: Matcher[];
     selectedCandidate?: Candidate;
+    setSelectedCandidate: (sourceColumn: string, targetColumn: string) => void;
 }
 
 const upperChartHeight = 150;
@@ -39,7 +40,7 @@ const upperMarginLeft = 30;
 const lowerMarginBottom = 80;
 const lowerBarChartWidth = 200;
 
-const UpsetPlot: React.FC<UpsetPlotProps> = ({ aggData, matchers, selectedCandidate }) => {
+const UpsetPlot: React.FC<UpsetPlotProps> = ({ aggData, matchers, selectedCandidate, setSelectedCandidate }) => {
     const upperColumnChartRef = useRef<HTMLDivElement>(null);
     const lowerBarChartRef = useRef<HTMLDivElement>(null);
     const lowerSetChartRef = useRef<HTMLDivElement>(null);
@@ -201,14 +202,14 @@ function lowerBarChart(matchers: Matcher[], developerMode: boolean) {
         matchers,
         {
             x: d => d.weight,
-            y: d => d.name,
+            y: d => d.name.length > 15 ? d.name.substring(0, 12) + '...' : d.name,
             opacity: developerMode ? 1 : 0,
             fill: 'steelblue',
         }
     );
 
     const maxWeight = Math.max(...matchers.map(m => m.weight));
-    const tickStep = 0.1;
+    const tickStep = maxWeight < 0.5 ? 0.1 : 0.3;
     const ticks = d3.range(0, maxWeight, tickStep);
 
     return Plot.plot({
@@ -234,7 +235,7 @@ function lowerBarChart(matchers: Matcher[], developerMode: boolean) {
 
         width: lowerBarChartWidth,
         height: lowerSetChartHeight + lowerMarginBottom,
-        marginRight: 100,
+        marginRight: 90,
         marginBottom: lowerMarginBottom,
         style: {
             background: '#ffffff00'

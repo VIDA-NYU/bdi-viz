@@ -21,15 +21,13 @@ const HistogramCell: FC<ExpandedCellProps> = ({
     position: 'absolute',
     fill: theme.palette.grey[800],
     boxShadow: theme.shadows[1],
-    padding: '2px 8px',
-    borderRadius: '4px',
     fontWeight: '300',
     fontFamily: `"Roboto", "Helvetica", "Arial", sans-serif`,
-    fontSize: '0.8rem',
+    fontSize: '0.65rem',
     zIndex: 999,
   });
 
-  const margin = { top: 16, right: 0, bottom: 0, left: 0 };
+  const margin = { top: 20, right: 0, bottom: 0, left: 0 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = (height) / 2 - margin.top - margin.bottom;
 
@@ -66,8 +64,8 @@ const HistogramCell: FC<ExpandedCellProps> = ({
 
   return (
       <svg width={width} height={height}>
-        <Label x={chartWidth - 3} y={12} textAnchor="end" >{sourceUniqueValues.sourceColumn}</Label>
-        <Label x={chartWidth - 3} y={chartHeight+margin.top+12} textAnchor="end" >{targetUniqueValues.targetColumn}</Label>
+        <Label x={chartWidth - 3} y={10} textAnchor="end" >{sourceUniqueValues.sourceColumn}</Label>
+        <Label x={chartWidth - 3} y={chartHeight+margin.top+10} textAnchor="end" >{targetUniqueValues.targetColumn}</Label>
         <g transform={`translate(${margin.left},${margin.top})`}>
           {/* Source Histogram */}
           <g>
@@ -86,12 +84,12 @@ const HistogramCell: FC<ExpandedCellProps> = ({
                   x={sourceX(bin.value!)! + sourceX.bandwidth() / 2}
                   y={sourceY(bin.count) - 2}
                   textAnchor="middle"
-                  fontSize={`${Math.min(sourceX.bandwidth() * 0.2, 10)}px`}
+                  fontSize={`${Math.min(sourceX.bandwidth() * 0.18, 9)}px`}
                   fontWeight={600}
                   fontStyle="normal"
                   fill={theme.palette.text.primary}
                 >
-                    {bin.value.length > 36 ? `${bin.value.substring(0, 36)}...` : bin.value}
+                    {bin.value.length > Math.floor(targetX.bandwidth() / 5) ? `${bin.value.substring(0, Math.floor(targetX.bandwidth() / 5))}...` : bin.value}
                 </StyledText>
               </g>
             ))
@@ -126,12 +124,12 @@ const HistogramCell: FC<ExpandedCellProps> = ({
                 x={targetX(bin.value!)! + targetX.bandwidth() / 2}
                 y={targetY(bin.count) - 2}
                 textAnchor="middle"
-                fontSize={`${Math.min(sourceX.bandwidth() * 0.2, 10)}px`}
+                fontSize={`${Math.min(sourceX.bandwidth() * 0.18, 9)}px`}
                 fontWeight={600}
                 fontStyle={'italic'}
                 fill={theme.palette.common.black}
                 >
-                {bin.value.length > 36 ? `${bin.value.substring(0, 36)}...` : bin.value}
+                {bin.value.length > Math.floor(targetX.bandwidth() / 5) ? `${bin.value.substring(0, Math.floor(targetX.bandwidth() / 5))}...` : bin.value}
                 </StyledText>
               </g>
               ))

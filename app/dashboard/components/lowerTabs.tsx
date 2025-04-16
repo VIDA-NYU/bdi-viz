@@ -48,6 +48,7 @@ const LowerTabs: React.FC<LowerTabsProps> = ({
               aggData={weightedAggregatedCandidates}
               matchers={matchers}
               selectedCandidate={selectedCandidate ? selectedCandidate : { sourceColumn: selectedSourceColumn, targetColumn: '' } as Candidate}
+              setSelectedCandidate={setSelectedCandidate}
             />
           </TabPanel>
           <TabPanel sx={{ padding: 0, maxHeight: 400, overflowY: 'scroll', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }} value={2}>

@@ -81,12 +81,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 onSelect={props.onCandidateThresholdSelect}
               />
               {developerMode && (
-                <Box sx={{ display: "flex", gap: 1, minWidth: "min-content" }}>
-                  <MatcherSliders 
+                <MatcherSliders 
                   matchers={props.matchers} 
                   onSlide={props.onMatchersSelect}
-                  />
-                </Box>
+                />
               )}
       </Box>
     </>
