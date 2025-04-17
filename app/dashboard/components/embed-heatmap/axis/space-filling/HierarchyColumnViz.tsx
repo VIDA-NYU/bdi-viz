@@ -1,15 +1,15 @@
-import React, { useContext, useEffect, useMemo, useRef } from 'react';
+import React, { useContext, useCallback, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
 import { useTheme } from '@mui/material';
-import { useResizedSVG } from '../../../hooks/resize-hooks.tsx';
+import { useResizedSVGRef } from '../../../hooks/resize-hooks.tsx';
 import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 import { renderSpaceFillingSegments } from './SpaceFillingSegments';
 import { renderEdgeBundling } from './EdgeBundling';
 import { renderColumns } from './ColumnRenderer.tsx';
 import { getHierarchyData } from './HierarchyUtils';
 import { TreeNode } from '../../tree/types';
-import { useResizedSVGRef } from '../../../hooks/resize-hooks.tsx';
 import { getOptimalCategoryColorScale } from './ColorUtils.ts';
+
 interface HierarchicalColumnVizProps {
   targetTreeData: TreeNode[];
   currentExpanding?: any; // Using any to match your existing code
@@ -42,7 +42,8 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
   // Inner dimensions reduce margins
   const innerWidth = useMemo(() => dimensions.width - MARGIN.left - MARGIN.right, [dimensions.width]);
   const innerHeight = useMemo(() => dimensions.height - MARGIN.top - MARGIN.bottom, [dimensions.height]);
-  const layoutConfig = {
+  
+  const layoutConfig = useMemo(() => ({
     innerWidth,
     innerHeight,
     columnHeight: 50,
@@ -53,45 +54,36 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     segmentSpacing: 2,
     theme,
     globalQuery
-  };
+  }), [innerWidth, innerHeight, theme, globalQuery]);
+
   // Process tree data into the format needed for our visualization
   const { 
     columnData, 
     categoryData, 
     superCategoryData 
-  } = useMemo(() => getHierarchyData(targetTreeData, layoutConfig ), [targetTreeData]);
-  const g = d3.select(gRef.current) as d3.Selection<SVGGElement, unknown, null, undefined>;
-  useEffect(() => {
-    if (!targetTreeData || targetTreeData.length === 0 || !svgRef.current) return;
+  } = useMemo(() => getHierarchyData(targetTreeData, layoutConfig), [targetTreeData, layoutConfig]);
 
-    // Initialize and clear SVG
-    const svg = d3.select(svgRef.current);
+  // Calculate spacing and positions
+  const columnsY = useMemo(() => 0, []);
+  const categoryY = useMemo(() => columnsY + layoutConfig.columnHeight + layoutConfig.columnSpacing, [columnsY, layoutConfig.columnHeight, layoutConfig.columnSpacing]);
+  const superCategoryY = useMemo(() => categoryY + layoutConfig.hierarchyHeight + layoutConfig.hierarchySpacing, [categoryY, layoutConfig.hierarchyHeight, layoutConfig.hierarchySpacing]);
+
+  const spaceFillingWidth = useMemo(() => columnData.reduce(
+    (acc, column) => Math.max(acc, column.x! + column.width!),
+    0 // Initial value
+  ), [columnData]);
+
+  const categoryColorScale = useMemo(() => getOptimalCategoryColorScale(
+    categoryData.map(c => c.id)
+  ), [categoryData]);
+
+  // Render function
+  const renderVisualization = useCallback(() => {
+    if (!targetTreeData || targetTreeData.length === 0 || !svgRef.current || !gRef.current) return;
+
+    const g = d3.select(gRef.current);
     g.selectAll('*').remove();
 
-    // Create a group element and translate by margins
-    // const g = svg.append('g')
-    //   .attr('transform', `translate(${MARGIN.left}, ${MARGIN.top})`);
-    
-    // Save reference to the group element
-    // gRef.current = g.node();
-    
-    // Define layout constants
-    
-
-    // Calculate spacing and positions
-    
-    const columnsY = 0;
-    const categoryY = columnsY + layoutConfig.columnHeight + layoutConfig.columnSpacing;
-    const superCategoryY = categoryY + layoutConfig.hierarchyHeight + layoutConfig.hierarchySpacing;
-    
-
-    const spaceFillingWidth = columnData.reduce(
-      (acc, column) => Math.max(acc, column.x! + column.width!),
-      0 // Initial value
-    )
-    const categoryColorScale = getOptimalCategoryColorScale(
-      categoryData.map(c => c.id)
-    );
     // Render the segments and connections
     renderSpaceFillingSegments(
       g, 
@@ -139,18 +131,34 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
       .attr('font-weight', 'bold')
       .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
       .text('Database Schema Hierarchy');
-
   }, [
     targetTreeData, 
+    targetTreeData, 
+    innerWidth, 
+    innerHeight, 
+    targetTreeData,
     innerWidth, 
     innerHeight, 
     columnData, 
     categoryData, 
-    superCategoryData, 
-    theme, 
-    globalQuery, 
-    currentExpanding
+    superCategoryData,
+    layoutConfig,
+    spaceFillingWidth,
+    superCategoryY,
+    categoryY,
+    columnsY,
+    currentExpanding,
+    categoryColorScale,
+    globalQuery
   ]);
+
+  // Use ref callback to get access to the g element and render when it's available
+  const setGRef = useCallback((node: SVGGElement | null) => {
+    gRef.current = node;
+    if (node) {
+      renderVisualization();
+    }
+  }, [renderVisualization]);
 
   return (
     <div onMouseMove={hideTooltip}>
@@ -160,12 +168,10 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
         style={{ overflow: 'visible' }} 
         ref={svgRef}
       >
-          <g
-            ref={gRef}
-            transform={transform}
-          >
-          </g>
-
+        <g
+          ref={setGRef}
+          transform={transform}
+        />
       </svg>
     </div>
   );

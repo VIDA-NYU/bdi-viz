@@ -1,8 +1,8 @@
 "use client";
 
+import { memo } from "react";
 import { LeftColumn } from "./layout/components";
 import ControlPanel from "./components/controlpanel";
-import DecisionPanel from "./components/decisionpanel";
 import ShortcutPanel from "./components/shortcutpanel";
 import Timeline from "./components/timeline/timeline";
 
@@ -46,6 +46,10 @@ interface LeftPanelProps {
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
 }
 
+const ShortcutPanelMemo = memo(ShortcutPanel);
+const ControlPanelMemo = memo(ControlPanel);
+const TimelineMemo = memo(Timeline);
+
 const LeftPanel = ({
     // ControlPanel Props
     sourceColumns,
@@ -77,7 +81,7 @@ const LeftPanel = ({
 
     return (
         <LeftColumn>
-            <ShortcutPanel
+            <ShortcutPanelMemo
                 handleFileUpload={handleFileUpload}
                 handleTargetOntology={handleTargetOntology}
                 handleUniqueValues={handleUniqueValues}
@@ -89,7 +93,7 @@ const LeftPanel = ({
                 redo={redo}
                 exportMatchingResults={exportMatchingResults}
             />
-            <ControlPanel
+            <ControlPanelMemo
                 sourceColumns={sourceColumns}
                 matchers={matchers}
                 isFloating={isFloating}
@@ -109,9 +113,9 @@ const LeftPanel = ({
             /> */}
 
             
-            <Timeline userOperations={userOperations} />
+            <TimelineMemo userOperations={userOperations} />
         </LeftColumn>
     );
 }
 
-export default LeftPanel;
+export default memo(LeftPanel);

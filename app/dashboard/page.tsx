@@ -1,5 +1,5 @@
 'use client';
-import { useContext, useState, useCallback } from "react";
+import { useContext, useState, useCallback, useMemo } from "react";
 import { Box, CircularProgress, Typography, Switch } from "@mui/material";
 import { toastify } from "@/app/lib/toastify/toastify-helper";
 
@@ -106,7 +106,6 @@ export default function Dashboard() {
         redo,
         explain,
         apply,
-        // filterExactMatches,
         exportMatchingResults,
         isExplaining,
     } = useDashboardOperations({
@@ -156,7 +155,7 @@ export default function Dashboard() {
         setSuggestions(suggestions);
         getCachedResults({ callback: handleFileUpload });
         setOpenSuggestionsPopup(true);
-    }
+    };
 
     function handleApply(actionResponses: ActionResponse[] | undefined) {
         console.log("Action Responses: ", actionResponses);
@@ -169,9 +168,9 @@ export default function Dashboard() {
                 }
             });
         }
-    }
+    };
 
-    function setSelectedCandidateCallback(candidate: Candidate | undefined) {
+    const setSelectedCandidateCallback = useCallback((candidate: Candidate | undefined) => {
         if (!candidate) {
             setSelectedCandidate(undefined);
             generateExplanations();
@@ -186,25 +185,25 @@ export default function Dashboard() {
         } else {
             setIsMatch(true);
         }
-    }
+    }, [setSelectedCandidate, generateExplanations, setGdcAttribute, explain, setIsMatch]);
 
-    function setSelectedCandidateByTargetColumnCallback(sourceColumn: string, targetColumn: string) {
+    const setSelectedCandidateByTargetColumnCallback = useCallback((sourceColumn: string, targetColumn: string) => {
         console.log("Selected Candidate: ", sourceColumn, targetColumn);
         const candidate = weightedAggregatedCandidates.find((c) => c.sourceColumn === sourceColumn && c.targetColumn === targetColumn);
         if (candidate) {
             setSelectedCandidateCallback(candidate);
         }
-    }
+    }, [weightedAggregatedCandidates, setSelectedCandidateCallback]);
 
-    function onGenerateExplanation() {
-        toastify("default", `Generating explanations for ${selectedCandidate?.sourceColumn}...`, { autoClose: 200 });
+    const onGenerateExplanation = useCallback(() => {
         if (selectedCandidate) {
+            toastify("default", `Generating explanations for ${selectedCandidate.sourceColumn}...`, { autoClose: 200 });
             explain(selectedCandidate);
         }
-    }
+    }, [selectedCandidate, explain]);
 
-    function onSelectedActions(actions: AgentAction[]) {
-        if (actions && actions.length > 0) {
+    const onSelectedActions = useCallback((actions: AgentAction[]) => {
+        if (actions && actions.length > 0 && userOperations.length > 0) {
             const previousOperation = userOperations[userOperations.length - 1];
             const reaction: UserReaction = {
                 actions,
@@ -213,9 +212,9 @@ export default function Dashboard() {
             console.log("Reaction: ", reaction);
             apply(reaction);
         }
-    }
+    }, [userOperations, apply]);
 
-    function handleUpdateSourceColumn(column: string) {
+    const handleUpdateSourceColumn = useCallback((column: string) => {
         setSelectedCandidate(undefined);
 
         const filteredSourceColumn = filteredSourceColumns.find((sc) => sc.name === column);
@@ -230,32 +229,61 @@ export default function Dashboard() {
         }
         
         updateSourceColumn(column);
-    }
+    }, [setSelectedCandidate, filteredSourceColumns, updateStatus, candidateThreshold, updateCandidateThreshold, updateSourceColumn]);
 
-    function handleSearchResults(results: Candidate[]) {
+    const handleSearchResults = useCallback((results: Candidate[]) => {
         console.log("Search Results: ", results);
         updateSearchResults(results);
-    }
+    }, [updateSearchResults]);
+
+    const matchersSelectHandler = useCallback((matchers: Matcher[]) => {
+        setMatchers(matchers);
+    }, [setMatchers]);
+
+    const headerContent = useMemo(() => (
+        <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
+            <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: "200" }}>BDI Visualization System</Typography>
+                <Box display="flex" alignItems="center" width="400pt">
+                    <SearchBar agentSearchResultCallback={handleSearchResults} />
+                </Box>
+                <Box display="flex" alignItems="center">
+                    <Typography sx={{ fontSize: "1rem", fontWeight: "300", marginRight: 0 }}>Developer Mode</Typography>
+                    <Switch
+                        checked={developerMode}
+                        onChange={(e) => setDeveloperMode(e.target.checked)}
+                        color="default"
+                    />
+                </Box>
+            </Box>
+        </Box>
+    ), [developerMode, setDeveloperMode, handleSearchResults]);
+
+    const loadingOverlay = useMemo(() => {
+        if (!isLoadingGlobal) return null;
+        
+        return (
+            <Box sx={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                zIndex: 1300,
+            }}>
+                <CircularProgress size={80} />
+            </Box>
+        );
+    }, [isLoadingGlobal]);
 
     return (
         <RootContainer>
             <Header>
-                <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
-                    <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
-                        <Typography sx={{ fontSize: "1.2rem", fontWeight: "200" }}>BDI Visualization System</Typography>
-                        <Box display="flex" alignItems="center" width="400pt">
-                            <SearchBar agentSearchResultCallback={handleSearchResults} />
-                        </Box>
-                        <Box display="flex" alignItems="center">
-                            <Typography sx={{ fontSize: "1rem", fontWeight: "300", marginRight: 0 }}>Developer Mode</Typography>
-                            <Switch
-                                checked={developerMode}
-                                onChange={(e) => setDeveloperMode(e.target.checked)}
-                                color="default"
-                            />
-                        </Box>
-                    </Box>
-                </Box>
+                {headerContent}
             </Header>
 
             <MainContent>
@@ -273,9 +301,7 @@ export default function Dashboard() {
                     undo={undo}
                     redo={redo}
                     exportMatchingResults={exportMatchingResults}
-                    onMatchersSelect={(matchers: Matcher[]) => {
-                        setMatchers(matchers);
-                    }}
+                    onMatchersSelect={matchersSelectHandler}
                     state={{ sourceColumn, candidateType, similarSources, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleFileUpload}
@@ -283,18 +309,6 @@ export default function Dashboard() {
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}
                 />
-
-                    {/* <DualScatter
-                        candidates={weightedAggregatedCandidates}
-                        updateHighlightSourceColumns={
-                            updateHighlightedSourceColumns
-                        }
-                        updateHighlightTargetColumns={
-                            updateHighlightedTargetColumns
-                        }
-                        width={300}
-                        height={300}
-                    /> */}
 
                 {/* Middle Column - Main Visualizations */}
                 <MainColumn>
@@ -315,7 +329,7 @@ export default function Dashboard() {
                         updateStatus={updateStatus}
                     />
                     {/* Show Paginator when sourceColumn is "all" */}
-                    <Paginator setSelectedCandidate={setSelectedCandidate}  isShow={sourceColumn === "all"} />
+                    <Paginator setSelectedCandidate={setSelectedCandidate} isShow={sourceColumn === "all"} />
                     <LowerTabs
                         weightedAggregatedCandidates={weightedAggregatedCandidates}
                         matchers={matchers}
@@ -359,22 +373,7 @@ export default function Dashboard() {
             </MainContent>
 
             {/* Loading Overlay */}
-            {isLoadingGlobal && (
-                <Box sx={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                    zIndex: 1300,
-                }}>
-                    <CircularProgress size={80} />
-                </Box>
-            )}
+            {loadingOverlay}
 
             {/* Popups */}
             <AgentSuggestionsPopup

@@ -226,7 +226,10 @@ export const {
         const explain = useCallback(async (candidate?: Candidate) => {
             const candidateToExplain = candidate || selectedCandidate;
             if (!candidateToExplain) return;
-            if (isExplaining) return;
+            if (isExplaining) {
+                toastify("warning", <p>Previous explanation is still running. Please wait for it to finish...</p>);
+                return;
+            }
 
             setIsExplaining(true);
 
