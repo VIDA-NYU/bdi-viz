@@ -60,7 +60,7 @@ export default function Dashboard() {
         handleFileUpload,
         setSelectedCandidate,
         setMatchers,
-        handleUserOperationsUpdate,
+        handleUserOperationsUpdate: setUserOperations,
         handleUniqueValues,
         handleValueMatches,
         setGdcAttribute,
@@ -169,6 +169,11 @@ export default function Dashboard() {
             });
         }
     };
+
+    function handleUserOperationsUpdate(userOperations: UserOperation[]) {
+        setUserOperations(userOperations);
+        generateExplanations();
+    }
 
     const setSelectedCandidateCallback = useCallback((candidate: Candidate | undefined) => {
         if (!candidate) {

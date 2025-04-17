@@ -7,6 +7,7 @@ import {
     Chip,
     CircularProgress
 } from '@mui/material';
+import { useMemo, useCallback } from 'react';
 import ExplanationItem from './ExplanationItem';
 import { BasicChip, SectionHeader } from '../../layout/components';
 import { agentThumbRequest } from '@/app/lib/langchain/agent-helper';
@@ -42,184 +43,155 @@ const SchemaExplanation = ({
     isLoading
 }: SchemaExplanationProps) => {
 
-    const handleSelect = (explanation: Explanation) => {
+    const handleSelect = useCallback((explanation: Explanation) => {
         if (selectedExplanations.some(e => e.id === explanation.id)) {
             setSelectExplanations(selectedExplanations.filter(e => e.id !== explanation.id));
         } else {
             setSelectExplanations([...selectedExplanations, explanation]);
         }
-    };
+    }, [selectedExplanations, setSelectExplanations]);
 
-    const handleThumbUp = (id: string) => {
+    const createUserOperation = useCallback((explanation: Explanation, isThumbUp: boolean) => {
+        return {
+            operation: (explanation.isMatch === isThumbUp) ? "accept" : "reject",
+            candidate: {
+                sourceColumn: selectedCandidate?.sourceColumn ?? "",
+                targetColumn: selectedCandidate?.targetColumn ?? "",
+                score: explanation.confidence,
+            },
+            references: [],
+        };
+    }, [selectedCandidate]);
+
+    const handleThumbUp = useCallback((id: string) => {
         const explanation = currentExplanations.find(e => e.id === id);
         if (explanation) {
-            const userOperation = {
-                operation: "accept",
-                candidate: {
-                    sourceColumn: selectedCandidate?.sourceColumn ?? "",
-                    targetColumn: selectedCandidate?.targetColumn ?? "",
-                    score: explanation.confidence,
-                },
-                references: [],
-            }
-            if (explanation.isMatch) {
-                agentThumbRequest(explanation, userOperation);
-                toastify("success", <p>BDI-Viz has learned your feedback on why this candidate is a match. We will pay more attention to this in the future.</p>);
-            } else {
-                userOperation.operation = "reject";
-                agentThumbRequest(explanation, userOperation);
-                toastify("warning", <p>BDI-Viz has noticed your feedback on why this candidate is not a match. We will pay more attention to this in the future.</p>);
-            }
+            const userOperation = createUserOperation(explanation, true);
+            agentThumbRequest(explanation, userOperation);
+            
+            const message = explanation.isMatch
+                ? <p>BDI-Viz has learned your feedback on why this candidate is a match. We will pay more attention to this in the future.</p>
+                : <p>BDI-Viz has noticed your feedback on why this candidate is not a match. We will pay more attention to this in the future.</p>;
+            
+            toastify(explanation.isMatch ? "success" : "warning", message);
         }
-        if (thumbUpExplanations.some(e => e === id)) {
-            setThumbUpExplanations(thumbUpExplanations.filter(e => e !== id));
-        } else {
-            setThumbUpExplanations([...thumbUpExplanations, id]);
-        }
-    };
+        
+        setThumbUpExplanations(
+            thumbUpExplanations.includes(id)
+                ? thumbUpExplanations.filter(e => e !== id)
+                : [...thumbUpExplanations, id]
+        );
+    }, [currentExplanations, thumbUpExplanations, setThumbUpExplanations, createUserOperation]);
 
-    const handleThumbDown = (id: string) => {
+    const handleThumbDown = useCallback((id: string) => {
         const explanation = currentExplanations.find(e => e.id === id);
         if (explanation) {
-            const userOperation = {
-                operation: "reject",
-                candidate: {
-                    sourceColumn: selectedCandidate?.sourceColumn ?? "",
-                    targetColumn: selectedCandidate?.targetColumn ?? "",
-                    score: explanation.confidence,
-                },
-                references: [],
-            }
-            if (explanation.isMatch) {
-                agentThumbRequest(explanation, userOperation);
-                toastify("warning", <p>BDI-Viz has learned your feedback on this kind of explanation. We will pay more attention to this in the future.</p>);
-            } else {
-                userOperation.operation = "accept";
-                agentThumbRequest(explanation, userOperation);
-                toastify("success", <p>BDI-Viz has noticed your feedback on why this candidate is a match. We will pay more attention to this in the future.</p>);
-            }
+            const userOperation = createUserOperation(explanation, false);
+            agentThumbRequest(explanation, userOperation);
+            
+            const message = explanation.isMatch
+                ? <p>BDI-Viz has learned your feedback on this kind of explanation. We will pay more attention to this in the future.</p>
+                : <p>BDI-Viz has noticed your feedback on why this candidate is a match. We will pay more attention to this in the future.</p>;
+            
+            toastify(explanation.isMatch ? "warning" : "success", message);
         }
-        if (thumbDownExplanations.some(e => e === id)) {
-            setThumbDownExplanations(thumbDownExplanations.filter(e => e !== id));
-        } else {
-            setThumbDownExplanations([...thumbDownExplanations, id]);
-        }
-    };
+        
+        setThumbDownExplanations(
+            thumbDownExplanations.includes(id)
+                ? thumbDownExplanations.filter(e => e !== id)
+                : [...thumbDownExplanations, id]
+        );
+    }, [currentExplanations, thumbDownExplanations, setThumbDownExplanations, createUserOperation]);
+
+    const candidateDisplay = useMemo(() => {
+        if (!selectedCandidate) return null;
+        
+        return (
+            <Box>
+                <SectionHeader>
+                    Current Selection
+                </SectionHeader>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <BasicChip 
+                        size="small" 
+                        label={selectedCandidate.sourceColumn} 
+                        color="primary" 
+                        sx={{ fontSize: '0.7rem', fontWeight: "600" }} 
+                        onClick={() => handleCopy(selectedCandidate.sourceColumn)}
+                    />
+                    <Typography>→</Typography>
+                    <BasicChip
+                        size="small" 
+                        label={selectedCandidate.targetColumn} 
+                        color="secondary" 
+                        sx={{ fontSize: '0.7rem', fontWeight: "600" }} 
+                        onClick={() => handleCopy(selectedCandidate.targetColumn)}
+                    />
+                </Stack>
+            </Box>
+        );
+    }, [selectedCandidate]);
+
+    const explanationsList = useMemo(() => {
+        if (currentExplanations.length === 0) return null;
+        
+        return (
+            <Box>
+                <List sx={{ margin: 0.5, zIndex: 1 }}>
+                    {currentExplanations.map(explanation => (
+                        <ExplanationItem
+                            key={explanation.id}
+                            explanation={explanation}
+                            selected={selectedExplanations.some(e => e.id === explanation.id)}
+                            thumbUp={thumbUpExplanations.includes(explanation.id)}
+                            thumbDown={thumbDownExplanations.includes(explanation.id)}
+                            onSelect={handleSelect}
+                            onThumbUpClick={handleThumbUp}
+                            onThumbDownClick={handleThumbDown}
+                        />
+                    ))}
+                </List>
+            </Box>
+        );
+    }, [currentExplanations, selectedExplanations, thumbUpExplanations, thumbDownExplanations, handleSelect, handleThumbUp, handleThumbDown]);
+
+    if (isLoading) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                <CircularProgress />
+            </Box>
+        );
+    }
 
     return (
-        <Stack spacing={0} >
-            {isLoading ? (
-                <Box display="flex" justifyContent="center" alignItems="center" height="100%">
-                    <CircularProgress />
-                </Box>
-            ) : (
+        <Stack spacing={0}>
+            {candidateDisplay}
+
+            {currentExplanations.length === 0 && isMatch === true && (
+                <GenerateExplanationButton 
+                    selectedCandidate={selectedCandidate as AggregatedCandidate}
+                    onClick={onGenerateExplanation}
+                />
+            )}
+            
+            {selectedCandidate && isMatch !== undefined && (
                 <>
-                    {/* Match Selection Display */}
-                    {selectedCandidate && (
-                        <Box>
-                            <SectionHeader>
-                                Current Selection
-                            </SectionHeader>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                                <BasicChip 
-                                    size="small" 
-                                    label={selectedCandidate.sourceColumn} 
-                                    color="primary" 
-                                    sx={{ fontSize: '0.7rem', fontWeight: "600" }} 
-                                    onClick={() => handleCopy(selectedCandidate.sourceColumn)}
-                                />
-                                <Typography>→</Typography>
-                                <BasicChip
-                                    size="small" 
-                                    label={selectedCandidate.targetColumn} 
-                                    color="secondary" 
-                                    sx={{ fontSize: '0.7rem', fontWeight: "600" }} 
-                                    onClick={() => handleCopy(selectedCandidate.targetColumn)}
-                                />
-                            </Stack>
-                        </Box>
-                    )}
-
-                    {/* Value Matches */}
-                    {/* {valueMatches.length > 0 && (
-                        <Box>
-                            <SectionHeader>
-                                Value Matches
-                            </SectionHeader>
-                            <List>
-                                {valueMatches.map((values, index) => (
-                                    <Stack direction="row" spacing={1} key={index} sx={{ marginBottom: 0.5 }}>
-                                        <BasicChip
-                                            variant='filled'
-                                            color='primary' 
-                                            key={index} 
-                                            label={values[0]} 
-                                            size="small" 
-                                            sx={{ fontSize: "0.6rem", fontWeight: "600" }} 
-                                            onClick={() => handleCopy(values[0])}
-                                        />
-                                        <Typography>→</Typography>
-                                        <BasicChip
-                                            variant='filled'
-                                            color='secondary'
-                                            key={index}
-                                            label={values[1]}
-                                            size="small"
-                                            sx={{ fontSize: "0.6rem", fontWeight: "600" }}
-                                            onClick={() => handleCopy(values[1])}
-                                        />
-                                    </Stack>
-                                ))}
-                            </List>
-                        </Box>
-                    )} */}
-
-                    {/* Generate Explanation Button */}
-                    {currentExplanations.length === 0 && isMatch === true && (
-                        <GenerateExplanationButton 
-                            selectedCandidate={selectedCandidate as AggregatedCandidate}
-                            onClick={onGenerateExplanation}
+                    <SectionHeader>
+                        Match Explanations
+                    </SectionHeader>
+                    <Box>
+                        <Chip
+                            size="small"
+                            label={isMatch ? "Our agent thinks this is a match." : "Our agent thinks this is not a match."} 
+                            sx={{ backgroundColor: isMatch ? 'green' : 'red', color: 'white', fontSize: '0.75rem' }} 
                         />
-                    )}
-                    
-                    {/* Is Match */}
-                    {selectedCandidate && isMatch !== undefined &&
-                        <>
-                            <SectionHeader>
-                                Match Explanations
-                            </SectionHeader>
-                            <Box>
-                                <Chip
-                                    size="small"
-                                    label={isMatch ? "Our agent thinks this is a match." : "Our agent thinks this is not a match."} 
-                                    sx={{ backgroundColor: isMatch ? 'green' : 'red', color: 'white', fontSize: '0.75rem' }} 
-                                />
-                            </Box>
-                        </>
-                    }
-                    {/* Current Explanations */}
-                    {currentExplanations.length > 0 && (
-                            <Box>
-                                <List sx={{ margin: 0.5, zIndex: 1 }}>
-                                    {currentExplanations.map(explanation => (
-                                        <ExplanationItem
-                                            key={explanation.id}
-                                            explanation={explanation}
-                                            selected={selectedExplanations.some(e => e.id === explanation.id)}
-                                            thumbUp={thumbUpExplanations.some(id => id === explanation.id)}
-                                            thumbDown={thumbDownExplanations.some(id => id === explanation.id)}
-                                            onSelect={handleSelect}
-                                            onThumbUpClick={handleThumbUp}
-                                            onThumbDownClick={handleThumbDown}
-                                        />
-                                    ))}
-                                </List>
-                            </Box>
-                    )}
+                    </Box>
                 </>
             )}
+            
+            {explanationsList}
         </Stack>
     );
-}
+};
 
 export default SchemaExplanation;

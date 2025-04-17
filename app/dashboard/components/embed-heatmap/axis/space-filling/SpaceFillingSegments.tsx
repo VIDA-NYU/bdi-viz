@@ -4,8 +4,6 @@ import * as d3 from 'd3';
 import { getOptimalCategoryColorScale } from './ColorUtils.ts';
 import { applyDefaultStyleOnColumn, applyDefaultStyleOnEdge, applyBackgroundStyleOnColumn, applyBackgroundStyleOnEdge, applyHighlightOnColumn, applyHighlightStyleOnEdge } from './InteractionUtils.ts';
 
-
-// Function to calculate segment positions for categories
 // Function to calculate segment positions for categories
 export function calculateCategorySegments(
   categoryData: CategoryData[],
@@ -13,7 +11,7 @@ export function calculateCategorySegments(
   columnsPositioned: boolean,
   columnPositions?: { id: string; x: number; width: number; }[]
 ): CategoryData[] {
-  const { innerWidth } = layoutConfig;
+  const { innerWidth, segmentSpacing } = layoutConfig;
   const MIN_CATEGORY_WIDTH = 80; // Minimum width for category to ensure text fits
   
   // First, sort categories based on their leftmost column position
@@ -65,75 +63,78 @@ export function calculateCategorySegments(
   } else {
     // If columns aren't positioned yet, distribute categories evenly
     const totalCategories = sortedCategories.length;
-    // const availableWidth = innerWidth - (MIN_CATEGORY_WIDTH * totalCategories);
     
     // Calculate percentage width based on column count with minimum width consideration
     const totalColumns = sortedCategories.reduce((sum, cat) => sum + cat.columns.length, 0);
-
     const widthThreshold = MIN_CATEGORY_WIDTH / innerWidth;
-    const numCategoriesBelowThreshold = sortedCategories.filter(cat => {
-      const proportion = cat.columns.length / totalColumns;
-      return proportion < widthThreshold;
-    }
-    ).length;
-
-    // const availableWidth = innerWidth - (MIN_CATEGORY_WIDTH * numCategoriesBelowThreshold);
-    const availableWidth = innerWidth - (MIN_CATEGORY_WIDTH * totalCategories) - ((totalCategories - 1) * layoutConfig.segmentSpacing);
-
-    const numColumnsInCategoriesAboveThreshold = sortedCategories.filter(cat => {
-      const proportion = cat.columns.length / totalColumns;
-      return proportion >= widthThreshold;
-    }
-    ).reduce((sum, cat) => sum + cat.columns.length, 0);
-
     
-    sortedCategories.forEach((category, i) => {
+    // Pre-calculate which categories are below threshold
+    const categoriesBelowThreshold = new Set<string>();
+    for (const cat of sortedCategories) {
+      const proportion = cat.columns.length / totalColumns;
+      if (proportion < widthThreshold) {
+        categoriesBelowThreshold.add(cat.id);
+      }
+    }
+    
+    const availableWidth = innerWidth - (MIN_CATEGORY_WIDTH * totalCategories) - ((totalCategories - 1) * segmentSpacing);
+    
+    // Calculate total columns in categories above threshold once
+    const numColumnsInCategoriesAboveThreshold = sortedCategories
+      .filter(cat => !categoriesBelowThreshold.has(cat.id))
+      .reduce((sum, cat) => sum + cat.columns.length, 0);
+    
+    // Pre-calculate widths for each category
+    const categoryWidths = new Map<string, number>();
+    for (const cat of sortedCategories) {
+      const proportionOfColumns = cat.columns.length / totalColumns;
+      const calculatedWidth = categoriesBelowThreshold.has(cat.id) 
+        ? MIN_CATEGORY_WIDTH 
+        : MIN_CATEGORY_WIDTH + cat.columns.length * availableWidth / numColumnsInCategoriesAboveThreshold;
+      categoryWidths.set(cat.id, calculatedWidth);
+    }
+    
+    // Calculate positions in a single pass
+    let currentX = 0;
+    for (let i = 0; i < sortedCategories.length; i++) {
+      const category = sortedCategories[i];
       const updatedCategory = { ...category };
+      const calculatedWidth = categoryWidths.get(category.id) || MIN_CATEGORY_WIDTH;
       
-      // Calculate proportional width (with minimum)
-      const proportionOfColumns = category.columns.length / totalColumns;
-      // const calculatedWidth = Math.max(
-      //   proportionOfColumns * availableWidth + MIN_CATEGORY_WIDTH,
-      //   MIN_CATEGORY_WIDTH
-      // );
-      
-      // if(proportionOfColumns < widthThreshold) {
-      //   const calculatedWidth = MIN_CATEGORY_WIDTH;
-      // }else{
-      //   const calculatedWidth = category.columns.length * availableWidth / numColumnsInCategoriesAboveThreshold;
-      // }
-      const calculatedWidth = proportionOfColumns < widthThreshold ? MIN_CATEGORY_WIDTH : MIN_CATEGORY_WIDTH + category.columns.length * availableWidth / numColumnsInCategoriesAboveThreshold;
-
-      // For positioning, we need to know how much width was used before this category
-      const precedingCategories = sortedCategories.slice(0, i);
-      const precedingWidth = precedingCategories.reduce((sum, cat) => {
-        const catProportion = cat.columns.length / totalColumns;
-        return sum + (catProportion < widthThreshold ? MIN_CATEGORY_WIDTH : MIN_CATEGORY_WIDTH + cat.columns.length * availableWidth / numColumnsInCategoriesAboveThreshold) + layoutConfig.segmentSpacing;
-
-      }, 0);
-      
-      updatedCategory.x = precedingWidth;
+      updatedCategory.x = currentX;
       updatedCategory.width = calculatedWidth;
-      updatedCategory.centerX = updatedCategory.x + (calculatedWidth / 2);
+      updatedCategory.centerX = currentX + (calculatedWidth / 2);
       
       result.push(updatedCategory);
-    });
+      
+      // Update x position for next category
+      currentX += calculatedWidth + segmentSpacing;
+    }
   }
   
   return result;
 }
-
 
 // Function to calculate segment positions for super categories
 export function calculateSuperCategorySegments(
   superCategoryData: SuperCategoryData[],
   categorySegments: CategoryData[]
 ): SuperCategoryData[] {
+  // Create a map to group categories by super category for faster lookup
+  const categoriesBySuperCategory = new Map<string, CategoryData[]>();
+  
+  for (const cat of categorySegments) {
+    if (!cat.superCategory) continue;
+    
+    if (!categoriesBySuperCategory.has(cat.superCategory)) {
+      categoriesBySuperCategory.set(cat.superCategory, []);
+    }
+    categoriesBySuperCategory.get(cat.superCategory)!.push(cat);
+  }
+  
   return superCategoryData.map(superCategory => {
     const updatedSuperCategory = { ...superCategory };
-    const relevantCategories = categorySegments.filter(
-      cat => cat.superCategory === superCategory.id
-    );
+    const relevantCategories = categoriesBySuperCategory.get(superCategory.id) || [];
     
     if (relevantCategories.length > 0) {
       const leftmost = Math.min(...relevantCategories.map(cat => cat.x || 0));
@@ -159,20 +160,38 @@ export function renderSpaceFillingSegments(
   categoryY: number,
   categoryColorScale: (id: string) => string
 ) {
-  const { theme, globalQuery } = layoutConfig;
-  // const categoryIds = [...new Set(categoryData.map(c => c.id))];
-  // const categoryColorScale = getOptimalCategoryColorScale(categoryIds);
+  const { theme, globalQuery, hierarchyHeight } = layoutConfig;
   
   // Create a color scale for super categories
   const superCategoryIds = [...new Set(superCategoryData.map(sc => sc.id))];
   const superCategoryColorScale = getOptimalCategoryColorScale(superCategoryIds);
 
-  
-
   // Position the segments
-  const hierarchyHeight = layoutConfig.hierarchyHeight;
   const positionedCategorySegments = calculateCategorySegments(categoryData, layoutConfig, false);
   const positionedSuperCategorySegments = calculateSuperCategorySegments(superCategoryData, positionedCategorySegments);
+
+  // Create maps for faster lookups during interactions
+  const columnsByCategory = new Map<string, string[]>();
+  const columnsBySuperCategory = new Map<string, string[]>();
+  const categoriesBySuper = new Map<string, string[]>();
+  
+  // Build lookup maps
+  for (const cat of categoryData) {
+    const columnIds = cat.columns.map(col => col.id);
+    columnsByCategory.set(cat.id, columnIds);
+    
+    if (cat.superCategory) {
+      if (!categoriesBySuper.has(cat.superCategory)) {
+        categoriesBySuper.set(cat.superCategory, []);
+      }
+      categoriesBySuper.get(cat.superCategory)!.push(cat.id);
+      
+      if (!columnsBySuperCategory.has(cat.superCategory)) {
+        columnsBySuperCategory.set(cat.superCategory, []);
+      }
+      columnsBySuperCategory.get(cat.superCategory)!.push(...columnIds);
+    }
+  }
 
   // Create super category segments
   const superCategoryGroup = g.append('g')
@@ -208,98 +227,84 @@ export function renderSpaceFillingSegments(
         .attr('font-size', '0.9rem')
         .attr('font-weight', '500')
         .html(highlightText(d.id, globalQuery, theme));
-      }).on('mouseover', function(event, d: SuperCategoryData) {
-        // Highlight this path
-        d3.select(this)
-          .attr('stroke-width', 2.5)
-          .attr('stroke-opacity', 1)
-          .attr('stroke-dasharray', '0');
-          superCategoryData.filter(sc => sc.id !== d.id).forEach(sc => {
-            g.select(`#super-category-${sc.id}`)
+    }).on('mouseover', function(event, d: SuperCategoryData) {
+      // Highlight this super category
+      d3.select(this)
+        .attr('stroke-width', 2.5)
+        .attr('stroke-opacity', 1)
+        .attr('stroke-dasharray', '0');
+      
+      // Fade other super categories
+      superCategoryData.forEach(sc => {
+        if (sc.id !== d.id) {
+          g.select(`#super-category-${sc.id}`)
             .attr('opacity', 0.2)
             .select('rect')
             .attr('stroke-width', 1);
-          });
-        
-
-        // Highlight the connected categories
-        categoryData.filter(category => category.superCategory === d.id).forEach(category => {
-          g.select(`#category-${category.id}`)
+        }
+      });
+      
+      // Get related categories and columns
+      const relatedCategoryIds = categoriesBySuper.get(d.id) || [];
+      const relatedColumnIds = columnsBySuperCategory.get(d.id) || [];
+      
+      // Highlight related categories
+      relatedCategoryIds.forEach(catId => {
+        g.select(`#category-${catId}`)
           .attr('opacity', 1)
           .select('rect')
           .attr('stroke-width', 2);
-
-          g.select(`category-super-connection-${category.id}-${d.id}`).call(applyHighlightStyleOnEdge);
-        });
         
-        // Make the unconnected categories transparent
-        categoryData.filter(category => category.superCategory !== d.id).forEach(category => {
-          g.select(`#category-${category.id}`)
-          .attr('opacity', 0.2)
-          .select('rect')
-          .attr('stroke-width', 1);
-
-          g.select(`category-super-connection-${category.id}-${d.id}`).call(applyBackgroundStyleOnEdge);
-          
-        });
-
-        columnData.filter(column => categoryData.filter(category => category.superCategory === d.id).map(cat => cat.columns.map(col => col.id)).flat().includes(column.id)).forEach(column => {
-          g.select(`#column-${column.id}`).call(applyHighlightOnColumn);
-          // .attr('opacity', 1)
-          // .select('rect')
-          // .attr('stroke-width', 2); 
-          
-          g.select(`#edge-${column.id}-${column.category}`).call(applyHighlightStyleOnEdge);
-          // .attr('stroke-width', 1.5)
-          // .attr('stroke-opacity', 1)
-          // .attr('stroke-dasharray', '3,3'); 
-        }
-        );
-
-        columnData.filter(column => categoryData.filter(category => category.superCategory !== d.id).map(cat => cat.columns.map(col => col.id)).flat().includes(column.id)).forEach(column => { 
-          g.select(`#column-${column.id}`).call(applyBackgroundStyleOnColumn);
-          // .attr('opacity', 0.2)
-          // .select('rect')
-          // .attr('stroke-width', 1);
-          
-          g.select(`#edge-${column.id}-${column.category}`).call(applyBackgroundStyleOnEdge);
-          // .attr('stroke-width', 1.5)
-          // .attr('stroke-opacity', 0.2)
-          // .attr('stroke-dasharray', '3,3'); 
-        });
-
-
-      }).on('mouseout', function(event, d: SuperCategoryData) {
-        // Reset all elements
-        g.selectAll('.category')
-          .attr('opacity', 1)
-          .select('rect')
-          .attr('stroke-width', 1);
-        
-        g.selectAll('.super-category')
-          .attr('opacity', 1)
-          .select('rect')
-          .attr('stroke-width', 1);
-
-        columnData.forEach(column => {
-          g.select(`#column-${column.id}`).call(applyHighlightOnColumn);
-          // .attr('opacity', 1)
-          // .select('rect')
-          // .attr('stroke-width', 1); 
-          
-          g.select(`#edge-${column.id}-${column.category}`).call(applyHighlightStyleOnEdge);
-
-          g.select('.category-super-connection').call(applyDefaultStyleOnEdge);
-          // .attr('stroke-width', 1.5)
-          // .attr('stroke-opacity', 0.7)
-          // .attr('stroke-dasharray', '3,3'); 
-        }
-        );
+        g.select(`category-super-connection-${catId}-${d.id}`).call(applyHighlightStyleOnEdge);
       });
+      
+      // Fade unrelated categories
+      categoryData.forEach(cat => {
+        if (!relatedCategoryIds.includes(cat.id)) {
+          g.select(`#category-${cat.id}`)
+            .attr('opacity', 0.2)
+            .select('rect')
+            .attr('stroke-width', 1);
+          
+          g.select(`category-super-connection-${cat.id}-${cat.superCategory}`).call(applyBackgroundStyleOnEdge);
+        }
+      });
+      
+      // Highlight related columns
+      columnData.forEach(column => {
+        if (relatedColumnIds.includes(column.id)) {
+          g.select(`#column-${column.id}`).call(applyHighlightOnColumn);
+          g.select(`#edge-${column.id}-${column.category}`).call(applyHighlightStyleOnEdge);
+        } else {
+          g.select(`#column-${column.id}`).call(applyBackgroundStyleOnColumn);
+          g.select(`#edge-${column.id}-${column.category}`).call(applyBackgroundStyleOnEdge);
+        }
+      });
+    }).on('mouseout', function(event, d: SuperCategoryData) {
+      // Reset all elements
+      g.selectAll('.category')
+        .attr('opacity', 1)
+        .select('rect')
+        .attr('stroke-width', 1);
+      
+      g.selectAll('.super-category')
+        .attr('opacity', 1)
+        .select('rect')
+        .attr('stroke-width', 1);
+      
+      // Reset all columns and edges
+      columnData.forEach(column => {
+        g.select(`#column-${column.id}`).call(applyDefaultStyleOnColumn);
+        g.select(`#edge-${column.id}-${column.category}`).call(applyDefaultStyleOnEdge);
+      });
+      
+      g.selectAll('.category-super-connection').call(applyDefaultStyleOnEdge);
+    });
 
   // Create category segments
   const categoryGroup = g.append('g')
     .attr('class', 'categories');
+  
   categoryGroup.selectAll('.category')
     .data(positionedCategorySegments)
     .enter()
@@ -330,107 +335,52 @@ export function renderSpaceFillingSegments(
         .attr('font-size', '0.8rem')
         .html(highlightText(d.id, globalQuery, theme));
     }).on('mouseover', function(event, d: CategoryData) {
-      // Highlight this path
+      // Highlight this category
       d3.select(this)
         .attr('stroke-width', 2.5)
         .attr('stroke-opacity', 1)
         .attr('stroke-dasharray', '0');
       
-        // Highlight the connected columns
-        columnData.filter(column => d.columns.map(col => col.id).includes(column.id)).forEach(column => {
-            g.select(`#column-${column.id}`)
-            // .call(applyHighlightOnColumn);
+      const relatedColumnIds = columnsByCategory.get(d.id) || [];
+      
+      // Highlight related columns
+      columnData.forEach(column => {
+        if (relatedColumnIds.includes(column.id)) {
+          g.select(`#column-${column.id}`)
             .attr('opacity', 1)
             .select('rect')
-            .attr('stroke-width', 2); 
-            
-            g.select(`#edge-${column.id}-${d.id}`)
-            // .call(applyHighlightStyleOnEdge);
+            .attr('stroke-width', 2);
+          
+          g.select(`#edge-${column.id}-${d.id}`)
             .attr('stroke-width', 1.5)
             .attr('stroke-opacity', 1)
-            .attr('stroke-dasharray', '3,3'); 
-          }
-        );
-
-        // Make the unconnected columns transparent
-        columnData.filter(column => !d.columns.map(col => col.id).includes(column.id)).forEach(column => {
+            .attr('stroke-dasharray', '3,3');
+        } else {
           g.select(`#column-${column.id}`)
-          // .call(applyBackgroundStyleOnColumn);
             .attr('opacity', 0.2)
             .select('rect')
             .attr('stroke-width', 1);
+          
           g.select(`#edge-${column.id}-${column.category}`)
-          // .call(applyBackgroundStyleOnEdge);
             .attr('stroke-width', 1.5)
             .attr('stroke-opacity', 0.2)
-            .attr('stroke-dasharray', '3,3'); 
-          }
-        );
-
-        
-
-      // Highlight the connected column and category
-      // g.select(`#column-${d.column.id}`)
-      //   .attr('opacity', 1)
-      //   .select('rect')
-      //   .attr('stroke-width', 2);
-      
-      g.select(`#category-${d.id}`)
-        .attr('opacity', 1)
-        .select('rect')
-        .attr('stroke-width', 2);
-      
-
-      // Fade other paths
-      // pathGroup.selectAll('.column-category-path')
-      //   .filter((path:any) => path.id !== d.id)
-      //   .attr('stroke-opacity', 0.2);
+            .attr('stroke-dasharray', '3,3');
+        }
+      });
     })
     .on('mouseout', function(event, d: CategoryData) {
       // Reset all elements
-      // pathGroup.selectAll('.column-category-path')
-      //   .attr('stroke-width', 1.5)
-      //   .attr('stroke-opacity', 0.7)
-      //   .attr('stroke-dasharray', '3,3');
-      
-      // g.selectAll('.column')
-      //   .attr('opacity', 1)
-      //   .select('rect')
-      //   .attr('stroke-width', 1);
-      
       g.selectAll('.category')
         .attr('opacity', 1)
         .select('rect')
         .attr('stroke-width', 1);
       
-        columnData.filter(column => d.columns.map(col => col.id).includes(column.id)).forEach(column => {
-          g.select(`#column-${column.id}`).call(applyHighlightOnColumn);
-            // .attr('opacity', 1)
-            // .select('rect')
-            // .attr('stroke-width', 1); 
-          
-          g.select(`#edge-${column.id}-${d.id}`).call(applyHighlightStyleOnEdge);
-            // .attr('stroke-width', 1.5)
-            // .attr('stroke-opacity', 0.7)
-            // .attr('stroke-dasharray', '3,3');
-          
-        }
-        );
-        columnData.filter(column => !d.columns.map(col => col.id).includes(column.id)).forEach(column => {
-          g.select(`#column-${column.id}`).call(applyDefaultStyleOnColumn);
-            // .attr('opacity', 1)
-            // .select('rect')
-            // .attr('stroke-width', 1);
-          g.select(`#edge-${column.id}-${column.category}`).call(applyDefaultStyleOnEdge);
-            // .attr('stroke-width', 1.5)
-            // .attr('stroke-opacity', 0.7)
-            // .attr('stroke-dasharray', '3,3');
-        }
-        );
-
-
+      // Reset all columns and edges
+      columnData.forEach(column => {
+        g.select(`#column-${column.id}`).call(applyDefaultStyleOnColumn);
+        g.select(`#edge-${column.id}-${column.category}`).call(applyDefaultStyleOnEdge);
+      });
     });
-
 
   // Create connecting lines from categories to super categories
   positionedCategorySegments.forEach(category => {

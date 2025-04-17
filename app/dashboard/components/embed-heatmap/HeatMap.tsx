@@ -8,7 +8,6 @@ import { useResizedSVGRef } from "../hooks/resize-hooks";
 import { useHeatmapScales } from "./hooks/useHeatmapScales";
 import { useTooltip } from "./hooks/useTooltip";
 import { useOntologyLayout } from "./tree/useOntologyLayout";
-import { useLabelManagement } from "./tree/useLabelManagement";
 import { Legend } from "./axis/Legend";
 import { YAxis } from "./axis/YAxis";
 import { BaseExpandedCell } from "./expanded-cells/BaseExpandedCell";
