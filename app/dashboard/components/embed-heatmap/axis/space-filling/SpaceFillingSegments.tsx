@@ -298,7 +298,9 @@ export function renderSpaceFillingSegments(
         g.select(`#edge-${column.id}-${column.category}`).call(applyDefaultStyleOnEdge);
       });
       
-      g.selectAll('.category-super-connection').call(applyDefaultStyleOnEdge);
+      g.selectAll('.category-super-connection').each(function() {
+        d3.select(this).call(applyDefaultStyleOnEdge);
+      });
     });
 
   // Create category segments
