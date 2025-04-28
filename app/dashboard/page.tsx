@@ -391,6 +391,7 @@ export default function Dashboard() {
                     onGenerateExplanation={onGenerateExplanation}
                     gdcAttribute={gdcAttribute}
                     relatedOuterSources={relatedOuterSources}
+                    matcherAnalysis={matcherMetrics}
                 />
             </MainContent>
 

@@ -4,6 +4,7 @@ import { Box, CircularProgress, Typography, Switch } from "@mui/material";
 import { AuxColumn } from "./layout/components";
 import CombinedView from "./components/explanation/CombinedView";
 import { SectionHeader } from "./layout/components";
+import MatcherView from "./components/matcher-card/matcherView";
 
 interface RightPanelProps {
     // CombinedView
@@ -21,6 +22,7 @@ interface RightPanelProps {
     selectedCandidate?: Candidate;
     gdcAttribute?: GDCAttribute;
     relatedOuterSources: RelatedSource[];
+    matcherAnalysis: MatcherAnalysis[];
 }
 
 
@@ -40,10 +42,12 @@ const RightPanel = ({
     selectedCandidate,
     gdcAttribute,
     relatedOuterSources,
+    matcherAnalysis,
 }: RightPanelProps) => {
     
     return (
         <AuxColumn>
+            <MatcherView matcherAnalysis={matcherAnalysis} />
             <CombinedView
                 isMatch={isMatch}
                 currentExplanations={currentExplanations}
