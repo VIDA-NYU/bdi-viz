@@ -304,18 +304,18 @@ class MatchingTask:
                 current_step=f"Completed matcher: {matcher_name} with {len(matcher_candidates)} candidates",
             )
 
-        easy_match_keys = {
-            (candidate["sourceColumn"], candidate["targetColumn"])
-            for candidate in layered_candidates
-            if candidate["matcher"] == "candidate_quadrants"
-        }
-        layered_candidates = [
-            candidate
-            for candidate in layered_candidates
-            if candidate["matcher"] == "candidate_quadrants"
-            or (candidate["sourceColumn"], candidate["targetColumn"])
-            not in easy_match_keys
-        ]
+        # easy_match_keys = {
+        #     (candidate["sourceColumn"], candidate["targetColumn"])
+        #     for candidate in layered_candidates
+        #     if candidate["matcher"] == "candidate_quadrants"
+        # }
+        # layered_candidates = [
+        #     candidate
+        #     for candidate in layered_candidates
+        #     if candidate["matcher"] == "candidate_quadrants"
+        #     or (candidate["sourceColumn"], candidate["targetColumn"])
+        #     not in easy_match_keys
+        # ]
         self._update_task_state(progress=90)
 
         # Step 5: Generate value matches

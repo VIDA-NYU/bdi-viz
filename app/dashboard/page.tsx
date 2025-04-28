@@ -28,6 +28,7 @@ import {
     MainColumn,
 } from "./layout/components";
 import { useDashboardHighlight } from "./hooks/useDashboardHighlight";
+import { useMatcherAnalysis } from "./hooks/useMatcherAnalysis";
 
 export default function Dashboard() {
     const [openSuggestionsPopup, setOpenSuggestionsPopup] = useState(false);
@@ -123,6 +124,9 @@ export default function Dashboard() {
         onUserOperationsUpdate: handleUserOperationsUpdate,
         onRelatedOuterSources: setRelatedOuterSources,
     });
+
+
+    const { matcherMetrics } = useMatcherAnalysis({ candidates, matchers, enabled: developerMode });
 
     const {
         filteredSourceCluster,

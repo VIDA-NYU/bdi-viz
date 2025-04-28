@@ -51,7 +51,7 @@ export const {
                     sourceColumn: items[0].sourceColumn,
                     targetColumn: items[0].targetColumn,
                     matchers: items.map(d => d.matcher).filter((m): m is string => m !== undefined),
-                    score: score,
+                    score: score > 1 ? 1 : score,
                     status: items.some(item => item.status === 'accepted') ? 'accepted' : items.some(item => item.status === 'rejected') ? 'rejected' : (items.every(item => item.status === 'discarded') ? 'discarded' : 'idle'),
                 };
             }).flat().sort((a, b) => b.score - a.score);

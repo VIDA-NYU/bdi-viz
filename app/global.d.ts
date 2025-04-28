@@ -163,3 +163,13 @@ declare interface TaskLog {
     step: string;
     progress: number;
 }
+
+declare interface MatcherAnalysis {
+    name: string;
+    description: string;
+    mrr: number;
+    recallGt: number;
+    f1Score: number;
+    falsePositives: Candidate[];
+    falseNegatives: Candidate[];
+}
