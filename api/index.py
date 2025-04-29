@@ -343,6 +343,22 @@ def get_candidates_results():
         return {"message": "failure", "results": None}
 
 
+@app.route("/api/matcher/new", methods=["POST"])
+def new_matcher():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    data = request.json
+    name = data["name"]
+    params = data["params"]
+    code = data["code"]
+
+    matching_task.new_matcher(name, code, params)
+    matchers = matching_task.get_matchers()
+
+    return {"message": "success", "matchers": matchers}
+
+
 @app.route("/api/agent", methods=["POST"])
 def ask_agent():
     data = request.json

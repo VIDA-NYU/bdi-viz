@@ -1,7 +1,10 @@
+import importlib
 import json
 import logging
 import os
 import re
+import subprocess
+import sys
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -282,3 +285,84 @@ def load_property(target_column: str) -> Optional[Dict[str, Any]]:
         property = ontology_flat[target_column]
 
     return property
+
+
+# Verify and return the new matcher from its code, the code should be a class
+def verify_new_matcher(
+    name: str, code: str, params: Dict[str, Any]
+) -> Tuple[Optional[str], Optional[object]]:
+    matcher_name = name
+    matcher_obj = None
+
+    try:
+        # Extract imports from the code
+        import_lines = [
+            line.strip()
+            for line in code.split("\n")
+            if line.strip().startswith("import ") or line.strip().startswith("from ")
+        ]
+        logger.info(f"import_lines: {import_lines}")
+
+        # Try to import each module and install if missing
+        for import_line in import_lines:
+            try:
+                if import_line.startswith("import "):
+                    module_name = (
+                        import_line.split("import ")[1]
+                        .split(" as ")[0]
+                        .split(",")[0]
+                        .strip()
+                    )
+                elif import_line.startswith("from "):
+                    module_name = (
+                        import_line.split("from ")[1].split(" import ")[0].strip()
+                    )
+
+                # Try importing the module
+                importlib.import_module(module_name)
+
+                logger.info(f"Importing: {module_name}")
+            except ImportError:
+                logger.info(f"Installing missing module: {module_name}")
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", module_name]
+                )
+
+        # Create a new matcher function
+        matcher_globals = {}
+        exec(code, matcher_globals)
+
+        # Check if the matcher function is defined
+        if matcher_name not in matcher_globals:
+            error_message = f"Matcher {name} is not defined"
+            logger.error(error_message)
+            return error_message, None
+
+        # Check if the matcher function is callable
+        if not callable(matcher_globals[matcher_name]):
+            error_message = f"Matcher {name} is not callable"
+            logger.error(error_message)
+            return error_message, None
+
+        # Create an instance of the matcher
+        logger.info(f"Params: {params}")
+        matcher_obj = matcher_globals[matcher_name](**params)
+
+        # Check if the matcher has the required methods
+        if not hasattr(matcher_obj, "top_matches"):
+            error_message = (
+                f"Matcher {name} does not have the required method 'top_matches'"
+            )
+            logger.error(error_message)
+            return error_message, None
+
+        # if not hasattr(matcher_obj, 'top_value_matches'):
+        #     error_message = f"Matcher {name} does not have the required method 'top_value_matches'"
+        #     logger.error(error_message)
+        #     return error_message, None
+
+        return None, matcher_obj
+    except Exception as e:
+        error_message = f"Error verifying new matcher: {e}"
+        logger.error(error_message)
+        return error_message, None

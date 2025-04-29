@@ -21,6 +21,7 @@ from .utils import (
     load_gdc_ontology,
     load_ontology,
     load_property,
+    verify_new_matcher,
 )
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -64,6 +65,7 @@ class MatchingTask:
         self.history = UserOperationHistory()
 
         self.update_matcher_weights = update_matcher_weights
+        self.weight_updater = None
 
         # Task state tracking
         self._initialize_task_state()
@@ -75,6 +77,8 @@ class MatchingTask:
             "candidates": [],
             "source_clusters": None,
             "value_matches": {},
+            "matchers": {},
+            "matcher_code": {},
         }
 
     def _initialize_task_state(self) -> None:
@@ -121,12 +125,17 @@ class MatchingTask:
             cached_json = self._import_cache_from_json()
             candidates = []
 
+            # Check if we can use the cached JSON file
             if self._is_cache_valid(cached_json, source_hash, target_hash):
                 self.cached_candidates = cached_json
                 candidates = cached_json["candidates"]
                 self._update_task_state(
                     progress=75, current_step="Using cached results", completed_steps=3
                 )
+                # Load cached matchers if they exist
+                if "matchers" in cached_json and cached_json["matchers"]:
+                    self._load_cached_matchers(cached_json)
+            # Check if we can use the in-memory cache
             elif is_candidates_cached and self._is_cache_valid(
                 self.cached_candidates, source_hash, target_hash
             ):
@@ -136,6 +145,7 @@ class MatchingTask:
                     current_step="Using in-memory cached results",
                     completed_steps=3,
                 )
+            # Generate new candidates
             else:
                 self._update_task_state(
                     progress=50, current_step="Generating candidates", completed_steps=2
@@ -209,6 +219,38 @@ class MatchingTask:
     def get_task_state(self) -> Dict[str, Any]:
         """Return the current state of the task for monitoring progress"""
         return self.task_state
+    def _load_cached_matchers(self, cached_json: Dict[str, Any]) -> None:
+        """Load matchers from cache"""
+        # First load the default matchers
+        default_matchers = {
+            "ct_learning": BDIKitMatcher("ct_learning"),
+            "magneto_ft": BDIKitMatcher("magneto_ft"),
+            "magneto_zs": BDIKitMatcher("magneto_zs"),
+        }
+
+        # Initialize matchers dictionary with defaults
+        self.matchers = default_matchers.copy()
+
+        # Load custom matchers from cache
+        for matcher_name, matcher_info in cached_json["matchers"].items():
+            # Skip default matchers as they're already loaded
+            if matcher_name in default_matchers:
+                continue
+
+            # Get matcher code if available
+            if matcher_name in cached_json.get("matcher_code", {}):
+                matcher_code = cached_json["matcher_code"][matcher_name]
+                matcher_params = matcher_info.get("params", {})
+
+                # Recreate the matcher
+                error, matcher = verify_new_matcher(
+                    matcher_name, matcher_code, matcher_params
+                )
+                if not error:
+                    self.matchers[matcher_name] = matcher
+                    logger.info(f"Loaded custom matcher '{matcher_name}' from cache")
+                else:
+                    logger.warning(f"Failed to load matcher '{matcher_name}': {error}")
 
     def update_exact_matches(self) -> List[Dict[str, Any]]:
         return self.get_candidates()
@@ -251,6 +293,7 @@ class MatchingTask:
 
         self._update_task_state(current_step=generation_steps[0])
 
+        # Generate embeddings for clustering
         embedding_clusterer = EmbeddingClusterer(
             params={
                 "embedding_model": self.clustering_model,
@@ -266,18 +309,25 @@ class MatchingTask:
 
         # Step 2: Cluster source columns
         self._update_task_state(current_step=generation_steps[1])
+        
+        # Generate clusters
         source_clusters = self._generate_source_clusters(source_embeddings)
         self._update_task_state(progress=70)
 
         # Step 3: Apply candidate quadrants
         self._update_task_state(current_step=generation_steps[2])
+        
+        # Initialize candidate quadrants
         self.candidate_quadrants = CandidateQuadrants(
             source=self.source_df,
             target=self.target_df,
             top_k=self.top_k,
         )
 
+        # Collect candidates from different sources
         layered_candidates = []
+
+        # Add candidates from quadrants
         for source_column in self.source_df.columns:
             layered_candidates.extend(
                 self.candidate_quadrants.get_easy_target_json(source_column)
@@ -291,6 +341,8 @@ class MatchingTask:
         for i, (matcher_name, matcher_instance) in enumerate(self.matchers.items()):
             logger.info(f"Running matcher: {matcher_name}")
             self._update_task_state(current_step=f"Running matcher: {matcher_name}")
+        # Add candidates from matchers
+        for matcher_name, matcher_instance in self.matchers.items():
             matcher_candidates = matcher_instance.top_matches(
                 source=self.source_df,
                 target=self.target_df,
@@ -320,18 +372,38 @@ class MatchingTask:
 
         # Step 5: Generate value matches
         self._update_task_state(current_step=generation_steps[4])
+
+        # Generate value matches for each candidate
         for candidate in layered_candidates:
             self._generate_value_matches(
                 candidate["sourceColumn"], candidate["targetColumn"]
             )
 
+        # Update cache if needed
         if is_candidates_cached:
+            # Cache matcher information
+            matcher_cache = {}
+            matcher_code_cache = {}
+
+            for name, matcher in self.matchers.items():
+                matcher_cache[name] = {
+                    "name": matcher.name,
+                    "weight": getattr(matcher, "weight", 1.0),
+                    "params": getattr(matcher, "params", {}),
+                }
+
+                # Store matcher code for custom matchers
+                if hasattr(matcher, "code"):
+                    matcher_code_cache[name] = matcher.code
+
             self.cached_candidates = {
                 "source_hash": source_hash,
                 "target_hash": target_hash,
                 "candidates": layered_candidates,
                 "source_clusters": source_clusters,
                 "value_matches": self.cached_candidates["value_matches"],
+                "matchers": matcher_cache,
+                "matcher_code": matcher_code_cache,
             }
             self._export_cache_to_json(self.cached_candidates)
 
@@ -340,21 +412,16 @@ class MatchingTask:
     def _generate_source_clusters(
         self, source_embeddings: np.ndarray
     ) -> Dict[str, List[str]]:
-        knn = NearestNeighbors(
-            n_neighbors=min(10, len(self.source_df.columns)), metric="cosine"
-        )
+        n_neighbors = min(10, len(self.source_df.columns))
+        knn = NearestNeighbors(n_neighbors=n_neighbors, metric="cosine")
         knn.fit(source_embeddings)
-        clusters_idx = [
-            knn.kneighbors([source_embedding], return_distance=False)[0]
-            for source_embedding in source_embeddings
-        ]
 
-        clusters = {
-            self.source_df.columns[i]: [
-                self.source_df.columns[idx] for idx in cluster_idx
-            ]
-            for i, cluster_idx in enumerate(clusters_idx)
-        }
+        clusters = {}
+        for i, source_embedding in enumerate(source_embeddings):
+            cluster_idx = knn.kneighbors([source_embedding], return_distance=False)[0]
+            source_col = self.source_df.columns[i]
+            clusters[source_col] = [self.source_df.columns[idx] for idx in cluster_idx]
+
         return clusters
 
     def _generate_gdc_ontology(self) -> List[Dict]:
@@ -367,9 +434,11 @@ class MatchingTask:
 
     def _initialize_value_matches(self) -> None:
         self.cached_candidates["value_matches"] = {}
+
         for source_col in self.source_df.columns:
             source_unique_values = []
-            # if the numeric type can be treated as categorical, still generate value matches
+
+            # Handle numeric columns that can be treated as categorical
             if pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype):
                 if is_candidate_for_category(self.source_df[source_col]):
                     source_unique_values = self.get_source_unique_values(
@@ -378,6 +447,7 @@ class MatchingTask:
             else:
                 source_unique_values = self.get_source_unique_values(source_col)
 
+            # Initialize value matches structure
             self.cached_candidates["value_matches"][source_col] = {
                 "source_unique_values": source_unique_values,
                 "source_mapped_values": source_unique_values,
@@ -385,6 +455,7 @@ class MatchingTask:
             }
 
     def _generate_value_matches(self, source_column: str, target_column: str) -> None:
+        # Skip if already generated
         if (
             target_column
             in self.cached_candidates["value_matches"][source_column]["targets"]
@@ -399,6 +470,7 @@ class MatchingTask:
 
         target_values = self.get_target_unique_values(target_column)
 
+        # Generate matches
         match_results = {
             "From": [],
             "To": [],
@@ -408,7 +480,7 @@ class MatchingTask:
             source_values, target_values, top_k=1
         )
 
-        # re-order as per source_values
+        # Sort results to match source values order
         matcher_results = sorted(
             matcher_results,
             key=lambda x: source_values.index(x["sourceValue"])
@@ -416,12 +488,14 @@ class MatchingTask:
             else len(source_values),
         )
 
+        # Extract matched values
         for result in matcher_results:
             source_value = result["sourceValue"]
             target_value = result["targetValue"]
             match_results["From"].append(source_value)
             match_results["To"].append(target_value)
 
+        # Store matches
         self.cached_candidates["value_matches"][source_column]["targets"][
             target_column
         ] = list(match_results["To"])
@@ -469,7 +543,7 @@ class MatchingTask:
 
     def to_frontend_json(self) -> dict:
         return {
-            "candidates": self.get_cached_candidates(),  # sourceColumn, targetColumn, score, matcher
+            "candidates": self.get_cached_candidates(),
             "sourceClusters": self._format_source_clusters_for_frontend(),
             "matchers": self.get_matchers(),
         }
@@ -495,6 +569,7 @@ class MatchingTask:
     def value_matches_to_frontend_json(self) -> List[Dict[str, any]]:
         value_matches = self.cached_candidates["value_matches"]
         ret_json = []
+
         for source_col, source_items in value_matches.items():
             source_json = {
                 "sourceColumn": source_col,
@@ -502,6 +577,7 @@ class MatchingTask:
                 "sourceMappedValues": source_items["source_mapped_values"],
                 "targets": [],
             }
+
             for target_col, target_unique_values in source_items["targets"].items():
                 source_json["targets"].append(
                     {
@@ -509,7 +585,9 @@ class MatchingTask:
                         "targetValues": target_unique_values,
                     }
                 )
+
             ret_json.append(source_json)
+
         return ret_json
 
     def _format_source_clusters_for_frontend(self) -> List[Dict[str, Any]]:
@@ -529,9 +607,12 @@ class MatchingTask:
         if os.path.exists(output_path):
             with open(output_path, "r") as f:
                 return json.load(f)
+        return None
 
     def _bucket_column(self, df: pd.DataFrame, col: str) -> List[Dict[str, Any]]:
         col_obj = df[col].dropna()
+
+        # Handle categorical data
         if col_obj.dtype in ["object", "category", "bool"]:
             counter = col_obj.value_counts()[:10].to_dict()
             return [
@@ -539,23 +620,27 @@ class MatchingTask:
                 for key, value in counter.items()
                 if value >= 1
             ]
+        # Handle numeric data
         elif col_obj.dtype in ["int64", "float64"]:
-            col_obj = col_obj.dropna()  # Drop NaN values
             if len(col_obj) == 0:
                 return []
+
             unique_vals = col_obj.unique()
-            # If the integer column has few unique values, treat it as categorical
+
+            # Integer columns with few unique values are treated as categorical
             if col_obj.dtype == "int64" and len(unique_vals) <= 10:
                 counter = col_obj.value_counts().sort_index()
                 return [
                     {"value": str(val), "count": int(count)}
                     for val, count in counter.items()
                 ]
+            # Otherwise create bins
             else:
                 min_val = col_obj.min()
                 max_val = col_obj.max()
                 bins = np.linspace(min_val, max_val, num=10)
                 counter = np.histogram(col_obj, bins=bins)[0]
+
                 if col_obj.dtype == "float64":
                     return [
                         {
@@ -576,7 +661,7 @@ class MatchingTask:
             logger.warning(f"Column {col} is of type {col_obj.dtype}.")
             return []
 
-    def undo(self) -> Optional["UserOperation"]:
+    def undo(self) -> Optional[Dict[str, Any]]:
         logger.info("Undoing last operation...")
         operation = self.history.undo_last_operation()
         if operation:
@@ -586,7 +671,7 @@ class MatchingTask:
             return operation._json_serialize()
         return None
 
-    def redo(self) -> Optional["UserOperation"]:
+    def redo(self) -> Optional[Dict[str, Any]]:
         logger.info("Redoing last operation...")
         operation = self.history.redo_last_operation()
         if operation:
@@ -604,8 +689,8 @@ class MatchingTask:
     ) -> None:
         logger.info(f"Applying operation: {operation}, on candidate: {candidate}...")
 
-        candidates = self.get_cached_candidates()
-        if self.update_matcher_weights:
+        # Update matcher weights if enabled
+        if self.update_matcher_weights and self.weight_updater:
             self.weight_updater.update_weights(
                 operation, candidate["sourceColumn"], candidate["targetColumn"]
             )
@@ -613,29 +698,11 @@ class MatchingTask:
         # Add operation to history
         self.history.add_operation(UserOperation(operation, candidate, references))
 
+        # Apply the operation
         if operation == "accept":
             self.accept_cached_candidate(candidate)
-            # self.set_cached_candidates(
-            #     [
-            #         cached_candidate
-            #         for cached_candidate in candidates
-            #         if (cached_candidate["sourceColumn"] != candidate["sourceColumn"])
-            #         or (cached_candidate["targetColumn"] == candidate["targetColumn"])
-            #     ] + [candidate]
-            # )
         elif operation == "reject":
             self.reject_cached_candidate(candidate)
-            # self.set_cached_candidates(
-            #     [
-            #         cached_candidate
-            #         for cached_candidate in candidates
-            #         if not (
-            #             cached_candidate["sourceColumn"] == candidate["sourceColumn"]
-            #             and cached_candidate["targetColumn"]
-            #             == candidate["targetColumn"]
-            #         )
-            #     ]
-            # )
         elif operation == "discard":
             self.discard_cached_column(candidate["sourceColumn"])
         else:
@@ -647,20 +714,10 @@ class MatchingTask:
         candidate: Dict[str, Any],
         references: List[Dict[str, Any]],
     ) -> None:
-        logger.info(f"Undoing operation: {operation}, on candidate: {candidate}... \n")
+        logger.info(f"Undoing operation: {operation}, on candidate: {candidate}...")
 
-        # candidates = self.get_cached_candidates()
-
-        # if operation in ["accept", "reject", "discard"]:
-        #     self.set_cached_candidates(
-        #         [
-        #             c
-        #             for c in candidates
-        #             if c["sourceColumn"] != candidate["sourceColumn"]
-        #         ]
-        #         + references
-        #     )
         last_status = candidate["status"]
+
         if operation in ["accept", "reject"]:
             candidate["status"] = last_status
             self.update_cached_candidate(candidate)
@@ -687,8 +744,6 @@ class MatchingTask:
             raise ValueError(
                 f"Source column {source_col} not found in the source dataframe."
             )
-        # if pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype):
-        #     return []
         return sorted(
             list(self.source_df[source_col].dropna().unique().astype(str)[:n])
         )
@@ -705,24 +760,21 @@ class MatchingTask:
             raise ValueError(
                 f"Target column {target_col} not found in the target dataframe."
             )
-        # if pd.api.types.is_numeric_dtype(self.target_df[target_col].dtype):
-        #     return []
+
+        # Try to get values from dataframe
         target_unique_values = self.target_df[target_col].dropna().unique()
         if len(target_unique_values) > 0:
             return list(target_unique_values.astype(str)[:n])
 
+        # If no values in dataframe, try to get from property description
         target_values = []
         target_description = load_property(target_col)
-        if target_description is None:
-            logger.warning(f"Target column {target_col} not found in GDC properties.")
-        else:
-            if "enum" in target_description:
-                target_enum = target_description["enum"]
-                if target_enum is not None:
-                    # if len(target_enum) > n:
-                    #     target_values = random.sample(target_enum, n)
-                    # else:
-                    target_values = target_enum
+
+        if target_description is not None and "enum" in target_description:
+            target_enum = target_description["enum"]
+            if target_enum is not None:
+                target_values = target_enum
+
         return [str(target_value) for target_value in target_values] or list(
             target_unique_values.astype(str)[:n]
         )
@@ -736,7 +788,7 @@ class MatchingTask:
     def get_value_matches(self) -> Dict[str, Dict[str, Any]]:
         return self.cached_candidates["value_matches"]
 
-    def update_cached_candidate(self, candidate: List[Dict[str, Any]]) -> None:
+    def update_cached_candidate(self, candidate: Dict[str, Any]) -> None:
         candidates = self.get_cached_candidates()
         for index, c in enumerate(candidates):
             if (
@@ -755,7 +807,77 @@ class MatchingTask:
             for key, item in self.matchers.items()
         ]
 
+    def set_matchers(self, matchers: Dict[str, object]) -> None:
+        self.matchers = matchers
+
+    def new_matcher(self, name: str, code: str, params: Dict[str, Any]) -> None:
+        # Verify and create the new matcher
+        error, matcher = verify_new_matcher(name, code, params)
+        if error:
+            raise ValueError(error)
+
+        # Store the source code in the matcher object for caching
+        matcher.code = code
+
+        # Add the new matcher to the matchers dictionary
+        self.matchers[name] = matcher
+
+        # Update the matcher code cache
+        if "matcher_code" not in self.cached_candidates:
+            self.cached_candidates["matcher_code"] = {}
+        self.cached_candidates["matcher_code"][name] = code
+
+        # Run the new matcher and add its results to existing candidates
+        with self.lock:
+            if self.source_df is None or self.target_df is None:
+                raise ValueError("Source and Target dataframes must be provided.")
+
+            # Get existing candidates
+            existing_candidates = self.get_cached_candidates()
+
+            # Run only the new matcher
+            new_matcher_candidates = matcher.top_matches(
+                source=self.source_df,
+                target=self.target_df,
+                top_k=self.top_k,
+            )
+
+            # Generate value matches for each new candidate
+            for candidate in new_matcher_candidates:
+                self._generate_value_matches(
+                    candidate["sourceColumn"], candidate["targetColumn"]
+                )
+
+            # Add new candidates to existing ones
+            updated_candidates = existing_candidates + new_matcher_candidates
+
+            # Update the cache
+            self.cached_candidates["candidates"] = updated_candidates
+
+            # Update matcher info in cache
+            if "matchers" not in self.cached_candidates:
+                self.cached_candidates["matchers"] = {}
+
+            self.cached_candidates["matchers"][name] = {
+                "name": matcher.name,
+                "weight": getattr(matcher, "weight", 1.0),
+                "params": params,
+            }
+
+            # Export updated cache to JSON
+            self._export_cache_to_json(self.cached_candidates)
+
+            # Update weight updater if needed
+            if self.update_matcher_weights:
+                self.weight_updater = WeightUpdater(
+                    matchers=self.matchers,
+                    candidates=updated_candidates,
+                    alpha=0.1,
+                    beta=0.1,
+                )
+
     def get_accepted_candidates(self) -> pd.DataFrame:
+        # Collect all accepted source-target column pairs
         candidates_set = set()
         for candidate in self.get_cached_candidates():
             if candidate["status"] == "accepted":
@@ -763,6 +885,7 @@ class MatchingTask:
                     (candidate["sourceColumn"], candidate["targetColumn"])
                 )
 
+        # Create a new dataframe with accepted mappings
         target_columns = []
         ret_df = self.source_df.copy()
         for source_col, target_col in candidates_set:
@@ -771,7 +894,7 @@ class MatchingTask:
 
         return ret_df[target_columns]
 
-    def get_accepted_mappings(self) -> List[Dict[str, str]]:
+    def get_accepted_mappings(self) -> List[Dict[str, Any]]:
         """
         Export a json like structure for all accepted mappings:
         {
@@ -786,6 +909,7 @@ class MatchingTask:
             ]
         }
         """
+        # Collect all accepted source-target column pairs
         candidates_set = set()
         for candidate in self.get_cached_candidates():
             if candidate["status"] == "accepted":
@@ -793,6 +917,7 @@ class MatchingTask:
                     (candidate["sourceColumn"], candidate["targetColumn"])
                 )
 
+        # Build the mappings with value matches
         ret = []
         for source_col, target_col in candidates_set:
             if source_col not in self.get_value_matches():
@@ -805,12 +930,15 @@ class MatchingTask:
                 "source_mapped_values"
             ]
 
+            # Get value matches or empty list if none exist
             if target_col not in self.get_value_matches()[source_col]["targets"]:
                 value_matches = []
             else:
                 value_matches = self.get_value_matches()[source_col]["targets"][
                     target_col
                 ]
+
+            # Create mapping entry
             ret.append(
                 {
                     "sourceColumn": source_col,
@@ -867,10 +995,11 @@ class UserOperationHistory:
     def redo_last_operation(self) -> Optional["UserOperation"]:
         if self.redo_stack:
             operation = self.redo_stack.pop()
+            self.history.append(operation)
             return operation
         return None
 
-    def get_history(self) -> List[Dict[str, Any]]:
+    def get_history(self) -> List["UserOperation"]:
         return self.history
 
     def export_history_for_frontend(self) -> List[Dict[str, Any]]:

@@ -1,13 +1,13 @@
 'use client';
-
+import React from 'react';
 import { IconButton } from '@mui/material';
-import ReplayIcon from '@mui/icons-material/Replay';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 
-interface RedoButtonProps {
+interface NewMatcherButtonProps {
     onClick: () => void;
 }
 
-const RedoButton: React.FC<RedoButtonProps> = ({ onClick }) => {
+const NewMatcherButton: React.FC<NewMatcherButtonProps> = ({ onClick }) => {
     return (
             <IconButton
                 onClick={onClick}
@@ -15,15 +15,15 @@ const RedoButton: React.FC<RedoButtonProps> = ({ onClick }) => {
                     px: 0,
                     py: 0,
                     borderRadius: 1,
-                    color: 'grey.800',
+                    color: 'primary.main',
                     '&:hover': { color: 'primary.dark' },
                     transform: 'scaleX(-1)'
                 }}
-                title="Redo"
+                title="New Matcher"
             >
-                <ReplayIcon />
+                <AddCircleOutlineIcon />
             </IconButton>
     );
 }
 
-export default RedoButton;
+export default NewMatcherButton;

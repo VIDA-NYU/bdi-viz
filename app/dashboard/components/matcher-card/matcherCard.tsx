@@ -24,6 +24,30 @@ function MatcherCard({ matcher }: MatcherCardProps) {
     return (
         <ListItem
             disablePadding
+            sx={{
+                mb: 1,
+                borderRadius: 1,
+                border: 1,
+                borderColor: 'divider',
+                borderLeft: `4px solid #4dabf5`,
+                position: 'relative',
+                overflow: 'hidden',
+                padding: 1.5,
+                backgroundColor: '#2a3441',
+                color: '#e0e0e0',
+                transition: 'all 0.2s',
+                '&:hover': {
+                    backgroundColor: '#354150',
+                    boxShadow: '0 0 10px rgba(77, 171, 245, 0.5)',
+                },
+                boxShadow: expanded ? '0 0 15px rgba(77, 171, 245, 0.6)' : '0 0 5px rgba(77, 171, 245, 0.3)',
+                cursor: 'pointer',
+                '& .MuiTypography-root': {
+                    color: '#e0e0e0',
+                },
+                '& .MuiChip-root': {
+                }
+            }}
         >
             <ListItemText
                 primary={
@@ -31,23 +55,35 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                         <Stack spacing={1}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Typography variant="subtitle1" sx={{ 
-                                    fontWeight: 500,
+                                    fontWeight: 800,
                                     fontSize: '0.9rem',
                                     color: 'text.primary'
                                 }}>
                                     {matcher.name}
                                 </Typography>
                             </Box>
-                            
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                            <Box sx={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                flexWrap: 'wrap',
+                                gap: 1.5, 
+                                mt: 0.8,
+                                '& .MuiChip-root': {
+                                    transition: 'transform 0.2s ease-in-out',
+                                    '&:hover': {
+                                        transform: 'scale(1.05)',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                    }
+                                }
+                            }}>
                                 <Tooltip title="Mean Reciprocal Rank">
                                     <Chip 
                                         size="small" 
                                         label={`MRR: ${matcher.mrr.toFixed(2)}`}
                                         sx={{ 
-                                            backgroundColor: 'rgba(25, 118, 210, 0.1)', 
-                                            color: 'primary.main',
-                                            fontWeight: 500,
+                                            backgroundColor: 'rgba(77, 171, 245, 0.5)', 
+                                            color: 'white',
+                                            fontWeight: 700,
                                             fontSize: '0.65rem',
                                         }} 
                                     />
@@ -57,9 +93,9 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                                         size="small"
                                         label={`F1: ${matcher.f1Score.toFixed(2)}`}
                                         sx={{
-                                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                                            color: 'success.main',
-                                            fontWeight: 500,
+                                            backgroundColor: 'rgba(102, 187, 106, 0.5)',
+                                            color: 'white',
+                                            fontWeight: 700,
                                             fontSize: '0.65rem',
                                         }}
                                     />
@@ -69,9 +105,9 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                                         size="small"
                                         label={`Recall: ${matcher.recallGt.toFixed(2)}`}
                                         sx={{
-                                            backgroundColor: 'rgba(255, 152, 0, 0.1)',
-                                            color: 'warning.dark',
-                                            fontWeight: 500,
+                                            backgroundColor: 'rgba(255, 152, 0, 0.5)',
+                                            color: 'white',
+                                            fontWeight: 700,
                                             fontSize: '0.65rem',
                                         }}
                                     />
@@ -84,6 +120,13 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                                 <IconButton 
                                     size="small" 
                                     onClick={() => setExpanded(!expanded)}
+                                    sx={{ 
+                                        backgroundColor: '#2a3441',
+                                        color: 'white',
+                                        '&:hover': {
+                                            backgroundColor: '#3a4a5c'
+                                        }
+                                    }}
                                 >
                                     {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                                 </IconButton>

@@ -1,11 +1,10 @@
 'use client';
 
-import { Box, CircularProgress, Typography, Switch } from "@mui/material";
 import { AuxColumn } from "./layout/components";
 import CombinedView from "./components/explanation/CombinedView";
-import { SectionHeader } from "./layout/components";
 import MatcherView from "./components/matcher-card/matcherView";
-
+import SettingsGlobalContext from "../lib/settings/settings-context";
+import { useContext } from "react";
 interface RightPanelProps {
     // CombinedView
     isMatch: boolean;
@@ -44,10 +43,14 @@ const RightPanel = ({
     relatedOuterSources,
     matcherAnalysis,
 }: RightPanelProps) => {
+
+    const { developerMode } = useContext(SettingsGlobalContext);
     
     return (
         <AuxColumn>
-            <MatcherView matcherAnalysis={matcherAnalysis} />
+            {developerMode && (
+                <MatcherView matcherAnalysis={matcherAnalysis} />
+            )}
             <CombinedView
                 isMatch={isMatch}
                 currentExplanations={currentExplanations}

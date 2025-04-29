@@ -13,6 +13,7 @@ import AgentSuggestionsPopup from "./components/langchain/suggestion";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
+import NewMatcherDialog from "./components/matcher-card/newMatcher";
 import { getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
@@ -32,6 +33,7 @@ import { useMatcherAnalysis } from "./hooks/useMatcherAnalysis";
 
 export default function Dashboard() {
     const [openSuggestionsPopup, setOpenSuggestionsPopup] = useState(false);
+    const [openNewMatcherDialog, setOpenNewMatcherDialog] = useState(false);
     const [suggestions, setSuggestions] = useState<AgentSuggestions>();
     const {
         isLoadingGlobal,
@@ -257,6 +259,13 @@ export default function Dashboard() {
         updateSimilarSources(1);
         updateCandidateThreshold(0.5);
     }, [handleFileUpload, setSelectedCandidate, updateSourceColumn, updateCandidateType, updateSimilarSources, updateCandidateThreshold]);
+    
+    const handleNewMatcherSubmit = useCallback((matchers: Matcher[]) => {
+        console.log("New Matchers: ", matchers);
+        setMatchers(matchers);
+        toastify("success", <p>New matchers created successfully!</p>);
+        getCachedResults({ callback: handleFileUpload });
+    }, [setMatchers, handleFileUpload]);
 
     const matchersSelectHandler = useCallback((matchers: Matcher[]) => {
         setMatchers(matchers);
@@ -330,6 +339,7 @@ export default function Dashboard() {
                     handleTargetOntology={handleTargetOntology}
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}
+                    setOpenNewMatcherDialog={setOpenNewMatcherDialog}
                 />
 
                 {/* Middle Column - Main Visualizations */}
@@ -404,6 +414,12 @@ export default function Dashboard() {
                 setOpen={setOpenSuggestionsPopup}
                 data={suggestions}
                 onSelectedActions={onSelectedActions}
+            />
+
+            <NewMatcherDialog
+                open={openNewMatcherDialog}
+                onClose={() => setOpenNewMatcherDialog(false)}
+                onSubmit={handleNewMatcherSubmit}
             />
         </RootContainer>
     );

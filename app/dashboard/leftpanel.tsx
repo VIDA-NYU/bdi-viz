@@ -19,7 +19,6 @@ interface LeftPanelProps {
     onSimilarSourcesSelect: (num: number) => void;
     onCandidateThresholdSelect: (num: number) => void;
     onMatchersSelect: (matchers: Matcher[]) => void;
-
     state: {
         sourceColumn: string;
         candidateType: string;
@@ -44,6 +43,7 @@ interface LeftPanelProps {
     handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
+    setOpenNewMatcherDialog: (open: boolean) => void;
 }
 
 const ShortcutPanelMemo = memo(ShortcutPanel);
@@ -77,6 +77,8 @@ const LeftPanel = ({
     handleTargetOntology,
     handleUniqueValues,
     handleValueMatches,
+    // New Matcher Props
+    setOpenNewMatcherDialog,
 }: LeftPanelProps) => {
 
     return (
@@ -92,6 +94,7 @@ const LeftPanel = ({
                 undo={undo}
                 redo={redo}
                 exportMatchingResults={exportMatchingResults}
+                setOpenNewMatcherDialog={setOpenNewMatcherDialog}
             />
             <ControlPanelMemo
                 sourceColumns={sourceColumns}

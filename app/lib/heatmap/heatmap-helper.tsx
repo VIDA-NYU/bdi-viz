@@ -467,6 +467,31 @@ const updateSourceValue = ({ column, value, newValue, valueMatchesCallback, sign
     );
 };
 
+interface newMatcherProps {
+    name: string;
+    code: string;
+    params: object;
+    callback: (newMatchers: Matcher[]) => void;
+    signal?: AbortSignal;
+}
+
+const newMatcher = ({ name, code, params, callback, signal }: newMatcherProps) => {
+    return makeApiRequest<void>(
+        "/api/matcher/new",
+        { name, code, params },
+        signal,
+        (data) => {
+            const matchers = data?.matchers;
+            if (matchers && Array.isArray(matchers)) {
+                const newMatchers = parseArray<Matcher>(matchers, "Matcher");
+                console.log("newMatcher finished!");
+                callback(newMatchers);
+                return;
+            }
+        }
+    );
+}
+    
 export { 
     runMatchingTask,
     getCachedResults, 
@@ -480,5 +505,6 @@ export {
     getExactMatches, 
     getGDCAttribute, 
     getCandidatesResult, 
-    updateSourceValue 
+    updateSourceValue,
+    newMatcher,
 };
