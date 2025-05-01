@@ -59,17 +59,19 @@ export const useMatcherAnalysis = ({
             return;
         }
         
-        const metrics = matcherNames.map((matcher) => {
+        const metrics = matchers.map((matcher) => {
             // Calculate metrics using candidates if available
-            const {mrr, recall, f1, falsePositives, falseNegatives} = calculateMetrics(matcher, candidates, groundTruth);
+            const {mrr, recall, f1, falsePositives, falseNegatives} = calculateMetrics(matcher.name, candidates, groundTruth);
             return {
-                name: matcher,
+                name: matcher.name,
                 description: "",
                 mrr: mrr,
                 recallGt: recall,
                 f1Score: f1,
                 falsePositives: falsePositives,
                 falseNegatives: falseNegatives,
+                params: matcher.params,
+                code: matcher.code,
             };
         });
         

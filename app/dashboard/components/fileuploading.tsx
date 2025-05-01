@@ -1,9 +1,6 @@
 "use client";
 
 import { useContext, useState } from "react";
-import axios from "axios";
-import http from 'http';
-// import https from 'https';
 import { runMatchingTask, getCachedResults, getTargetOntology, getValueBins, getValueMatches } from "@/app/lib/heatmap/heatmap-helper";
 
 import { Box, Paper, IconButton } from "@mui/material";

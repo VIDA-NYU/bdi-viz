@@ -135,6 +135,7 @@ class MatchingTask:
                 # Load cached matchers if they exist
                 if "matchers" in cached_json and cached_json["matchers"]:
                     self._load_cached_matchers(cached_json)
+                    logger.info(f"self.matchers Hahahahahahahah: {self.matchers}")
             # Check if we can use the in-memory cache
             elif is_candidates_cached and self._is_cache_valid(
                 self.cached_candidates, source_hash, target_hash
@@ -545,7 +546,8 @@ class MatchingTask:
         return {
             "candidates": self.get_cached_candidates(),
             "sourceClusters": self._format_source_clusters_for_frontend(),
-            "matchers": self.get_matchers(),
+            # "targetClusters": self.get_cached_target_clusters(),
+            # "matchers": self.get_matchers(),
         }
 
     def unique_values_to_frontend_json(self) -> dict:
@@ -802,19 +804,41 @@ class MatchingTask:
         return self.cached_candidates["source_clusters"] or {}
 
     def get_matchers(self) -> List[Dict[str, any]]:
-        return [
-            {"name": item.name, "weight": item.weight}
-            for key, item in self.matchers.items()
-        ]
+        matcher_list = []
+        cached_matchers = self.cached_candidates["matchers"]
+        logger.info(f"self.matchers: {self.matchers}")
+        for key, item in self.matchers.items():
+            matcher_info = {
+                "name": item.name,
+                "weight": getattr(item, "weight", 1.0),
+                "params": cached_matchers[key]["params"]
+                if key in cached_matchers
+                else getattr(item, "params", {}),
+            }
+
+            # Add code if it exists in the matcher or in the cached matcher code
+            if hasattr(item, "code"):
+                matcher_info["code"] = item.code
+            elif (
+                "matcher_code" in self.cached_candidates
+                and key in self.cached_candidates["matcher_code"]
+            ):
+                matcher_info["code"] = self.cached_candidates["matcher_code"][key]
+
+            matcher_list.append(matcher_info)
+
+        return matcher_list
 
     def set_matchers(self, matchers: Dict[str, object]) -> None:
         self.matchers = matchers
 
-    def new_matcher(self, name: str, code: str, params: Dict[str, Any]) -> None:
+    def new_matcher(
+        self, name: str, code: str, params: Dict[str, Any]
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         # Verify and create the new matcher
         error, matcher = verify_new_matcher(name, code, params)
         if error:
-            raise ValueError(error)
+            return error, None
 
         # Store the source code in the matcher object for caching
         matcher.code = code
@@ -830,7 +854,7 @@ class MatchingTask:
         # Run the new matcher and add its results to existing candidates
         with self.lock:
             if self.source_df is None or self.target_df is None:
-                raise ValueError("Source and Target dataframes must be provided.")
+                return "Source and Target dataframes must be provided.", None
 
             # Get existing candidates
             existing_candidates = self.get_cached_candidates()
@@ -875,6 +899,8 @@ class MatchingTask:
                     alpha=0.1,
                     beta=0.1,
                 )
+
+            return None, self.cached_candidates["matchers"]
 
     def get_accepted_candidates(self) -> pd.DataFrame:
         # Collect all accepted source-target column pairs

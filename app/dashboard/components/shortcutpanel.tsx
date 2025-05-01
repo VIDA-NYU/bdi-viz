@@ -18,7 +18,8 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 
 
 interface ShortcutPanelProps {
-    handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
+    handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => void;
+    handleMatchers: (matchers: Matcher[]) => void;
     handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
@@ -33,6 +34,7 @@ interface ShortcutPanelProps {
 
 const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
     handleFileUpload,
+    handleMatchers,
     handleTargetOntology,
     handleUniqueValues,
     handleValueMatches,
@@ -74,7 +76,13 @@ const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
                 </Box>
                 <Box sx={{ display: "flex", gap: 0.5 }}>
                   <ExportMatchingResultsButton onClick={exportMatchingResults} />
-                  <FileUploading callback={handleFileUpload} ontologyCallback={handleTargetOntology} uniqueValuesCallback={handleUniqueValues} valueMatchesCallback={handleValueMatches} />
+                  <FileUploading
+                    callback={handleFileUpload}
+                    matchersCallback={handleMatchers}
+                    ontologyCallback={handleTargetOntology}
+                    uniqueValuesCallback={handleUniqueValues}
+                    valueMatchesCallback={handleValueMatches}
+                  />
                 </Box>
             </Box>
 

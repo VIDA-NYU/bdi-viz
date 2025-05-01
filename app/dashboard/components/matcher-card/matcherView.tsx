@@ -14,12 +14,19 @@ interface MatcherViewProps {
 
 const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
 
+    // Sort the matcherAnalysis by mrr+f1+recall in descending order
+    const sortedMatcherAnalysis = useMemo(() => {
+        return matcherAnalysis.sort((a, b) => {
+            return (b.mrr + b.f1Score + b.recallGt) - (a.mrr + a.f1Score + a.recallGt);
+        });
+    }, [matcherAnalysis]);
+
     const matcherList = useMemo(() => {
-        if (matcherAnalysis.length === 0) return null;
+        if (sortedMatcherAnalysis.length === 0) return null;
 
         return (
             <List sx={{ margin: 0.5, zIndex: 1 }}>
-                {matcherAnalysis.map(analysis => (
+                {sortedMatcherAnalysis.map(analysis => (
                     <MatcherCard
                         key={analysis.name}
                         matcher={analysis}
@@ -27,7 +34,7 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                 ))}
             </List>
         )
-    }, [matcherAnalysis]);
+    }, [sortedMatcherAnalysis]);
 
     return (
         <Stack spacing={0}>

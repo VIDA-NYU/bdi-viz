@@ -84,12 +84,7 @@ const makeApiRequest = async <T,>(
     processResponse?: (response: any) => T
 ): Promise<T> => {
     return new Promise<T>((resolve, reject) => {
-        const config = {
-            ...getHttpAgents(),
-            ...data
-        };
-
-        axios.post(endpoint, config, { signal })
+        axios.post(endpoint, data, { ...getHttpAgents(), signal })
             .then((response) => {
                 if (processResponse) {
                     try {
@@ -127,7 +122,7 @@ const parseArray = <T,>(data: any[], typeName: string): T[] => {
 };
 
 interface getCachedResultsProps {
-    callback: (newCandidates: Candidate[], newSourceCluster: SourceCluster[], newMatchers: Matcher[]) => void;
+    callback: (newCandidates: Candidate[], newSourceCluster: SourceCluster[]) => void;
     signal?: AbortSignal;
 }
 
@@ -143,14 +138,32 @@ const getCachedResults = (prop: getCachedResultsProps) => {
                 
                 const candidates = parseArray<Candidate>(results.candidates, "Candidate");
                 const sourceClusters = parseArray<SourceCluster>(results.sourceClusters, "SourceCluster");
-                const matchers = parseArray<Matcher>(results.matchers, "Matcher");
 
                 console.log("getCachedResults finished!");
-                prop.callback(candidates, sourceClusters, matchers);
+                prop.callback(candidates, sourceClusters);
                 return;
             } else {
                 throw new Error("Invalid results format");
             }
+        }
+    );
+};
+
+interface getMatchersProps {
+    callback: (matchers: Matcher[]) => void;
+    signal?: AbortSignal;
+}
+
+const getMatchers = (prop: getMatchersProps) => {
+    return makeApiRequest<void>(
+        "/api/matchers",
+        {},
+        prop.signal,
+        (data) => {
+            const matchers = parseArray<Matcher>(data?.matchers, "Matcher");
+            console.log("getMatchers finished!", matchers);
+            prop.callback(matchers);
+            return;
         }
     );
 };
@@ -471,7 +484,7 @@ interface newMatcherProps {
     name: string;
     code: string;
     params: object;
-    callback: (newMatchers: Matcher[]) => void;
+    callback: (newMatchers: Matcher[], error: string | null) => void;
     signal?: AbortSignal;
 }
 
@@ -481,12 +494,19 @@ const newMatcher = ({ name, code, params, callback, signal }: newMatcherProps) =
         { name, code, params },
         signal,
         (data) => {
+            const error = data?.error;
             const matchers = data?.matchers;
-            if (matchers && Array.isArray(matchers)) {
+            if (error) {
+                console.log("newMatcher finished!");
+                callback([], error);
+                return;
+            } else if (matchers && Array.isArray(matchers)) {
                 const newMatchers = parseArray<Matcher>(matchers, "Matcher");
                 console.log("newMatcher finished!");
-                callback(newMatchers);
+                callback(newMatchers, null);
                 return;
+            } else {
+                throw new Error("Invalid results format");
             }
         }
     );
@@ -495,6 +515,7 @@ const newMatcher = ({ name, code, params, callback, signal }: newMatcherProps) =
 export { 
     runMatchingTask,
     getCachedResults, 
+    getMatchers,
     getValueBins, 
     getValueMatches, 
     getUserOperationHistory, 

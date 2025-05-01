@@ -343,6 +343,14 @@ def get_candidates_results():
         return {"message": "failure", "results": None}
 
 
+@app.route("/api/matchers", methods=["POST"])
+def get_matchers():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+    matchers = matching_task.get_matchers()
+    return {"message": "success", "matchers": matchers}
+
+
 @app.route("/api/matcher/new", methods=["POST"])
 def new_matcher():
     session = extract_session_name(request)
@@ -353,10 +361,11 @@ def new_matcher():
     params = data["params"]
     code = data["code"]
 
-    matching_task.new_matcher(name, code, params)
-    matchers = matching_task.get_matchers()
+    error, matchers = matching_task.new_matcher(name, code, params)
+    if error:
+        return {"message": "failure", "error": error, "matchers": None}
 
-    return {"message": "success", "matchers": matchers}
+    return {"message": "success", "error": error, "matchers": matchers}
 
 
 @app.route("/api/agent", methods=["POST"])

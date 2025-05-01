@@ -14,7 +14,8 @@ import {
     Tooltip,
     CircularProgress,
     Grid,
-    Paper
+    Paper,
+    Alert
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CodeIcon from '@mui/icons-material/Code';
@@ -44,6 +45,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
             name: false,
             code: false
         });
+        const [errorMessage, setErrorMessage] = useState('');
 
         const handleAddParam = () => {
             setParamItems([...paramItems, { name: '', value: '' }]);
@@ -79,6 +81,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
             };
             
             setErrors(newErrors);
+            setErrorMessage(''); // Clear previous error messages
             
             if (newErrors.name || newErrors.code) {
                 return;
@@ -87,7 +90,23 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
             setIsSubmitting(true);
             try {
                 const params = buildParamsObject();
-                await newMatcher({ name, code, params, callback: onSubmit });
+                await newMatcher({ 
+                    name, 
+                    code, 
+                    params, 
+                    callback: (newMatchers, error) => {
+                        if (error) {
+                            toastify("error", <p>Error creating matcher: {error}</p>);
+                            setErrorMessage(error);
+                            setErrors({
+                                name: false,
+                                code: true,
+                            });
+                            return;
+                        }
+                        onSubmit(newMatchers);
+                    } 
+                });
                 // Reset form
                 setName('');
                 setCode('');
@@ -228,6 +247,22 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                         <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, color: 'white' }}>
                             Matcher Code
                         </Typography>
+                        
+                        {errorMessage && (
+                            <Alert 
+                                severity="error" 
+                                sx={{ 
+                                    mb: 2, 
+                                    backgroundColor: 'rgba(211, 47, 47, 0.15)', 
+                                    color: '#f44336',
+                                    '& .MuiAlert-icon': {
+                                        color: '#f44336'
+                                    }
+                                }}
+                            >
+                                {errorMessage}
+                            </Alert>
+                        )}
                         
                         <TextField
                             required

@@ -64,8 +64,8 @@ export default function Dashboard() {
         targetOntologies,
         gdcAttribute,
         handleFileUpload,
+        handleMatchers,
         setSelectedCandidate,
-        setMatchers,
         handleUserOperationsUpdate: setUserOperations,
         handleUniqueValues,
         handleValueMatches,
@@ -119,6 +119,7 @@ export default function Dashboard() {
         selectedCandidate,
         selectedExplanations,
         onCandidateUpdate: handleFileUpload,
+        onMatchersUpdate: handleMatchers,
         onCandidateSelect: setSelectedCandidate,
         onExplanation: generateExplanations,
         onSuggestions: handleSuggestions,
@@ -262,14 +263,14 @@ export default function Dashboard() {
     
     const handleNewMatcherSubmit = useCallback((matchers: Matcher[]) => {
         console.log("New Matchers: ", matchers);
-        setMatchers(matchers);
+        handleMatchers(matchers);
         toastify("success", <p>New matchers created successfully!</p>);
         getCachedResults({ callback: handleFileUpload });
-    }, [setMatchers, handleFileUpload]);
+    }, [handleMatchers, handleFileUpload]);
 
     const matchersSelectHandler = useCallback((matchers: Matcher[]) => {
-        setMatchers(matchers);
-    }, [setMatchers]);
+        handleMatchers(matchers);
+    }, [handleMatchers]);
 
     const headerContent = useMemo(() => (
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
@@ -336,6 +337,7 @@ export default function Dashboard() {
                     state={{ sourceColumn, candidateType, similarSources, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleNewMatchingTask}
+                    handleMatchers={handleMatchers}
                     handleTargetOntology={handleTargetOntology}
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}

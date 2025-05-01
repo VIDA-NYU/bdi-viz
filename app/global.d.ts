@@ -124,6 +124,8 @@ declare interface ActionResponse {
 declare interface Matcher {
     name: string;
     weight: number;
+    params?: object;
+    code?: string;
 }
 
 declare interface GDCAttribute {
@@ -172,4 +174,6 @@ declare interface MatcherAnalysis {
     f1Score: number;
     falsePositives: Candidate[];
     falseNegatives: Candidate[];
+    params?: object;
+    code?: string;
 }

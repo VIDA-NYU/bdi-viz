@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Candidate } from '../types';
-import { getCachedResults, getValueBins, getValueMatches, getUserOperationHistory, getTargetOntology, getGDCAttribute } from '@/app/lib/heatmap/heatmap-helper';
+import { getCachedResults, getMatchers, getValueBins, getValueMatches, getUserOperationHistory, getTargetOntology, getGDCAttribute } from '@/app/lib/heatmap/heatmap-helper';
 import { getMockData } from '../components/utils/mock';
 
 type DashboardCandidateState = {
@@ -14,10 +14,10 @@ type DashboardCandidateState = {
     userOperations: UserOperation[];
     targetOntologies: TargetOntology[];
     gdcAttribute: GDCAttribute | undefined;
-    handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
+    handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => void;
+    handleMatchers: (matchers: Matcher[]) => void;
     handleChatUpdate: (candidates: Candidate[]) => void;
     setSelectedCandidate: (candidate: Candidate | undefined) => void;
-    setMatchers: (matchers: Matcher[]) => void;
     handleUserOperationsUpdate: (newUserOperations: UserOperation[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
@@ -42,7 +42,9 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
     const [gdcAttribute, setGdcAttribute] = useState<GDCAttribute | undefined>(undefined);
 
     // Memoize handlers to prevent unnecessary re-renders
-    const handleFileUpload = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => {
+    const handleFileUpload = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => {
+        const controller = new AbortController();
+
         setCandidates(prevCandidates => {
             const sortedCandidates = [...newCandidates].sort((a, b) => b.score - a.score);
             return JSON.stringify(prevCandidates) !== JSON.stringify(sortedCandidates) ? sortedCandidates : prevCandidates;
@@ -54,6 +56,13 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
             );
         }
 
+        getMatchers({
+            callback: handleMatchers,
+            signal: controller.signal
+        });
+    }, []);
+
+    const handleMatchers = useCallback((newMatchers: Matcher[]) => {
         if (newMatchers) {
             setMatchers(prevMatchers => 
                 JSON.stringify(prevMatchers) !== JSON.stringify(newMatchers) ? newMatchers : prevMatchers
@@ -166,9 +175,9 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
         targetOntologies,
         gdcAttribute,
         handleFileUpload,
+        handleMatchers,
         handleChatUpdate,
         setSelectedCandidate: handleSelectedCandidate,
-        setMatchers,
         handleUserOperationsUpdate,
         handleUniqueValues,
         handleValueMatches,
