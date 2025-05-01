@@ -241,6 +241,16 @@ export default function Dashboard() {
         updateSearchResults(results);
     }, [updateSearchResults]);
 
+    const handleNewMatchingTask = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => {
+        console.log("New Matching Task: ", newCandidates, newSourceClusters, newMatchers);
+        handleFileUpload(newCandidates, newSourceClusters, newMatchers);
+        setSelectedCandidate(undefined);
+        updateSourceColumn("all");
+        updateCandidateType("all");
+        updateSimilarSources(1);
+        updateCandidateThreshold(0.5);
+    }, [handleFileUpload, setSelectedCandidate, updateSourceColumn, updateCandidateType, updateSimilarSources, updateCandidateThreshold]);
+
     const matchersSelectHandler = useCallback((matchers: Matcher[]) => {
         setMatchers(matchers);
     }, [setMatchers]);
@@ -309,7 +319,7 @@ export default function Dashboard() {
                     onMatchersSelect={matchersSelectHandler}
                     state={{ sourceColumn, candidateType, similarSources, candidateThreshold }}
                     userOperations={userOperations}
-                    handleFileUpload={handleFileUpload}
+                    handleFileUpload={handleNewMatchingTask}
                     handleTargetOntology={handleTargetOntology}
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}

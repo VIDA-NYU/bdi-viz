@@ -18,7 +18,7 @@ from .clusterer.embedding_clusterer import EmbeddingClusterer
 from .matcher.bdikit import BDIKitMatcher
 
 # from .matcher.difflib import DiffLibMatcher
-# from .matcher.rapidfuzz_value import RapidFuzzValueMatcher
+from .matcher.rapidfuzz_value import RapidFuzzValueMatcher
 from .matcher_weight.weight_updater import WeightUpdater
 from .utils import (
     is_candidate_for_category,
@@ -48,7 +48,7 @@ class MatchingTask:
     def __init__(
         self,
         top_k: int = 20,
-        clustering_model="Snowflake/snowflake-arctic-embed-m",
+        clustering_model="michiyasunaga/BioLinkBERT-base",
         update_matcher_weights: bool = True,
     ) -> None:
         self.lock = threading.Lock()
@@ -325,7 +325,7 @@ class MatchingTask:
             "To": [],
         }
         # matcher = DiffLibMatcher("diff_matcher")
-        matcher_results = BDIKitMatcher.top_value_matches(
+        matcher_results = RapidFuzzValueMatcher.top_value_matches(
             source_values, target_values, top_k=1
         )
 
