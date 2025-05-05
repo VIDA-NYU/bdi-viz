@@ -91,6 +91,7 @@ def run_matching_task(self, session):
             target = pd.read_csv(".target.csv")
 
             matching_task.update_dataframe(source_df=source, target_df=target)
+            matching_task._initialize_task_state()
             candidates = matching_task.get_candidates()
 
             return {"status": "completed", "candidates_count": len(candidates)}
@@ -152,18 +153,35 @@ def matching_status():
     )
 
     if task.state == "PENDING":
-        response = {"status": "pending", "message": "Task is pending"}
+        response = {
+            "status": "pending",
+            "message": "Task is pending",
+            "taskState": None,
+        }
     elif task.state == "FAILURE":
-        response = {"status": "failed", "message": str(task.info)}
+        response = {
+            "status": "failed",
+            "message": str(task.info),
+            "taskState": None,
+        }
     elif task.state == "SUCCESS":
         source = pd.read_csv(".source.csv")
         target = pd.read_csv(".target.csv")
         matching_task.update_dataframe(source_df=source, target_df=target)
         matching_task.get_candidates()
 
-        response = {"status": "completed", "result": task.result}
+        response = {
+            "status": "completed",
+            "result": task.result,
+            "taskState": None,
+        }
     else:
-        response = {"status": task.state, "message": "Task is in progress"}
+        task_state = matching_task._load_task_state()
+        response = {
+            "status": task.state,
+            "message": "Task is in progress",
+            "taskState": task_state,
+        }
 
     return response
 

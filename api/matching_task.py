@@ -1,17 +1,13 @@
-import difflib
 import hashlib
 import json
 import logging
 import os
-import random
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
 from sklearn.neighbors import NearestNeighbors
-from torch import Tensor
 
 from .candidate_quadrants import CandidateQuadrants
 from .clusterer.embedding_clusterer import EmbeddingClusterer
@@ -23,7 +19,6 @@ from .matcher_weight.weight_updater import WeightUpdater
 from .utils import (
     is_candidate_for_category,
     load_gdc_ontology,
-    load_gdc_property,
     load_ontology,
     load_property,
 )
@@ -65,18 +60,31 @@ class MatchingTask:
         self.clustering_model = clustering_model
         self.source_df = None
         self.target_df = None
-        self.cached_candidates = self._initialize_cache()
+        self._initialize_cache()
         self.history = UserOperationHistory()
 
         self.update_matcher_weights = update_matcher_weights
 
-    def _initialize_cache(self) -> Dict[str, Any]:
-        return {
+        # Task state tracking
+        self._initialize_task_state()
+
+    def _initialize_cache(self) -> None:
+        self.cached_candidates = {
             "source_hash": None,
             "target_hash": None,
             "candidates": [],
             "source_clusters": None,
             "value_matches": {},
+        }
+
+    def _initialize_task_state(self) -> None:
+        self.task_state = {
+            "status": "idle",
+            "progress": 0,
+            "current_step": "",
+            "total_steps": 4,
+            "completed_steps": 0,
+            "logs": [],
         }
 
     def update_dataframe(
@@ -85,10 +93,10 @@ class MatchingTask:
         with self.lock:
             if source_df is not None:
                 self.source_df = source_df
-                logger.info(f"[MatchingTask] Source dataframe updated!")
+                logger.info("[MatchingTask] Source dataframe updated!")
             if target_df is not None:
                 self.target_df = target_df
-                logger.info(f"[MatchingTask] Target dataframe updated!")
+                logger.info("[MatchingTask] Target dataframe updated!")
 
         self._initialize_value_matches()
 
@@ -97,32 +105,110 @@ class MatchingTask:
             if self.source_df is None or self.target_df is None:
                 raise ValueError("Source and Target dataframes must be provided.")
 
+            # Initialize task state
+            self._update_task_state(
+                status="running",
+                progress=0,
+                current_step="Computing hashes",
+                completed_steps=0,
+            )
+
             source_hash, target_hash = self._compute_hashes()
+            self._update_task_state(
+                progress=25, current_step="Checking cache", completed_steps=1
+            )
+
             cached_json = self._import_cache_from_json()
             candidates = []
 
             if self._is_cache_valid(cached_json, source_hash, target_hash):
                 self.cached_candidates = cached_json
                 candidates = cached_json["candidates"]
-
+                self._update_task_state(
+                    progress=75, current_step="Using cached results", completed_steps=3
+                )
             elif is_candidates_cached and self._is_cache_valid(
                 self.cached_candidates, source_hash, target_hash
             ):
                 candidates = self.get_cached_candidates()
+                self._update_task_state(
+                    progress=75,
+                    current_step="Using in-memory cached results",
+                    completed_steps=3,
+                )
             else:
+                self._update_task_state(
+                    progress=50, current_step="Generating candidates", completed_steps=2
+                )
                 candidates = self._generate_candidates(
                     source_hash, target_hash, is_candidates_cached
                 )
 
             if self.update_matcher_weights:
+                self._update_task_state(current_step="Updating matcher weights")
                 self.weight_updater = WeightUpdater(
                     matchers=self.matchers,
                     candidates=candidates,
                     alpha=0.1,
                     beta=0.1,
                 )
+                self._update_task_state(
+                    progress=100,
+                    current_step="Complete",
+                    status="complete",
+                    completed_steps=4,
+                )
+
+            # Save task state after completion
+            self._save_task_state()
 
             return candidates
+
+    def _update_task_state(self, **kwargs) -> None:
+        """Update task state with provided values"""
+        for key, value in kwargs.items():
+            if key in self.task_state:
+                self.task_state[key] = value
+
+        # Add log entry for step changes
+        if "current_step" in kwargs:
+            log_entry = {
+                "timestamp": pd.Timestamp.now().isoformat(),
+                "step": kwargs["current_step"],
+                "progress": self.task_state["progress"],
+            }
+            self.task_state["logs"].append(log_entry)
+            logger.info(
+                f"Task step: {kwargs['current_step']} - Progress: {self.task_state['progress']}%"
+            )
+
+        # Save task state after each update
+        self._save_task_state()
+
+    def _save_task_state(self) -> None:
+        """Save task state to a JSON file"""
+        task_state_path = os.path.join(os.path.dirname(__file__), "task_state.json")
+        try:
+            with open(task_state_path, "w") as f:
+                json.dump(self.task_state, f, indent=4)
+        except Exception as e:
+            logger.error(f"Failed to save task state: {str(e)}")
+
+    def _load_task_state(self) -> Optional[Dict[str, Any]]:
+        """Load task state from a JSON file if it exists"""
+        task_state_path = os.path.join(os.path.dirname(__file__), "task_state.json")
+        if os.path.exists(task_state_path):
+            try:
+                with open(task_state_path, "r") as f:
+                    loaded_state = json.load(f)
+                return loaded_state
+            except Exception as e:
+                logger.error(f"Failed to load task state: {str(e)}")
+        return None
+
+    def get_task_state(self) -> Dict[str, Any]:
+        """Return the current state of the task for monitoring progress"""
+        return self.task_state
 
     def update_exact_matches(self) -> List[Dict[str, Any]]:
         return self.get_candidates()
@@ -154,6 +240,17 @@ class MatchingTask:
     def _generate_candidates(
         self, source_hash: int, target_hash: int, is_candidates_cached: bool
     ) -> Dict[str, list]:
+        # Define generation steps for better logging
+        generation_steps = [
+            "Generating embeddings",
+            "Clustering source columns",
+            "Identifying candidate quadrants",
+            "Running matchers",
+            "Generating value matches",
+        ]
+
+        self._update_task_state(current_step=generation_steps[0])
+
         embedding_clusterer = EmbeddingClusterer(
             params={
                 "embedding_model": self.clustering_model,
@@ -161,13 +258,19 @@ class MatchingTask:
                 **DEFAULT_PARAMS,
             }
         )
+
         source_embeddings = embedding_clusterer.get_source_embeddings(
             source_df=self.source_df
         )
+        self._update_task_state(progress=60)
 
+        # Step 2: Cluster source columns
+        self._update_task_state(current_step=generation_steps[1])
         source_clusters = self._generate_source_clusters(source_embeddings)
+        self._update_task_state(progress=70)
 
-        # Apply candidate quadrants
+        # Step 3: Apply candidate quadrants
+        self._update_task_state(current_step=generation_steps[2])
         self.candidate_quadrants = CandidateQuadrants(
             source=self.source_df,
             target=self.target_df,
@@ -175,41 +278,31 @@ class MatchingTask:
         )
 
         layered_candidates = []
-        # numeric_columns = []
         for source_column in self.source_df.columns:
             layered_candidates.extend(
                 self.candidate_quadrants.get_easy_target_json(source_column)
             )
 
-            # if pd.api.types.is_numeric_dtype(self.source_df[source_column].dtype):
-            #     numeric_columns.append(source_column)
-            #     continue
+        self._update_task_state(progress=80)
 
-            # target_df = self.candidate_quadrants.get_potential_target_df(source_column)
-            # if target_df is None:  # No potential matches
-            #     continue
-        for matcher_name, matcher_instance in self.matchers.items():
-            logger.info(f"Running matcher: {matcher_name}...")
+        # Step 4: Run matchers
+        self._update_task_state(current_step=generation_steps[3])
+        total_matchers = len(self.matchers)
+        for i, (matcher_name, matcher_instance) in enumerate(self.matchers.items()):
+            logger.info(f"Running matcher: {matcher_name}")
+            self._update_task_state(current_step=f"Running matcher: {matcher_name}")
             matcher_candidates = matcher_instance.top_matches(
                 source=self.source_df,
                 target=self.target_df,
                 top_k=self.top_k,
             )
             layered_candidates.extend(matcher_candidates)
-
-        # if numeric_columns:
-        #     target_df = self.candidate_quadrants.get_potential_numeric_target_df()
-        #     source_df = self.source_df[numeric_columns]
-        #     for matcher_name, matcher_instance in self.matchers.items():
-        #         logger.info(
-        #             f"Running matcher: {matcher_name} on source {numeric_columns}..."
-        #         )
-        #         matcher_candidates = matcher_instance.top_matches(
-        #             source=source_df,
-        #             target=target_df,
-        #             top_k=self.top_k,
-        #         )
-        #         layered_candidates.extend(matcher_candidates)
+            # Calculate progress based on matcher position
+            matcher_progress = 80 + ((i + 1) / total_matchers * 10)
+            self._update_task_state(
+                progress=matcher_progress,
+                current_step=f"Completed matcher: {matcher_name} with {len(matcher_candidates)} candidates",
+            )
 
         easy_match_keys = {
             (candidate["sourceColumn"], candidate["targetColumn"])
@@ -223,8 +316,10 @@ class MatchingTask:
             or (candidate["sourceColumn"], candidate["targetColumn"])
             not in easy_match_keys
         ]
+        self._update_task_state(progress=90)
 
-        # Generate value matches for each candidate
+        # Step 5: Generate value matches
+        self._update_task_state(current_step=generation_steps[4])
         for candidate in layered_candidates:
             self._generate_value_matches(
                 candidate["sourceColumn"], candidate["targetColumn"]

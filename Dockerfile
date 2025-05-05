@@ -1,45 +1,43 @@
-FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.9-nodejs20 as base
+FROM nikolaik/python-nodejs:python3.9-nodejs20 as base
 
-ADD . /home/bdi-viz-react/
 WORKDIR /home/bdi-viz-react/
-RUN apt-get update
-RUN apt-get install -y vim
 
-# Install dependencies based on the preferred package manager
-RUN npm install concurrently
-RUN \
-  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm i; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+# Install system dependencies in a single layer
+RUN apt-get update && apt-get install -y \
+    vim \
+    redis \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN \
-  if [ -f yarn.lock ]; then yarn run build; \
-  elif [ -f package-lock.json ]; then npm run build; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+# Create user early to optimize layer caching
+RUN groupadd --gid 1001 yfw215 && \
+    useradd --uid 1001 --gid 1001 -m yfw215
 
-ENV NODE_ENV=development
+# Copy only package files first to leverage Docker cache
+COPY package*.json ./
 
-RUN chmod -R 777 /home/bdi-viz-react/
+# Install dependencies based on the preferred package manager in a single layer
+RUN npm install concurrently && npm i
 
-RUN groupadd --gid 1001 yfw215
-RUN useradd --uid 1001 --gid 1001 -m yfw215
+# Copy application code
+COPY --chown=yfw215:yfw215 . .
+
+# Build the application
+RUN npm run build && \
+    chmod -R 777 /home/bdi-viz-react/
 
 # Copy cached model files if they exist
 COPY --chown=yfw215:yfw215 .cache/ /home/yfw215/.cache/
 
 USER yfw215
 
-ENV PATH="${PATH}:/home/yfw215/.local/bin"
-ENV PYTHONPATH="${PYTHONPATH}:/home/yfw215/.local/bin"
+ENV NODE_ENV=development \
+    PATH="${PATH}:/home/yfw215/.local/bin" \
+    PYTHONPATH="${PYTHONPATH}:/home/yfw215/.local/bin" \
+    PORT=3000 \
+    HOSTNAME="0.0.0.0"
 
 RUN pip install --user ipython
 
 EXPOSE 3000
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
 
 CMD ["npm", "run", "dev"]

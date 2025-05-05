@@ -4,12 +4,15 @@
   "private": true,
   "scripts": {
     "redis-server": "redis-server",
-    "celery-worker": "celery -A api.index.celery worker --pool threads --loglevel=debug",
+    "celery-dev": "celery -A api.index.celery worker --pool threads --loglevel=debug",
     "flask-dev": "FLASK_DEBUG=1 python3 -m flask --app api/index run -p 5328 --debug",
     "next-dev": "next dev",
-    "dev": "concurrently \"pnpm run next-dev\" \"pnpm run flask-dev\" \"pnpm run redis-server\" \"pnpm run celery-worker\"",
+    "celery-start": "celery -A api.index.celery worker --pool threads --loglevel=info",
+    "next-start": "next start",
+    "flask-start": "python3 -m flask --app api/index run -p 5328",
+    "dev": "concurrently \"pnpm run next-dev\" \"pnpm run flask-dev\" \"pnpm run redis-server\" \"pnpm run celery-dev\"",
+    "start": "concurrently \"pnpm run next-start\" \"pnpm run flask-dev\" \"pnpm run redis-server\" \"pnpm run celery-start\"",
     "build": "pip3 install -r requirements.txt --break-system-packages && next build",
-    "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
