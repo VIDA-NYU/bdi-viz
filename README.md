@@ -1,5 +1,11 @@
 <h1 align="center">BDIViz: An Interactive Visualization System for Biomedical Schema Matching with LLM-Supported Validation</h2>
 
+<div align="center">
+  <a href="https://vida-nyu.github.io/bdi-viz-manual/">
+    <img src="https://img.shields.io/badge/User%20Manual-Read%20the%20Docs-blue?style=for-the-badge&logo=read-the-docs" alt="User Manual" />
+  </a>
+</div>
+
 
 ## Table of Contents
 
