@@ -65,3 +65,4 @@ docs/_build/
 **/*.ipynb
 tmp*/
 **/tmp*/
+*.rdb

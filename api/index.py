@@ -108,37 +108,20 @@ def start_matching():
 
     source, target, target_json = extract_data_from_request(request)
 
-    # Case 1: If uploaded target is None, use default GDC or cached target
     if target is None:
-        if os.path.exists(".target.csv"):
-            target = pd.read_csv(".target.csv")
-            # Try to load cached target JSON if it exists
-            if os.path.exists(".target.json"):
-                target_json = json.load(open(".target.json", "r"))
+        app.logger.info("Using default GDC data")
+        target = pd.read_csv(GDC_DATA_PATH)
+        target_json = json.load(open(GDC_JSON_PATH, "r"))
+    else:
+        app.logger.info("Using uploaded target")
+        if target_json is None:
+            app.logger.info("[AGENT] Generating ontology for uploaded target...")
+            agent = get_agent()
+            response = agent.infer_ontology(target)
+            target_json = response.model_dump()
+            target_json = parse_llm_generated_ontology(target_json)
         else:
-            # Use default GDC data
-            app.logger.info("Using default GDC data")
-            target = pd.read_csv(GDC_DATA_PATH)
-            target_json = json.load(open(GDC_JSON_PATH, "r"))
-
-    # Case 2: If uploaded target exists but target_json is None, infer ontology
-    elif target_json is None:
-        app.logger.info("[AGENT] Generating ontology for uploaded target...")
-        agent = get_agent()
-        response = agent.infer_ontology(target)
-        target_json = response.model_dump()
-        target_json = parse_llm_generated_ontology(target_json)
-
-    # Case 3: Both target and target_json are provided, use as is
-    # No additional processing needed as they're already extracted
-
-    # Final check to ensure we have target_json
-    if target_json is None and target is not None:
-        app.logger.info("[AGENT] Final attempt to generate ontology...")
-        agent = get_agent()
-        response = agent.infer_ontology(target)
-        target_json = response.model_dump()
-        target_json = parse_llm_generated_ontology(target_json)
+            app.logger.info("Using cached ontology for uploaded target")
 
     # cache csvs
     source.to_csv(".source.csv", index=False)
@@ -153,6 +136,9 @@ def start_matching():
 
 @app.route("/api/matching/status", methods=["POST"])
 def matching_status():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
     data = request.json
     task_id = data.get("taskId")
 
@@ -170,6 +156,11 @@ def matching_status():
     elif task.state == "FAILURE":
         response = {"status": "failed", "message": str(task.info)}
     elif task.state == "SUCCESS":
+        source = pd.read_csv(".source.csv")
+        target = pd.read_csv(".target.csv")
+        matching_task.update_dataframe(source_df=source, target_df=target)
+        matching_task.get_candidates()
+
         response = {"status": "completed", "result": task.result}
     else:
         response = {"status": task.state, "message": "Task is in progress"}
