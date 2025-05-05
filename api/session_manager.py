@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Dict, List
+from typing import List
 
 from .matching_task import MatchingTask
 
@@ -11,13 +11,13 @@ class SessionManager:
     Each session have:
     - A unique name
     - A MatchingTask object
-    -
     """
 
     def __init__(self):
-        self.max_sessions = 10
-        self.queue = deque()
+        self.max_sessions = 5  # Reduced from 10 to save memory
+        self.queue = deque(maxlen=self.max_sessions)  # Set maxlen to avoid growing
         self.sessions = {"default": Session("default")}
+        self.queue.append("default")
 
     def add_session(self, session_name: str) -> None:
         if session_name in self.sessions:
@@ -34,12 +34,20 @@ class SessionManager:
             self.queue.append(session_name)
 
     def get_session(self, session_name: str) -> "Session":
+        if session_name not in self.sessions:
+            # Return default session if requested session doesn't exist
+            return self.sessions.get("default")
+        # Move accessed session to end of queue (most recently used)
+        if session_name in self.queue:
+            self.queue.remove(session_name)
+            self.queue.append(session_name)
         return self.sessions.get(session_name)
 
     def remove_session(self, session_name: str) -> None:
-        if session_name in self.sessions:
+        if session_name in self.sessions and session_name != "default":
             del self.sessions[session_name]
-            self.queue.remove(session_name)
+            if session_name in self.queue:
+                self.queue.remove(session_name)
 
     def get_active_sessions(self) -> List[str]:
         return list(self.sessions.keys())
@@ -51,7 +59,20 @@ class SessionManager:
 class Session:
     def __init__(self, name: str):
         self.name = name
-        self.matching_task = MatchingTask()
+        self.matching_task = None  # Lazy initialization
+        self._initialized = False
+
+    @property
+    def matching_task(self):
+        if not self._initialized:
+            self._matching_task = MatchingTask()
+            self._initialized = True
+        return self._matching_task
+
+    @matching_task.setter
+    def matching_task(self, value):
+        self._matching_task = value
+        self._initialized = value is not None
 
 
 SESSION_MANAGER = SessionManager()

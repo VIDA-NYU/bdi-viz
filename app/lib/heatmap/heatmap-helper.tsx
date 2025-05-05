@@ -4,6 +4,61 @@ import axios from "axios";
 import http from 'http';
 import https from 'https';
 
+
+// Matching Task
+
+const startMatchingTask = async (uploadData: FormData) => {
+    console.log("startMatchingTask", uploadData.get("type"));
+    const response = await axios.post("/api/matching/start", uploadData);
+    return response.data.task_id;
+};
+
+interface MatchingStatusProps {
+    taskId: string;
+    onResult: (result: any) => void;
+    onError: (error: any) => void;
+}
+
+const pollForMatchingStatus = async ({ taskId, onResult, onError }: MatchingStatusProps) => {
+    const interval = setInterval(async () => {
+        try {
+            const response = await axios.post("/api/matching/status", { taskId });
+            const status = response.data.status;
+
+            if (status === "completed") {
+                clearInterval(interval);
+                console.log("Matching task completed!");
+                onResult(response.data.result);
+            } else if (status === "failed") {
+                clearInterval(interval);
+                console.log("Matching task failed!", response.data.message);
+                onError(response.data.message);
+            }
+        } catch (error) {
+            onError(error);
+            console.error("Error polling for matching status:", error);
+            clearInterval(interval);
+        }
+    }, 5000);
+};
+
+interface RunMatchingTaskProps {
+    uploadData: FormData;
+    onResult: (result: any) => void;
+    onError: (error: any) => void;
+}
+
+const runMatchingTask = async ({ uploadData, onResult, onError }: RunMatchingTaskProps) => {
+    try {
+        const taskId = await startMatchingTask(uploadData);
+        console.log("Matching task started with taskId:", taskId);
+        pollForMatchingStatus({ taskId, onResult, onError });
+    } catch (error) {
+        console.error("Error running matching task:", error);
+        onError(error);
+    }
+};
+
 // Common HTTP configuration
 const getHttpAgents = () => ({
     httpAgent: new http.Agent({ keepAlive: true }),
@@ -403,6 +458,7 @@ const updateSourceValue = ({ column, value, newValue, valueMatchesCallback, sign
 };
 
 export { 
+    runMatchingTask,
     getCachedResults, 
     getValueBins, 
     getValueMatches, 

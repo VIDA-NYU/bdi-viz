@@ -4,11 +4,10 @@ import os
 from uuid import uuid4
 
 import pandas as pd
+from celery import Celery, Task
 from flask import Flask, request
 
-from .langchain.agent import AGENT
-
-# langchain
+# Lazy import the agent to save resources
 from .langchain.pydantic import AgentResponse
 from .session_manager import SESSION_MANAGER
 from .utils import (
@@ -26,31 +25,120 @@ GDC_JSON_PATH = os.path.join(
     os.path.dirname(__file__), "./resources/gdc_ontology_flat.json"
 )
 
-app = Flask("bdiviz_flask")
-app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
-app.logger.setLevel(logging.INFO)
+
+# Configure Celery
+def celery_init_app(app: Flask) -> Celery:
+    class FlaskTask(Task):
+        def __call__(self, *args: object, **kwargs: object) -> object:
+            with app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery_app = Celery(app.name, task_cls=FlaskTask)
+    celery_app.config_from_object(app.config["CELERY"])
+    celery_app.set_default()
+    app.extensions["celery"] = celery_app
+    # Set debug mode with low log level
+    celery_app.conf.worker_log_level = "DEBUG"
+    celery_app.conf.worker_log_format = (
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    return celery_app
 
 
-@app.route("/api/matching", methods=["POST"])
-def matcher():
-    matching_task = SESSION_MANAGER.get_session("default").matching_task
+def create_app() -> Flask:
+    app = Flask("bdiviz_flask")
+    app.config.from_mapping(
+        CELERY=dict(
+            broker_url="redis://localhost:6379/0",
+            result_backend="redis://localhost:6379/0",
+            task_ignore_result=False,
+            task_track_started=True,
+            task_time_limit=300,
+            task_soft_time_limit=240,
+        ),
+    )
+    app.config.from_prefixed_env()
+    celery_init_app(app)
+    app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
+    app.logger.setLevel(logging.INFO)
+    return app
+
+
+app = create_app()
+celery = app.extensions["celery"]
+
+# Lazy load the agent only when needed
+_AGENT = None
+
+
+def get_agent():
+    global _AGENT
+    if _AGENT is None:
+        from .langchain.agent import get_agent
+
+        _AGENT = get_agent()
+    return _AGENT
+
+
+@celery.task(bind=True)
+def run_matching_task(self, session):
+    try:
+        app.logger.info(f"Running matching task for session: {session}")
+        matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+        if os.path.exists(".source.csv") and os.path.exists(".target.csv"):
+            source = pd.read_csv(".source.csv")
+            target = pd.read_csv(".target.csv")
+
+            matching_task.update_dataframe(source_df=source, target_df=target)
+            candidates = matching_task.get_candidates()
+
+            return {"status": "completed", "candidates_count": len(candidates)}
+
+        return {"status": "failed", "message": "Source or target files not found"}
+    except Exception as e:
+        # Handle the NoneType Redis error and other potential exceptions
+        app.logger.error(f"Error in matching task: {str(e)}")
+        return {"status": "failed", "message": f"Error processing task: {str(e)}"}
+
+
+@app.route("/api/matching/start", methods=["POST"])
+def start_matching():
+    session = "default"
 
     source, target, target_json = extract_data_from_request(request)
+
+    # Case 1: If uploaded target is None, use default GDC or cached target
     if target is None:
         if os.path.exists(".target.csv"):
             target = pd.read_csv(".target.csv")
+            # Try to load cached target JSON if it exists
+            if os.path.exists(".target.json"):
+                target_json = json.load(open(".target.json", "r"))
         else:
-            # GDC
+            # Use default GDC data
+            app.logger.info("Using default GDC data")
             target = pd.read_csv(GDC_DATA_PATH)
             target_json = json.load(open(GDC_JSON_PATH, "r"))
-    if target_json is None:
-        if os.path.exists(".target.json"):
-            target_json = json.load(open(".target.json", "r"))
-        else:
-            app.logger.info("[AGENT] Generating ontology...")
-            response = AGENT.infer_ontology(target)
-            target_json = response.model_dump()
-            target_json = parse_llm_generated_ontology(target_json)
+
+    # Case 2: If uploaded target exists but target_json is None, infer ontology
+    elif target_json is None:
+        app.logger.info("[AGENT] Generating ontology for uploaded target...")
+        agent = get_agent()
+        response = agent.infer_ontology(target)
+        target_json = response.model_dump()
+        target_json = parse_llm_generated_ontology(target_json)
+
+    # Case 3: Both target and target_json are provided, use as is
+    # No additional processing needed as they're already extracted
+
+    # Final check to ensure we have target_json
+    if target_json is None and target is not None:
+        app.logger.info("[AGENT] Final attempt to generate ontology...")
+        agent = get_agent()
+        response = agent.infer_ontology(target)
+        target_json = response.model_dump()
+        target_json = parse_llm_generated_ontology(target_json)
 
     # cache csvs
     source.to_csv(".source.csv", index=False)
@@ -59,13 +147,34 @@ def matcher():
     with open(".target.json", "w") as f:
         json.dump(target_json, f)
 
-    app.logger.info("Matching task started!")
+    task = run_matching_task.delay(session)
+    return {"task_id": task.id}
 
-    matching_task.update_dataframe(source_df=source, target_df=target)
 
-    _ = matching_task.get_candidates()
+@app.route("/api/matching/status", methods=["POST"])
+def matching_status():
+    data = request.json
+    task_id = data.get("taskId")
 
-    return {"message": "success"}
+    if not task_id:
+        return {"status": "error", "message": "No task_id provided"}, 400
+
+    task = run_matching_task.AsyncResult(task_id)
+
+    app.logger.info(
+        f"Task state: {task.state}, {task.info}, {task.result}, {task.traceback}"
+    )
+
+    if task.state == "PENDING":
+        response = {"status": "pending", "message": "Task is pending"}
+    elif task.state == "FAILURE":
+        response = {"status": "failed", "message": str(task.info)}
+    elif task.state == "SUCCESS":
+        response = {"status": "completed", "result": task.result}
+    else:
+        response = {"status": task.state, "message": "Task is in progress"}
+
+    return response
 
 
 @app.route("/api/exact-matches", methods=["POST"])
@@ -100,8 +209,8 @@ def get_results():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
-        candidates = matching_task.get_candidates()
-        # AGENT.remember_candidates(candidates)
+        _ = matching_task.get_candidates()
+        # get_agent().remember_candidates(candidates)
 
     results = matching_task.to_frontend_json()
 
@@ -186,8 +295,7 @@ def get_ontology():
 @app.route("/api/gdc/property", methods=["POST"])
 def get_gdc_property():
     session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
-
+    # Unused variable removed to save memory
     target_col = request.json["targetColumn"]
 
     property = load_gdc_property(target_col)
@@ -198,8 +306,7 @@ def get_gdc_property():
 @app.route("/api/property", methods=["POST"])
 def get_property():
     session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
-
+    # Unused variable removed to save memory
     target_col = request.json["targetColumn"]
 
     property = load_property(target_col)
@@ -232,7 +339,8 @@ def ask_agent():
     data = request.json
     prompt = data["prompt"]
     app.logger.info(f"Prompt: {prompt}")
-    response = AGENT.invoke(prompt, [], AgentResponse)
+    agent = get_agent()
+    response = agent.invoke(prompt, [], AgentResponse)
     app.logger.info(f"{response}")
 
     response = response.model_dump()
@@ -243,12 +351,12 @@ def ask_agent():
 @app.route("/api/agent/search/candidates", methods=["POST"])
 def search_candidates():
     session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
-
+    # Unused variable removed to save memory
     data = request.json
     query = data["query"]
 
-    response = AGENT.search(query)
+    agent = get_agent()
+    response = agent.search(query)
     response = response.model_dump()
 
     return response
@@ -273,7 +381,8 @@ def agent_explanation():
         )
         return cached_explanation
 
-    response = AGENT.explain(
+    agent = get_agent()
+    response = agent.explain(
         {
             "sourceColumn": source_col,
             "targetColumn": target_col,
@@ -304,7 +413,8 @@ def agent_suggest_value_mapping():
     source_values = matching_task.get_source_unique_values(source_col)
     target_values = matching_task.get_target_unique_values(target_col)
 
-    response = AGENT.suggest_value_mapping(
+    agent = get_agent()
+    response = agent.suggest_value_mapping(
         {
             "sourceColumn": source_col,
             "targetColumn": target_col,
@@ -339,8 +449,9 @@ def agent_suggest():
         agent_thinks_is_match = cached_explanation["is_match"]
         source_values = matching_task.get_source_unique_values(source_col)
         target_values = matching_task.get_target_unique_values(target_col)
+        agent = get_agent()
         if agent_thinks_is_match and operation == "reject":
-            AGENT.remember_fp(
+            agent.remember_fp(
                 {
                     "sourceColumn": source_col,
                     "targetColumn": target_col,
@@ -349,7 +460,7 @@ def agent_suggest():
                 }
             )
         elif not agent_thinks_is_match and operation == "accept":
-            AGENT.remember_fn(
+            agent.remember_fn(
                 {
                     "sourceColumn": source_col,
                     "targetColumn": target_col,
@@ -361,8 +472,9 @@ def agent_suggest():
     matching_task.apply_operation(operation, candidate, references)
 
     # put into memory
-    AGENT.remember_explanation(explanations, user_operation)
-    response = AGENT.make_suggestion(explanations, user_operation)
+    agent = get_agent()
+    agent.remember_explanation(explanations, user_operation)
+    response = agent.make_suggestion(explanations, user_operation)
     response = response.model_dump()
 
     return response
@@ -379,14 +491,9 @@ def agent_related_source():
     source_values = matching_task.get_source_unique_values(source_col)
     target_values = matching_task.get_target_unique_values(target_col)
 
-    candidate = {
-        "sourceColumn": source_col,
-        "targetColumn": target_col,
-        "sourceValues": source_values,
-        "targetValues": target_values,
-    }
-
-    # response = AGENT.search_for_sources(candidate)
+    # Unused variable removed to save memory
+    # agent = get_agent()
+    # response = agent.search_for_sources(candidate)
     # response = response.model_dump()
     response = {"sources": []}
 
@@ -399,7 +506,8 @@ def agent_thumb():
     explanation = data["explanation"]
     user_operation = data["userOperation"]
 
-    AGENT.remember_explanation([explanation], user_operation)
+    agent = get_agent()
+    agent.remember_explanation([explanation], user_operation)
 
     return {"message": "success"}
 
@@ -416,8 +524,9 @@ def agent_apply():
     app.logger.info(f"User Reaction: {reaction}")
 
     responses = []
+    agent = get_agent()
     for action in actions:
-        response = AGENT.apply(session, action, previous_operation)
+        response = agent.apply(session, action, previous_operation)
         if response:
             response_obj = response.model_dump()
             if response_obj["action"] == "undo":
@@ -436,6 +545,7 @@ def user_operation():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     operation_objs = request.json["userOperations"]
+    agent = get_agent()
 
     for operation_obj in operation_objs:
         operation = operation_obj["operation"]
@@ -445,9 +555,9 @@ def user_operation():
         matching_task.apply_operation(operation, candidate, references)
 
         if operation == "accept":
-            AGENT.remember_fn(candidate)
+            agent.remember_fn(candidate)
         elif operation == "reject":
-            AGENT.remember_fp(candidate)
+            agent.remember_fp(candidate)
 
     return {"message": "success"}
 

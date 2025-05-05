@@ -34,6 +34,7 @@ export const useOntologyLayout = ({
   );
 
   const filteredOntologies = useMemo(() => {
+    console.log("targetOntologies", targetOntologies);
     return targetOntologies.filter((ontology) =>
       columns.includes(ontology.name)
     );

@@ -3,10 +3,11 @@ import random
 from typing import Any, Dict, Generator, List, Optional
 
 import pandas as pd
-
-pd.set_option("display.max_columns", None)
-
 from dotenv import load_dotenv
+
+# Only set pandas display options when needed, not at module level
+# pd.set_option("display.max_columns", None)
+
 
 load_dotenv()
 from langchain.output_parsers import PydanticOutputParser
@@ -46,10 +47,10 @@ class Agent:
         # self.llm = ChatOllama(base_url='https://ollama-asr498.users.hsrn.nyu.edu', model='llama3.1:8b-instruct-fp16', temperature=0.2)
         # self.llm = ChatOllama(model="deepseek-r1:1.5b", temperature=0.2)
         # self.llm = ChatTogether(model="meta-llama/Llama-3.3-70B-Instruct-Turbo")
-        if llm_model is not None:
-            self.llm = llm_model
-        else:
-            self.llm = ChatOpenAI(model="gpt-4o", temperature=0)
+
+        # Lazy initialization of LLM
+        self._llm = None
+        self._llm_model = llm_model
 
         self.agent_config = {"configurable": {"thread_id": "bdiviz-1"}}
 
@@ -69,6 +70,16 @@ class Agent:
     4. Approach the task with the mindset of a biomedical expert.
             """,
         ]
+
+    @property
+    def llm(self):
+        # Lazy initialization of LLM to save resources
+        if self._llm is None:
+            if self._llm_model is not None:
+                self._llm = self._llm_model
+            else:
+                self._llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        return self._llm
 
     def search(self, query: str) -> SearchResponse:
         logger.info(f"[Agent] Searching for candidates...")
@@ -269,12 +280,18 @@ Diagnosis:
     def infer_ontology(self, target_df: pd.DataFrame) -> Ontology:
         logger.info(f"[Agent] Inferring ontology...")
 
+        # Set pandas display options only when needed
+        pd.set_option("display.max_columns", None)
+        df_preview = target_df.head().to_string()
+        # Reset to default to save memory
+        pd.reset_option("display.max_columns")
+
         prompt = f"""
     You are given a pandas DataFrame containing target data.
     Review the preview below and determine the ontology for each column.
 
     DataFrame Preview:
-    {target_df.head()}
+    {df_preview}
 
     Instructions:
     1. For EVERY column, create an AttributeProperties object that describes its ontology FOR EACH OF THEM.
@@ -321,7 +338,7 @@ Candidate: {candidate}
 **Instructions**:
 1. Identify **Related Source Columns and Their Candidates**.
 2. Consult Domain Knowledge (using **retrieve_from_rag**) if any clarifications are needed.
-3. Decide Which Candidates to Prune based on your understanding and the user’s previous operations, then compile the candidates after pruning into a **dictionary** like this:
+3. Decide Which Candidates to Prune based on your understanding and the user's previous operations, then compile the candidates after pruning into a **dictionary** like this:
     [
         {{"sourceColumn": "source_column_1", "targetColumn": "target_column_1", "score": 0.9, "matcher": "magneto_zs_bp"}},
         {{"sourceColumn": "source_column_1", "targetColumn": "target_column_15", "score": 0.7, "matcher": "magneto_zs_bp"}},
@@ -424,4 +441,12 @@ Prompt: {prompt}
         return template
 
 
-AGENT = Agent()
+# Lazy initialization of the global agent
+AGENT = None
+
+
+def get_agent():
+    global AGENT
+    if AGENT is None:
+        AGENT = Agent()
+    return AGENT

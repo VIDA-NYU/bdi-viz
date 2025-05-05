@@ -1,4 +1,6 @@
 Flask==3.0.3
+redis==6.0.0
+celery==5.5.2
 fuzzywuzzy
 jq
 sentence_transformers
@@ -15,8 +17,9 @@ langchain_huggingface
 langchain-openai
 # langchain-together
 langgraph
-duckduckgo-search
+# duckduckgo-search
 
+hf_xet
 python-dotenv
 pydantic
 rapidfuzz

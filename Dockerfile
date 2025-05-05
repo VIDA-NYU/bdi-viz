@@ -28,6 +28,9 @@ RUN chmod -R 777 /home/bdi-viz-react/
 RUN groupadd --gid 1001 yfw215
 RUN useradd --uid 1001 --gid 1001 -m yfw215
 
+# Copy cached model files if they exist
+COPY --chown=yfw215:yfw215 .cache/ /home/yfw215/.cache/
+
 USER yfw215
 
 ENV PATH="${PATH}:/home/yfw215/.local/bin"

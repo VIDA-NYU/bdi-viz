@@ -5,7 +5,6 @@ import pandas as pd
 
 from ..matcher.rapidfuzz import RapidFuzzMatcher
 from ..matcher.rapidfuzz_value import RapidFuzzValueMatcher
-from ..matcher.valentine import ValentineMatcher
 
 
 class CandidateQuadrants:
@@ -33,7 +32,15 @@ class CandidateQuadrants:
         self.value_threshold_high = value_threshold + 0.2
         self.value_threshold = value_threshold
 
-        self.quadrants = self._init_quadrants()
+        # Lazy initialization of quadrants to reduce initial memory usage
+        self._quadrants = None
+
+    @property
+    def quadrants(self) -> Dict[str, List[List[str]]]:
+        # Lazy load quadrants only when needed
+        if self._quadrants is None:
+            self._quadrants = self._init_quadrants()
+        return self._quadrants
 
     def _init_quadrants(self) -> Dict[str, List[List[str]]]:
         """
@@ -46,20 +53,29 @@ class CandidateQuadrants:
         """
         quadrants = {colname: [[] for _ in range(4)] for colname in self.source.columns}
 
-        col_name_matches = RapidFuzzMatcher("quad_col_name")._get_matches(
+        # Create matchers only when needed and release them after use
+        col_matcher = RapidFuzzMatcher("quad_col_name")
+        col_name_matches = col_matcher._get_matches(
             self.source, self.target, self.top_k
         )
-        value_matches = RapidFuzzValueMatcher("quad_value")._get_matches(
-            self.source, self.target, self.top_k
-        )
+        del col_matcher  # Release memory
+
+        val_matcher = RapidFuzzValueMatcher("quad_value")
+        value_matches = val_matcher._get_matches(self.source, self.target, self.top_k)
+        del val_matcher  # Release memory
 
         for source_column in self.source.columns:
             col_name_matches_source = col_name_matches[source_column]
             value_matches_source = value_matches[source_column]
 
-            all_targets = set(
-                list(col_name_matches_source.keys()) + list(value_matches_source.keys())
-            )
+            # Use list comprehension instead of set operations for better memory usage
+            all_targets = []
+            for target_column in col_name_matches_source:
+                all_targets.append(target_column)
+            for target_column in value_matches_source:
+                if target_column not in col_name_matches_source:
+                    all_targets.append(target_column)
+
             for target_column in all_targets:
                 col_score = col_name_matches_source.get(target_column, 0)
                 val_score = value_matches_source.get(target_column, 0)
@@ -86,55 +102,77 @@ class CandidateQuadrants:
         self, source_column: str, is_very_high: bool = False
     ) -> List[str]:
         if is_very_high:
-            ret = [
-                target_column
-                for target_column, col_score, _ in set(
-                    self.get_quadrant(source_column, True, True)
-                    + self.get_quadrant(source_column, True, False)
-                )
-                if col_score >= self.column_name_threshold_high
-            ]
+            # Use a more memory-efficient approach
+            high_col_matches = set()
+            for target_column, col_score, _ in self.get_quadrant(
+                source_column, True, True
+            ):
+                if col_score >= self.column_name_threshold_high:
+                    high_col_matches.add(target_column)
+
+            for target_column, col_score, _ in self.get_quadrant(
+                source_column, True, False
+            ):
+                if col_score >= self.column_name_threshold_high:
+                    high_col_matches.add(target_column)
+
+            # Only process value matches if needed
             if not self.source[source_column].isna().all():
-                ret += [
-                    target_column
-                    for target_column, _, val_score in self.get_quadrant(
-                        source_column, True, True
-                    )
-                    if val_score >= self.value_threshold_high
-                ]
-            return list(set(ret))
+                for target_column, _, val_score in self.get_quadrant(
+                    source_column, True, True
+                ):
+                    if val_score >= self.value_threshold_high:
+                        high_col_matches.add(target_column)
+
+            return list(high_col_matches)
+
+        # Simple case - just return the high-high quadrant
         return [
             target_column
             for target_column, _, _ in self.get_quadrant(source_column, True, True)
         ]
 
     def get_potential_matches(self, source_column: str) -> List[str]:
-        easy_matches = self.get_easy_matches(source_column)
+        easy_matches = set(self.get_easy_matches(source_column))
+
+        # Only process non-empty columns
         if not self.source[source_column].isna().all():
             matches = self.get_quadrant(source_column, True, False) + self.get_quadrant(
                 source_column, False, True
             )
         else:
             matches = self.get_quadrant(source_column, True, False)
-        return list(
-            set(
-                target_column
-                for target_column, _, _ in matches
-                if target_column not in easy_matches
-            )
-        )
+
+        # More memory-efficient filtering
+        result = []
+        for target_column, _, _ in matches:
+            if target_column not in easy_matches and target_column not in result:
+                result.append(target_column)
+
+        return result
 
     def get_unrelated_columns(self, source_column: str) -> List[str]:
-        return list(set(self.get_quadrant(source_column, False, False)))
+        # More memory-efficient approach
+        result = []
+        seen = set()
+        for target_column, _, _ in self.get_quadrant(source_column, False, False):
+            if target_column not in seen:
+                result.append(target_column)
+                seen.add(target_column)
+        return result
 
     def get_potential_target_df(self, source_column: str) -> pd.DataFrame:
-        return self.target[self.get_potential_matches(source_column)]
+        matches = self.get_potential_matches(source_column)
+        if not matches:
+            return None
+        return self.target[matches]
 
     def get_potential_numeric_target_df(self) -> pd.DataFrame:
-        target_df = self.target.select_dtypes(include=np.number)
-        return target_df
+        # More efficient to select only numeric columns
+        return self.target.select_dtypes(include=np.number)
 
     def get_easy_target_json(self, source_column: str) -> List[Dict[str, Any]]:
+        easy_matches = self.get_easy_matches(source_column, True)
         return [
             {
                 "sourceColumn": source_column,
@@ -143,5 +181,5 @@ class CandidateQuadrants:
                 "matcher": "candidate_quadrants",
                 "status": "accepted",
             }
-            for target_column in self.get_easy_matches(source_column, True)
+            for target_column in easy_matches
         ]

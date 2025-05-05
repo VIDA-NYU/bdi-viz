@@ -2,7 +2,9 @@
 
 import { useContext, useState } from "react";
 import axios from "axios";
-import { getCachedResults, getTargetOntology, getValueBins, getValueMatches } from "@/app/lib/heatmap/heatmap-helper";
+import http from 'http';
+// import https from 'https';
+import { runMatchingTask, getCachedResults, getTargetOntology, getValueBins, getValueMatches } from "@/app/lib/heatmap/heatmap-helper";
 
 import { Box, Paper, IconButton } from "@mui/material";
 import { BasicButton } from "../layout/components";
@@ -26,12 +28,6 @@ const FileUploading: React.FC<FileUploadingProps> = ({
 }) => {
     const { setIsLoadingGlobal } = useContext(SettingsGlobalContext);
     const [isVisible, setIsVisible] = useState(false);
-
-    const customHeader = {
-        headers: {
-            "Content-Type": "multipart/form-data",
-        },
-    };
 
     const readFileAsync = (file: File | null): Promise<string | null> => {
         return new Promise((resolve) => {
@@ -76,16 +72,26 @@ const FileUploading: React.FC<FileUploadingProps> = ({
             if (targetCsv) uploadData.append("target_csv", targetCsv);
             if (targetJson) uploadData.append("target_json", targetJson);
 
-            const response = await axios.post("/api/matching", uploadData, { ...customHeader, timeout: 600000 });
-            if (response.status === 200) {
-                getCachedResults({ callback });
-                getTargetOntology({ callback: ontologyCallback });
-                getValueBins({ callback: uniqueValuesCallback });
-                getValueMatches({ callback: valueMatchesCallback });
-            }
+            // Add keep alive agents for long-running requests
+            // const httpAgent = new http.Agent({ keepAlive: true });
+            // const httpsAgent = new https.Agent({ keepAlive: true });
+            runMatchingTask({
+                uploadData,
+                onResult: (result) => {
+                    console.log("Matching task completed with result:", result);
+                    getCachedResults({ callback });
+                    getTargetOntology({ callback: ontologyCallback });
+                    getValueBins({ callback: uniqueValuesCallback });
+                    getValueMatches({ callback: valueMatchesCallback });
+                    setIsLoadingGlobal(false);
+                },
+                onError: (error) => {
+                    console.error("Matching task failed with error:", error);
+                    setIsLoadingGlobal(false);
+                }
+            });
         } catch (error) {
             console.error(error);
-        } finally {
             setIsLoadingGlobal(false);
         }
     };

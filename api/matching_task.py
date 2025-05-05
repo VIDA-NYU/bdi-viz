@@ -57,7 +57,7 @@ class MatchingTask:
         self.candidate_quadrants = None
         self.matchers = {
             # "jaccard_distance_matcher": ValentineMatcher("jaccard_distance_matcher"),
-            "ct_learning": BDIKitMatcher("ct_learning"),
+            # "ct_learning": BDIKitMatcher("ct_learning"),
             "magneto_ft": BDIKitMatcher("magneto_ft"),
             "magneto_zs": BDIKitMatcher("magneto_zs"),
         }
@@ -76,7 +76,6 @@ class MatchingTask:
             "target_hash": None,
             "candidates": [],
             "source_clusters": None,
-            "target_clusters": None,
             "value_matches": {},
         }
 
@@ -162,12 +161,11 @@ class MatchingTask:
                 **DEFAULT_PARAMS,
             }
         )
-        source_embeddings, target_embeddings = embedding_clusterer.get_embeddings(
-            source_df=self.source_df, target_df=self.target_df
+        source_embeddings = embedding_clusterer.get_source_embeddings(
+            source_df=self.source_df
         )
 
         source_clusters = self._generate_source_clusters(source_embeddings)
-        target_clusters = self._generate_target_clusters(target_embeddings)
 
         # Apply candidate quadrants
         self.candidate_quadrants = CandidateQuadrants(
@@ -191,6 +189,7 @@ class MatchingTask:
             # if target_df is None:  # No potential matches
             #     continue
         for matcher_name, matcher_instance in self.matchers.items():
+            logger.info(f"Running matcher: {matcher_name}...")
             matcher_candidates = matcher_instance.top_matches(
                 source=self.source_df,
                 target=self.target_df,
@@ -237,7 +236,6 @@ class MatchingTask:
                 "target_hash": target_hash,
                 "candidates": layered_candidates,
                 "source_clusters": source_clusters,
-                "target_clusters": target_clusters,
                 "value_matches": self.cached_candidates["value_matches"],
             }
             self._export_cache_to_json(self.cached_candidates)
@@ -263,20 +261,6 @@ class MatchingTask:
             for i, cluster_idx in enumerate(clusters_idx)
         }
         return clusters
-
-    def _generate_target_clusters(self, target_embeddings: Tensor) -> List[List[str]]:
-        kmeans = KMeans(n_clusters=min(20, len(self.target_df.columns)))
-        kmeans.fit(np.array(target_embeddings))
-        clusters_idx = kmeans.labels_
-
-        clusters = {}
-        for i, target_column in enumerate(self.target_df.columns):
-            cluster_idx = clusters_idx[i]
-            if cluster_idx not in clusters:
-                clusters[cluster_idx] = []
-            clusters[cluster_idx].append(target_column)
-
-        return list(clusters.values())
 
     def _generate_gdc_ontology(self) -> List[Dict]:
         candidates = self.get_cached_candidates()
@@ -392,7 +376,6 @@ class MatchingTask:
         return {
             "candidates": self.get_cached_candidates(),  # sourceColumn, targetColumn, score, matcher
             "sourceClusters": self._format_source_clusters_for_frontend(),
-            # "targetClusters": self.get_cached_target_clusters(),  # [["column1", "column2", ...], [], []]
             "matchers": self.get_matchers(),
         }
 
@@ -670,9 +653,6 @@ class MatchingTask:
 
     def get_cached_source_clusters(self) -> Dict[str, List[str]]:
         return self.cached_candidates["source_clusters"] or {}
-
-    def get_cached_target_clusters(self) -> List[List[str]]:
-        return self.cached_candidates["target_clusters"] or []
 
     def get_matchers(self) -> List[Dict[str, any]]:
         return [
