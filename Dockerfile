@@ -1,4 +1,4 @@
-FROM nikolaik/python-nodejs:python3.9-nodejs20 as base
+FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.9-nodejs20 as base
 
 WORKDIR /home/bdi-viz-react/
 
@@ -40,4 +40,4 @@ RUN pip install --user ipython
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start"]

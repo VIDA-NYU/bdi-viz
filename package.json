@@ -11,7 +11,7 @@
     "next-start": "next start",
     "flask-start": "python3 -m flask --app api/index run -p 5328",
     "dev": "concurrently \"pnpm run next-dev\" \"pnpm run flask-dev\" \"pnpm run redis-server\" \"pnpm run celery-dev\"",
-    "start": "concurrently \"pnpm run next-start\" \"pnpm run flask-dev\" \"pnpm run redis-server\" \"pnpm run celery-start\"",
+    "start": "concurrently \"pnpm run next-start\" \"pnpm run flask-start\" \"pnpm run redis-server\" \"pnpm run celery-start\"",
     "build": "pip3 install -r requirements.txt --break-system-packages && next build",
     "lint": "next lint"
   },

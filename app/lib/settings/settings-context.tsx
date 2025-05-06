@@ -7,6 +7,8 @@ type SettingsGlobalState = {
     setDeveloperMode: (developerMode: boolean) => void;
     hoverMode: boolean;
     setHoverMode: (hoverMode: boolean) => void;
+    taskState: TaskState;
+    setTaskState: (taskState: TaskState) => void;
 }
 
 const SettingsGlobalContext = createContext<SettingsGlobalState>({
@@ -16,6 +18,15 @@ const SettingsGlobalContext = createContext<SettingsGlobalState>({
     setDeveloperMode: () => { },
     hoverMode: false,
     setHoverMode: () => { },
+    taskState: {
+        status: "idle",
+        progress: 0,
+        current_step: "",
+        completed_steps: 0,
+        total_steps: 0,
+        logs: [],
+    },
+    setTaskState: () => { },
 });
 
 

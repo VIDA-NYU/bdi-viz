@@ -26,7 +26,7 @@ const FileUploading: React.FC<FileUploadingProps> = ({
     uniqueValuesCallback,
     valueMatchesCallback,
 }) => {
-    const { setIsLoadingGlobal } = useContext(SettingsGlobalContext);
+    const { setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext);
     const [isVisible, setIsVisible] = useState(false);
 
     const readFileAsync = (file: File | null): Promise<string | null> => {
@@ -88,6 +88,10 @@ const FileUploading: React.FC<FileUploadingProps> = ({
                 onError: (error) => {
                     console.error("Matching task failed with error:", error);
                     setIsLoadingGlobal(false);
+                },
+                taskStateCallback: (taskState) => {
+                    console.log("Task state:", taskState);
+                    setTaskState(taskState);
                 }
             });
         } catch (error) {

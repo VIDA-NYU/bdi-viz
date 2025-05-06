@@ -15,15 +15,24 @@ const startMatchingTask = async (uploadData: FormData) => {
 
 interface MatchingStatusProps {
     taskId: string;
+    taskStateCallback: (taskState: TaskState) => void;
     onResult: (result: any) => void;
     onError: (error: any) => void;
 }
 
-const pollForMatchingStatus = async ({ taskId, onResult, onError }: MatchingStatusProps) => {
+const pollForMatchingStatus = async ({ 
+    taskId, 
+    taskStateCallback, 
+    onResult, 
+    onError 
+}: MatchingStatusProps) => {
     const interval = setInterval(async () => {
         try {
             const response = await axios.post("/api/matching/status", { taskId });
             const status = response.data.status;
+            const taskState = response.data.taskState as TaskState;
+            console.log("taskState", taskState);
+            taskStateCallback(taskState);
 
             if (status === "completed") {
                 clearInterval(interval);
@@ -46,13 +55,14 @@ interface RunMatchingTaskProps {
     uploadData: FormData;
     onResult: (result: any) => void;
     onError: (error: any) => void;
+    taskStateCallback: (taskState: TaskState) => void;
 }
 
-const runMatchingTask = async ({ uploadData, onResult, onError }: RunMatchingTaskProps) => {
+const runMatchingTask = async ({ uploadData, onResult, onError, taskStateCallback }: RunMatchingTaskProps) => {
     try {
         const taskId = await startMatchingTask(uploadData);
         console.log("Matching task started with taskId:", taskId);
-        pollForMatchingStatus({ taskId, onResult, onError });
+        pollForMatchingStatus({ taskId, taskStateCallback, onResult, onError });
     } catch (error) {
         console.error("Error running matching task:", error);
         onError(error);

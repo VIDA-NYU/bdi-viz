@@ -7,6 +7,14 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [isLoadingGlobal, setIsLoadingGlobal] = useState(false);
     const [developerMode, setDeveloperMode] = useState(false);
     const [hoverMode, setHoverMode] = useState(false);
+    const [taskState, setTaskState] = useState<TaskState>({
+        status: "idle",
+        progress: 0,
+        current_step: "",
+        completed_steps: 0,
+        total_steps: 0,
+        logs: [],
+    });
 
     const value = {
         isLoadingGlobal,
@@ -15,6 +23,8 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
         setDeveloperMode,
         hoverMode,
         setHoverMode,
+        taskState,
+        setTaskState,
     }
 
     return (

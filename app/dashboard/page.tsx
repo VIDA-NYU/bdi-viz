@@ -12,6 +12,7 @@ import Paginator from "./components/control-inputs/paginator";
 import AgentSuggestionsPopup from "./components/langchain/suggestion";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import PaginationGlobalContext from "../lib/pagination/pagination-context";
+import LoadingPopup from "./components/loading-popup/loadingPopup";
 import { getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
@@ -38,6 +39,8 @@ export default function Dashboard() {
         setDeveloperMode,
         hoverMode,
         setHoverMode,
+        taskState,
+        setTaskState,
     } = useContext(SettingsGlobalContext);
 
     const {
@@ -290,10 +293,10 @@ export default function Dashboard() {
                 backgroundColor: 'rgba(255, 255, 255, 0.7)',
                 zIndex: 1300,
             }}>
-                <CircularProgress size={80} />
+                <LoadingPopup taskState={taskState} />
             </Box>
         );
-    }, [isLoadingGlobal]);
+    }, [isLoadingGlobal, taskState]);
 
     return (
         <RootContainer>

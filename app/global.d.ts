@@ -147,3 +147,19 @@ declare interface RelatedSource {
     title: string;
     link: string;
 }
+
+
+declare interface TaskState {
+    status: string;
+    progress: number;
+    current_step: string;
+    completed_steps: number;
+    total_steps: number;
+    logs: TaskLog[];
+}
+
+declare interface TaskLog {
+    timestamp: string;
+    step: string;
+    progress: number;
+}
