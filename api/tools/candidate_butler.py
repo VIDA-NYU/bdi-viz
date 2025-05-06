@@ -1,8 +1,7 @@
 import logging
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional
 
 from langchain.tools.base import StructuredTool
-from langchain_core.tools import tool
 
 from ..session_manager import SESSION_MANAGER
 
@@ -13,96 +12,124 @@ class CandidateButler:
     def __init__(self, session: str):
         self.matching_task = SESSION_MANAGER.get_session(session).matching_task
 
-    def get_toolset(self):
-        return [
-            StructuredTool.from_function(
-                func=self.update_candidates,
-                name="update_candidates",
-            ),
-            # StructuredTool.from_function(
-            #     func=self.discard_source_column,
-            #     name="discard_source_column",
-            # ),
-        ]
-
-    def read_source_cluster_details(
-        self,
-        source_column: str,
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Reads the details of the source cluster for a given source column.
-
-        Args:
-            source_column (str): The name of the source column for which to read the cluster details.
-        Returns:
-            Dict[str, List[Tuple[str, float]]]: A dictionary where the key is the source column name and the value
-            is a list of tuples, each containing a candidate string and its associated float value.
-        """
-
-        top_neighbors = 1
-        cached_candidates = self.matching_task.get_cached_candidates()
-        source_cluster = self.matching_task.get_cached_source_clusters()[source_column][
-            1 : top_neighbors + 1
-        ]
-
-        logger.info(f"[Candidate Butler] Read source cluster for {source_column}......")
-
-        return {
-            column: [
-                candidate
-                for candidate in cached_candidates
-                if candidate["sourceColumn"] == column
-            ]
-            for column in source_cluster
-            if column != source_column
-        }
-
-    def update_candidates(
-        self, candidates: List[Dict[str, Union[str, float]]]
-    ) -> Dict[str, str]:
-        """
-        Updates the heatmap with refined candidate mappings.
-
-        - Source columns (keys) must match those from read_candidates.
-        - Target column names (first item in each tuple) must not be changed.
-        - Filter or remove items to refine each column's candidates.
-        - Matcher names (second item in each tuple) must not be changed.
-
-        Args:
-            candidates (dict):
-                Example:
-                [
-                    {"sourceColumn": "source_column_1", "targetColumn": "target_column_1", "score": 0.9, "matcher": "magneto_zs_bp"},
-                    {"sourceColumn": "source_column_1", "targetColumn": "target_column_15", "score": 0.7, "matcher": "magneto_zs_bp"},
-                    ...
-                ]
-        """
-        logger.info(
-            f"[Candidate Butler] Update candidates to the matching task {candidates}......"
+        self.search_candidates_tool = StructuredTool.from_function(
+            func=self.search_candidates,
+            name="search_candidates",
+            description="""
+            Search for candidates matching specific biomedical attributes.
+            Args:
+                source_column (Optional[str]): Source biomedical attribute.
+                target_column (Optional[str]): Target biomedical attribute.
+            Returns:
+                List[Dict[str, Any]]: Matching candidate attributes.
+            """.strip(),
         )
-        cached_candidates = self.matching_task.get_cached_candidates()
-        sources_to_update = set([candidate["sourceColumn"] for candidate in candidates])
-        cached_candidates = [
+
+        self.get_attribute_candidates_tool = StructuredTool.from_function(
+            func=self.get_candidates_for_source_attribute,
+            name="get_attribute_candidates",
+            description="""
+            Retrieve all candidate matches for a specific biomedical attribute.
+            Args:
+                source_attribute (str): The biomedical attribute to analyze.
+            Returns:
+                List[Dict[str, Any]]: Potential attribute mappings.
+            """.strip(),
+        )
+
+    def get_candidates_for_source_attribute(self, source_attribute: str):
+        """
+        Get all candidate mappings for a specific biomedical attribute.
+        """
+        candidates = self.matching_task.get_cached_candidates()
+        return [
             candidate
-            for candidate in cached_candidates
-            if candidate["sourceColumn"] not in sources_to_update
+            for candidate in candidates
+            if candidate["sourceColumn"] == source_attribute
         ]
-        cached_candidates.extend(candidates)
 
-        self.matching_task.set_cached_candidates(cached_candidates)
-
-        return {"status": "success"}
-
-    def discard_source_column(self, column_name: str):
+    def update_candidates_for_source_attribute(
+        self, source_attribute: str, candidates: List[Dict[str, Any]]
+    ):
         """
-        Discard a source column from the heatmap.
-        If you think non of the candidates are correct, you can discard the column.
+        Update mappings for a biomedical attribute based on expert knowledge.
+        """
+        new_candidates = []
+        cached_candidates = self.matching_task.get_cached_candidates()
+        for candidate in cached_candidates:
+            if candidate["sourceColumn"] == source_attribute:
+                continue
+            new_candidates.append(candidate)
+        logger.info(
+            f"[CandidateButler] Updating {len(candidates)} mappings for "
+            f"biomedical attribute: {source_attribute}"
+        )
+        new_candidates.extend(candidates)
+        self.matching_task.set_cached_candidates(new_candidates)
 
+    def append_candidates_from_agent(
+        self, source_attribute: str, candidates: List[Dict[str, Any]]
+    ):
+        """
+        Add domain-knowledge suggested mappings for a biomedical attribute.
+        """
+        self.matching_task.append_candidates_from_agent(source_attribute, candidates)
+
+    def accept_mapping(self, source_attribute: str, target_attribute: str) -> bool:
+        """
+        Accept a biomedical attribute mapping as correct.
+        """
+        try:
+            self.matching_task.accept_cached_candidate({
+                "sourceColumn": source_attribute,
+                "targetColumn": target_attribute
+            })
+            return True
+        except Exception as e:
+            logger.error(f"Failed to accept mapping: {str(e)}")
+            return False
+
+    def reject_mapping(self, source_attribute: str, target_attribute: str) -> bool:
+        """
+        Reject an incorrect biomedical attribute mapping.
+        """
+        try:
+            self.matching_task.reject_cached_candidate({
+                "sourceColumn": source_attribute,
+                "targetColumn": target_attribute
+            })
+            return True
+        except Exception as e:
+            logger.error(f"Failed to reject mapping: {str(e)}")
+            return False
+
+    def search_candidates(
+        self,
+        source_column: Optional[str],
+        target_column: Optional[str],
+        top_k: int = 20,
+    ):
+        """
+        Search for biomedical attribute mappings with optional filtering.
         Args:
-            column_name (str): The name of the column to discard
+            source_column (Optional[str]): Source biomedical attribute.
+            target_column (Optional[str]): Target biomedical attribute.
+            top_k (int): Maximum number of results to return.
+        Returns:
+            List[Dict[str, Any]]: Ranked potential attribute mappings.
         """
-
-        logger.info(f"[Candidate Butler] Discard column {column_name}......")
-        self.matching_task.discard_cached_column(column_name)
-
-        return {"status": "success"}
+        candidates = self.matching_task.get_cached_candidates()
+        if source_column is not None:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if candidate["sourceColumn"] == source_column
+            ]
+        if target_column is not None:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if candidate["targetColumn"] == target_column
+            ]
+        candidates = sorted(candidates, key=lambda x: x["score"], reverse=True)
+        return candidates[:top_k]

@@ -1,11 +1,10 @@
-import json
 import logging
-import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
-from langchain.embeddings import init_embeddings
 from langchain.tools import StructuredTool
+from langchain_core.documents import Document
+from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 from langgraph.store.memory import InMemoryStore
 
@@ -50,7 +49,11 @@ FP_CANDIDATES = [
         "sourceColumn": "Ethnicity",
         "targetColumn": "race",
         "sourceValues": ["Not-Hispanic or Latino", "Hispanic or Latino"],
-        "targetValues": ["native hawaiian or other pacific islander", "white", "asian"],
+        "targetValues": [
+            "native hawaiian or other pacific islander",
+            "white",
+            "asian",
+        ],
     },
     {
         "sourceColumn": "FIGO_stage",
@@ -104,18 +107,9 @@ class MemoryRetriver:
         embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
-        self.store = InMemoryStore(
-            index={
-                "embed": embeddings,
-                "dims": 1536,
-            }
-        )
+        self.store = InMemoryStore()  # Keep for backward compatibility
+        self.vector_store = InMemoryVectorStore(embeddings)
         self.user_id = "bdi_viz_user"
-
-        # for fp in FP_CANDIDATES:
-        #     self.put_mismatch(fp)
-        # for fn in FN_CANDIDATES:
-        #     self.put_match(fn)
 
         self.query_candidates_tool = StructuredTool.from_function(
             func=self.query_candidates,
@@ -132,29 +126,93 @@ class MemoryRetriver:
         """.strip(),
         )
 
+        self.search_ontology_tool = StructuredTool.from_function(
+            func=self.search_target_schema,
+            name="search_ontology",
+            description="""
+            Search the ontology for the most relevant information.
+            Args:
+                query (str): The query to search the ontology.
+                candidate (Dict[str, Any]): The candidate to search the ontology.
+            Returns:
+                AttributeProperties: The ontology for the candidate.
+            """.strip(),
+        )
+
     # [candidates]
     def query_candidates(
         self,
         keywords: List[str],
         source_column: Optional[str] = None,
         target_column: Optional[str] = None,
-        # matcher: Optional[str] = None,
         limit: int = 20,
     ) -> List[Dict[str, Any]]:
-        query = ",".join(keywords)
-        # if matcher is not None:
-        #     query = f"{matcher}::{query}"
+        query = " ".join(keywords)
 
-        if target_column is not None:
-            query = f"{target_column}::{query}"
+        # Build filter function based on source and target columns
+        def filter_func(doc: Document) -> bool:
+            if doc.metadata.get("namespace") != "candidates":
+                return False
 
-        if source_column is not None:
-            query = f"{source_column}::{query}"
+            if source_column and doc.metadata.get("sourceColumn") != source_column:
+                return False
 
-        results = self.search_candidates(query, limit)
-        return results
+            if target_column and doc.metadata.get("targetColumn") != target_column:
+                return False
+
+            return True
+
+        results = self._search_vector_store(query, limit, filter_func)
+        return [doc.metadata for doc in results]
 
     # puts
+    def put_target_schema(self, property: Dict[str, Any]):
+        """
+        property is in the following format:
+        {
+            "column_name": "ajcc_clinical_m",
+            "category": "clinical",
+            "node": "diagnosis",
+            "type": "enum",
+            "description": "Extent of the distant metastasis for the cancer based on evidence obtained from clinical assessment parameters determined prior to treatment.",
+            "enum": [
+                "cM0 (i+)",
+                "M0",
+                "M1",
+                "M1a",
+                "M1b",
+                "M1c",
+                "MX",
+                "Unknown",
+                "Not Reported",
+                "Not Allowed To Collect"
+            ]
+        }
+        """
+        id = f"{property['column_name']}"
+        page_content = f"""
+Column name: {property['column_name']}
+Category: {property['category']}
+Node: {property['node']}
+Type: {property['type']}
+Description: {property['description']}
+        """
+        if "enum" in property and property["enum"] is not None:
+            page_content += f"\nEnum: {property['enum']}"
+        if "maximum" in property and property["maximum"] is not None:
+            page_content += f"\nMaximum: {property['maximum']}"
+        if "minimum" in property and property["minimum"] is not None:
+            page_content += f"\nMinimum: {property['minimum']}"
+
+        metadata = {
+            "column_name": property["column_name"],
+            "category": property["category"],
+            "node": property["node"],
+            "type": property["type"],
+            "namespace": "schema",
+        }
+        self._add_vector_store(id, page_content, metadata)
+
     def put_candidate(self, value: Dict[str, Any]):
         """
         value is in the following format:
@@ -166,15 +224,26 @@ class MemoryRetriver:
         }
         """
         key = f"{value['sourceColumn']}::{value['targetColumn']}"
-        self.put(
-            (self.user_id, "candidates"),
-            key,
-            {
-                "sourceColumn": value["sourceColumn"],
-                "targetColumn": value["targetColumn"],
-                "score": value["score"],
-            },
-        )
+
+        page_content = f"""
+Source Column: {value['sourceColumn']}
+Target Column: {value['targetColumn']}
+Score: {value['score']}
+        """
+
+        metadata = {
+            "sourceColumn": value["sourceColumn"],
+            "targetColumn": value["targetColumn"],
+            "score": value["score"],
+            "namespace": "candidates",
+            "user_id": self.user_id,
+        }
+
+        if "matcher" in value:
+            metadata["matcher"] = value["matcher"]
+            page_content += f"\nMatcher: {value['matcher']}"
+
+        self._add_vector_store(key, page_content, metadata)
 
     def put_match(self, value: Dict[str, Any]):
         """
@@ -182,12 +251,23 @@ class MemoryRetriver:
         {
             'sourceColumn': 'Path_Stage_Primary_Tumor-pT',
             'targetColumn': 'ajcc_pathologic_stage',
-            'sourceValues': ['pT1b (FIGO IB)', 'pT3a (FIGO IIIA)', 'pT1 (FIGO I)'],
-            'targetValues': ['Stage I', 'Stage IB', 'StageIIIA']
         }
         """
         key = f"{value['sourceColumn']}::{value['targetColumn']}"
-        self.put((self.user_id, "matches"), key, value)
+
+        page_content = f"""
+Source Column: {value['sourceColumn']}
+Target Column: {value['targetColumn']}
+        """
+
+        metadata = {
+            "sourceColumn": value["sourceColumn"],
+            "targetColumn": value["targetColumn"],
+            "namespace": "matches",
+            "user_id": self.user_id,
+        }
+
+        self._add_vector_store(key, page_content, metadata)
 
     def put_mismatch(self, value: Dict[str, Any]) -> None:
         """
@@ -196,15 +276,26 @@ class MemoryRetriver:
             {
                 'sourceColumn': 'Path_Stage_Primary_Tumor-pT',
                 'targetColumn': 'ajcc_pathologic_stage',
-                'sourceValues': ['pT1b (FIGO IB)', 'pT3a (FIGO IIIA)', 'pT1 (FIGO I)'],
-                'targetValues': ['Stage I', 'Stage IB', 'StageIIIA']
             }
 
         Returns:
             None
         """
         key = f"{value['sourceColumn']}::{value['targetColumn']}"
-        self.put((self.user_id, "mismatches"), key, value)
+
+        page_content = f"""
+Source Column: {value['sourceColumn']}
+Target Column: {value['targetColumn']}
+        """
+
+        metadata = {
+            "sourceColumn": value["sourceColumn"],
+            "targetColumn": value["targetColumn"],
+            "namespace": "mismatches",
+            "user_id": self.user_id,
+        }
+
+        self._add_vector_store(key, page_content, metadata)
 
     def put_explanation(
         self, explanations: List[Dict[str, Any]], user_operation: Dict[str, Any]
@@ -227,77 +318,113 @@ class MemoryRetriver:
                 };
             }
         """
-
         key = f"{user_operation['operation']}::{user_operation['candidate']['sourceColumn']}::{user_operation['candidate']['targetColumn']}"
 
-        # Only keep at most 5 most recent explanations
-        existing_explanations = self.store.get((self.user_id, "explanations"), key)
-        if existing_explanations is not None:
-            existing_explanations = existing_explanations.value
-            explanations = [
-                {
-                    "type": explanation["type"],
-                    "reason": explanation["reason"],
-                    "reference": explanation["reference"],
-                    "confidence": explanation["confidence"],
-                }
-                for explanation in explanations
+        # Get existing explanations
+        def filter_func(doc: Document) -> bool:
+            return (
+                doc.metadata.get("namespace") == "explanations"
+                and doc.metadata.get("key") == key
+                and doc.metadata.get("user_id") == self.user_id
+            )
+
+        existing_docs = self._search_vector_store("", k=1, filter=filter_func)
+
+        # Format new explanations
+        formatted_explanations = [
+            {
+                "type": explanation["type"],
+                "reason": explanation["reason"],
+                "reference": explanation["reference"],
+                "confidence": explanation["confidence"],
+            }
+            for explanation in explanations
+        ]
+
+        # Combine with existing explanations (keep only 5 most recent)
+        if existing_docs:
+            existing_explanations = existing_docs[0].metadata.get("explanations", [])
+            formatted_explanations = (formatted_explanations + existing_explanations)[
+                :5
             ]
-            explanations = (explanations + existing_explanations)[:5]
-        self.put((self.user_id, "explanations"), key, explanations)
+
+        page_content = f"""
+Operation: {user_operation['operation']}
+Source Column: {user_operation['candidate']['sourceColumn']}
+Target Column: {user_operation['candidate']['targetColumn']}
+Explanations: {formatted_explanations}
+        """
+
+        metadata = {
+            "sourceColumn": user_operation["candidate"]["sourceColumn"],
+            "targetColumn": user_operation["candidate"]["targetColumn"],
+            "namespace": "explanations",
+            "user_id": self.user_id,
+        }
+
+        # Remove existing document if it exists
+        if existing_docs:
+            self.vector_store.delete([existing_docs[0].id])
+
+        self._add_vector_store(key, page_content, metadata)
 
     # Search
-    def search_candidates(self, query: Dict[str, Any], limit: int = 10):
-        return self.search((self.user_id, "candidates"), query, limit)
+    def search_target_schema(self, query: str, limit: int = 10):
+        def filter_func(doc: Document) -> bool:
+            return doc.metadata.get("namespace") == "schema"
 
-    def search_mismatches(self, query: Dict[str, Any], limit: int = 10):
-        return self.search((self.user_id, "mismatches"), query, limit)
+        return self._search_vector_store(query, limit, filter_func)
 
-    def search_matches(self, query: Dict[str, Any], limit: int = 10):
-        return self.search((self.user_id, "matches"), query, limit)
-
-    def search_explanations(self, query: Dict[str, Any], limit: int = 10):
-        return self.search((self.user_id, "explanations"), query, limit)
-
-    # Basic operations
-    def check_value(func):
-        def wrapper(self, namespace: Tuple, key: Optional[str], value: Any):
-            if value is None:
-                raise ValueError("Value cannot be None")
-            if namespace[1] not in self.supported_namespaces:
-                raise ValueError(f"Namespace {namespace[1]} not supported")
-            return func(self, namespace, key, value)
-
-        return wrapper
-
-    @check_value
-    def put(self, namespace: Tuple, key: Optional[str], value: Any):
-        if key is None:
-            key = str(uuid4())
-        if self.store.get(namespace, key) is not None:
-            logger.debug(
-                f"Key {key} already exists in namespace {namespace}, updating value"
+    def search_candidates(self, query: str, limit: int = 10):
+        def filter_func(doc: Document) -> bool:
+            return (
+                doc.metadata.get("namespace") == "candidates"
+                and doc.metadata.get("user_id") == self.user_id
             )
-            self.store.delete(namespace, key)
 
-        self.store.put(namespace, key, value)
+        results = self._search_vector_store(query, limit, filter_func)
+        return [doc.page_content for doc in results]
 
-    async def aput(self, namespace: Tuple, key: Optional[str], value: Any):
-        if key is None:
-            key = str(uuid4())
-
-        if await self.store.aget(namespace, key) is not None:
-            logger.debug(
-                f"Key {key} already exists in namespace {namespace}, updating value"
+    def search_mismatches(self, query: str, limit: int = 10):
+        def filter_func(doc: Document) -> bool:
+            return (
+                doc.metadata.get("namespace") == "mismatches"
+                and doc.metadata.get("user_id") == self.user_id
             )
-            await self.store.adelete(namespace, key)
 
-        await self.store.aput(namespace, key, value)
+        results = self._search_vector_store(query, limit, filter_func)
+        return [doc.page_content for doc in results]
 
-    def search(self, namespace: Tuple, query: Any, limit: int = 10):
-        logger.info(f"namespace: {namespace}, query: {query}, limit: {limit}")
-        items = self.store.search(namespace, query=query, limit=limit)
-        return [item.value for item in items]
+    def search_matches(self, query: str, limit: int = 10):
+        def filter_func(doc: Document) -> bool:
+            return (
+                doc.metadata.get("namespace") == "matches"
+                and doc.metadata.get("user_id") == self.user_id
+            )
 
-    def clear_namespace(self, namespace: Tuple):
-        self.store.delete(namespace)
+        results = self._search_vector_store(query, limit, filter_func)
+        return [doc.page_content for doc in results]
+
+    def search_explanations(self, query: str, limit: int = 10):
+        def filter_func(doc: Document) -> bool:
+            return (
+                doc.metadata.get("namespace") == "explanations"
+                and doc.metadata.get("user_id") == self.user_id
+            )
+
+        results = self._search_vector_store(query, limit, filter_func)
+        return [doc.page_content for doc in results]
+
+    # Vector store operations
+    def _add_vector_store(self, id: str, page_content: str, metadata: Dict[str, Any]):
+        self.vector_store.add_documents(
+            [Document(page_content=page_content, metadata=metadata, id=id)]
+        )
+
+    def _search_vector_store(
+        self,
+        query: str,
+        k: int = 10,
+        filter: Optional[Callable[[Document], bool]] = None,
+    ):
+        return self.vector_store.similarity_search(query, k=k, filter=filter)

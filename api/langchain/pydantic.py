@@ -3,23 +3,6 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 
-class AgentResponse(BaseModel):
-    """Response from the agent."""
-
-    status: str = Field(description="The status of the response: success or failure")
-    response: str = Field(description="The response from the agent")
-    candidates: Optional[List[Dict[str, Any]]] = Field(
-        default=None,
-        description="""The candidates for source column(s), the layered dictionary looks like:
-        [
-            {"sourceColumn": "source_column_1", "targetColumn": "target_column_1", "score": 0.9, "matcher": "magneto_zs_bp"},
-            {"sourceColumn": "source_column_1", "targetColumn": "target_column_15", "score": 0.7, "matcher": "magneto_zs_bp"},
-            ...
-        ]
-        """,
-    )
-
-
 class CandidateObject(BaseModel):
     """Object for single candidate match or mismatch."""
 
@@ -27,15 +10,6 @@ class CandidateObject(BaseModel):
     targetColumn: str = Field(description="The target column name")
     score: float = Field(description="The score of the candidate")
     # matcher: str = Field(description="The matcher used for the candidate")
-
-
-class SearchResponse(BaseModel):
-    """Response from the agent search."""
-
-    status: str = Field(description="The status of the response: success or failure")
-    candidates: Optional[List[CandidateObject]] = Field(
-        description="The searched candidates"
-    )
 
 
 class DiagnoseObject(BaseModel):
@@ -93,6 +67,18 @@ class RelevantKnowledge(BaseModel):
         description="The entry of the relevant knowledge. Example: FIGO, AJCC, UICC"
     )
     description: str = Field(description="The description of the relevant knowledge")
+
+
+class SearchResponse(BaseModel):
+    """Response from the agent search."""
+
+    status: str = Field(description="The status of the response: success or failure")
+    candidates: Optional[List[CandidateObject]] = Field(
+        description="The searched candidates"
+    )
+    terminologies: Optional[List[RelevantKnowledge]] = Field(
+        description="The terminologies related to the candidates and the search query"
+    )
 
 
 class CandidateExplanation(BaseModel):
@@ -205,4 +191,29 @@ class Ontology(BaseModel):
 
     properties: List[AttributeProperties] = Field(
         description="The properties of the ontology, including column name, category, node, type, description, enum, maximum, minimum"
+    )
+
+
+class AgentResponse(BaseModel):
+    """Response from the agent."""
+
+    status: str = Field(description="The status of the response: success or failure")
+    tool_uses: Optional[List[str]] = Field(
+        default=None,
+        description="The tool uses from the agent",
+    )
+    response: str = Field(description="The response from the agent")
+    candidates: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="""The candidates for source column(s), the layered dictionary looks like:
+        [
+            {"sourceColumn": "source_column_1", "targetColumn": "target_column_1", "score": 0.9, "matcher": "agent", "status": "idle"},
+            ...
+        ]
+        If you did not manipulate the candidates list, candidates will be empty.
+        """,
+    )
+    terminologies: Optional[List[RelevantKnowledge]] = Field(
+        default=None,
+        description="The terminologies related to the candidates and the search query, try to find as many as possible.",
     )

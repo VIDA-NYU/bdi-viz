@@ -418,6 +418,29 @@ class MatchingTask:
         """Return the current state of the task for monitoring progress"""
         return self.task_state
 
+    def append_candidates_from_agent(
+        self, source_col: str, candidates: List[Dict[str, Any]]
+    ) -> None:
+        for candidate in candidates:
+            if candidate["sourceColumn"] != source_col:
+                continue
+
+            target_col = candidate["targetColumn"]
+            property_obj = load_property(target_col)
+            if property_obj is None:
+                continue
+
+            new_candidate = {
+                "sourceColumn": source_col,
+                "targetColumn": property_obj["column_name"],
+                "score": candidate["score"],
+                "matcher": "agent",
+                "status": "idle",
+            }
+            self.append_cached_candidate(new_candidate)
+
+            logger.info(f"[MatchingTask] Appended candidate from agent: {target_col}")
+
     def _load_cached_matcher_objs(self, cached_json: Dict[str, Any]) -> None:
         """Load matcher objects from cache"""
         default_matcher_objs = {
@@ -1074,6 +1097,25 @@ class MatchingTask:
             ):
                 candidates[index]["status"] = candidate["status"]
         self.set_cached_candidates(candidates)
+    
+    def append_cached_candidate(self, candidate: Dict[str, Any]) -> None:
+        cached_candidates = self.get_cached_candidates()
+        source_col = candidate["sourceColumn"]
+        target_col = candidate["targetColumn"]
+
+        # Check if candidate already exists
+        for index, c in enumerate(cached_candidates):
+            if c["sourceColumn"] == source_col and c["targetColumn"] == target_col:
+                # Don't replace accepted candidates
+                if c["status"] == "accepted":
+                    return
+                # Remove existing candidate that's not accepted
+                del cached_candidates[index]
+                break
+
+        # Add the new candidate
+        cached_candidates.append(candidate)
+        self.set_cached_candidates(cached_candidates)
 
     def get_cached_source_clusters(self) -> Dict[str, List[str]]:
         return self.cached_candidates["source_clusters"] or {}

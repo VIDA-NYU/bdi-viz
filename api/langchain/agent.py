@@ -29,12 +29,13 @@ from ..utils import load_gdc_property, load_property
 from .memory import MemoryRetriver
 from .pydantic import (
     ActionResponse,
+    AgentResponse,
     AgentSuggestions,
+    AttributeProperties,
     CandidateExplanation,
     Ontology,
     RelatedSources,
     SearchResponse,
-    SuggestedValueMappings,
 )
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -166,32 +167,58 @@ class Agent:
         )
         return response
 
-    def suggest_value_mapping(
-        self, candidate: Dict[str, Any]
-    ) -> SuggestedValueMappings:
-        logger.info(f"[Agent] Suggesting value mapping...")
+    def explore_candidates(
+        self, session: str, candidate: Dict[str, Any], query: str
+    ) -> AgentResponse:
+        source_attribute = candidate["sourceColumn"]
+        logger.info(
+            f"[Agent] Exploring candidates for {source_attribute} with query: {query}"
+        )
+        candidate_butler = CandidateButler(session)
+
+        tools = [
+            # Manipulate the existing candidates
+            candidate_butler.get_attribute_candidates_tool,
+            candidate_butler.update_attribute_mappings_tool,
+            candidate_butler.suggest_new_mappings_tool,
+            # Search within the target ontology
+            self.store.search_ontology_tool,
+        ]
 
         prompt = f"""
-        Analyze the following lists of values and determine the best mapping from each source value to one of the target values.
+        Analyze the user's query and perform the appropriate actions using the available tools.
         
-        Source Column: {candidate["sourceColumn"]}
-        Target Column: {candidate["targetColumn"]}
-        Source Values: {candidate["sourceValues"]}
-        Target Values: {candidate["targetValues"]}
-
+        Source Attribute: {source_attribute}
+        User Query: {query}
+        
         Instructions:
-        1. For every source value, identify the most appropriate corresponding target value.
-        2. If no clear match exists for a source value, return an empty string for that value.
+        1. If the user wants to filter, discard, or remove candidates:
+           - Use get_attribute_candidates to retrieve current candidates
+           - Filter based on user criteria
+           - Pass the filtered list to update_attribute_mappings to save the filtered list
+        
+        2. If the user wants to explore or find new matches:
+           - Use search_ontology to find relevant target attributes
+           - Consider domain-specific terminology (like AJCC, FIGO, etc.)
+           - Pass the candidates list found by search_ontology to append_candidates_from_agent
+        
+        3. If the user wants information about specific terminology:
+           - Use search_ontology to find related attributes and their descriptions
+        
+        Respond under AgentResponse schema:
+        - status: success or failure
+        - tool_uses: the tool(s) used
+        - response: the response to the user's query
+        - candidates: the candidates found, empty if you did not manipulate the candidates list
+        - terminologies: the terminologies found, empty if you did not search the ontology
         """
 
-        logger.info(f"[SUGGEST-VALUE-MAPPING] Prompt: {prompt}")
-
+        logger.info(f"[EXPLORE] Prompt: {prompt}")
         response = self.invoke(
             prompt=prompt,
-            tools=[],
-            output_structure=SuggestedValueMappings,
+            tools=tools,
+            output_structure=AgentResponse,
         )
-
         return response
 
     def make_suggestion(
@@ -287,16 +314,25 @@ Diagnosis:
         pd.reset_option("display.max_columns")
 
         prompt = f"""
-    You are given a pandas DataFrame containing target data.
-    Review the preview below and determine the ontology for each column.
+    Analyze the target DataFrame preview below to create an ontology for each column.
 
     DataFrame Preview:
     {df_preview}
 
-    Instructions:
-    1. For EVERY column, create an AttributeProperties object that describes its ontology FOR EACH OF THEM.
-    2. There should be **no more than 3 categories and 10 nodes**.
-    3. Return your answer strictly as a JSON object following the Ontology schema, with no extra text.
+    Task:
+    Create an AttributeProperties object for EACH column with the following information:
+    - column_name: The exact name of the column
+    - category: Group columns into at most 3 high-level categories (grandparent level)
+    - node: Group columns into at most 10 mid-level nodes (parent level)
+    - type: Classify as "enum" (categorical), "number", "string", "boolean", or "other"
+    - description: A clear description of what the column represents
+    - enum: For categorical columns, list observed and inferred possible values
+    - maximum/minimum: For numerical columns, provide range constraints if applicable
+
+    Important:
+    - Organize columns into NO MORE THAN 3 categories and 10 nodes total
+    - For "enum" types, include all observed values plus likely additional values
+    - Return ONLY a valid JSON object following the Ontology schema with no additional text
     """
 
         logger.info(f"[INFER-ONTOLOGY] Prompt: {prompt}")
@@ -304,6 +340,70 @@ Diagnosis:
             prompt=prompt,
             tools=[],
             output_structure=Ontology,
+        )
+        return response
+
+    def search_ontology(self, query: str, candidate: Dict[str, Any]) -> Ontology:
+        """
+        TBD: understand user's query, and search the ontology for the most relevant information
+        """
+
+        source_col = candidate["sourceColumn"]
+        # target_col = candidate["targetColumn"]
+        source_values = candidate["sourceValues"]
+        # target_values = candidate["targetValues"]
+
+        prompt = f"""
+Find the most relevant target attributes in the ontology for the user's query.
+
+User Query: {query}
+Source Column: {source_col}
+Source Values: {source_values}
+
+**Instructions**:
+1. Understand the user's query.
+2. Use "search_ontology" to find semantically related properties:
+   - Identify synonyms and related concepts.
+   - Use keywords from the query, source column, and values.
+   - Leverage domain-specific terminology.
+3. Rank results by:
+   - Query relevance
+   - Semantic similarity
+   - Data type compatibility
+   - Biomedical domain relevance
+4. Return a SearchResponse with top candidates.
+
+**Example**:
+User Query: What is ajcc?
+Source Column: ajcc_stage_pt
+Source Values: pT1, pT2, pT3
+
+**search_ontology input**:
+- query: AJCC: American Joint Committee on Cancer, ajcc_stage_pt, pT1, pT2, pT3
+- k: 10
+
+**search_ontology output**:
+- status: success
+- candidates: [
+    {{
+        "sourceColumn": "ajcc_stage_pt",
+        "targetColumn": "AJCC_Pathologic_T",
+        "score": 0.9
+    }}, ...
+]
+- terminologies: [
+    {{
+        "entry": "AJCC",
+        "description": "American Joint Committee on Cancer"
+    }}, ...
+]
+        """.strip()
+
+        logger.info(f"[SEARCH-ONTOLOGY] Prompt: {prompt}")
+        response = self.invoke(
+            prompt=prompt,
+            tools=[self.store.search_ontology_tool],
+            output_structure=SearchResponse,
         )
         return response
 
@@ -383,6 +483,12 @@ Candidate: {candidate}
         logger.info(f"[Agent] Remembering the candidates...")
         for candidate in candidates:
             self.store.put_candidate(candidate)
+
+    def remember_ontology(self, ontology: Dict[str, AttributeProperties]) -> None:
+        logger.info(f"[Agent] Remembering the ontology...")
+        for _, property in ontology.items():
+            self.store.put_target_schema(property)
+        logger.info(f"[Agent] Ontology remembered!")
 
     def invoke(
         self, prompt: str, tools: List, output_structure: BaseModel

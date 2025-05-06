@@ -9,6 +9,8 @@ type SettingsGlobalState = {
     setHoverMode: (hoverMode: boolean) => void;
     taskState: TaskState;
     setTaskState: (taskState: TaskState) => void;
+    ontologySearchPopupOpen: boolean;
+    setOntologySearchPopupOpen: (ontologySearchPopupOpen: boolean) => void;
 }
 
 const SettingsGlobalContext = createContext<SettingsGlobalState>({
@@ -27,6 +29,8 @@ const SettingsGlobalContext = createContext<SettingsGlobalState>({
         logs: [],
     },
     setTaskState: () => { },
+    ontologySearchPopupOpen: false,
+    setOntologySearchPopupOpen: () => { },
 });
 
 
