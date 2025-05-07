@@ -79,7 +79,7 @@ class Agent:
             if self._llm_model is not None:
                 self._llm = self._llm_model
             else:
-                self._llm = ChatOpenAI(model="gpt-4o", temperature=0)
+                self._llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
         return self._llm
 
     def search(self, query: str) -> SearchResponse:
@@ -178,9 +178,10 @@ class Agent:
 
         tools = [
             # Manipulate the existing candidates
-            candidate_butler.get_attribute_candidates_tool,
-            candidate_butler.update_attribute_mappings_tool,
-            candidate_butler.suggest_new_mappings_tool,
+            candidate_butler.read_candidates_tool,
+            candidate_butler.update_candidates_tool,
+            candidate_butler.prune_candidates_tool,
+            candidate_butler.append_candidates_tool,
             # Search within the target ontology
             self.store.search_ontology_tool,
         ]
@@ -193,14 +194,14 @@ class Agent:
         
         Instructions:
         1. If the user wants to filter, discard, or remove candidates:
-           - Use get_attribute_candidates to retrieve current candidates
+           - Use read_candidates to retrieve current candidates
            - Filter based on user criteria
-           - Pass the filtered list to update_attribute_mappings to save the filtered list
+           - Pass the filtered list to update_candidates to save the filtered list
         
         2. If the user wants to explore or find new matches:
            - Use search_ontology to find relevant target attributes
            - Consider domain-specific terminology (like AJCC, FIGO, etc.)
-           - Pass the candidates list found by search_ontology to append_candidates_from_agent
+           - Pass the candidates list found by search_ontology to append_candidates
         
         3. If the user wants information about specific terminology:
            - Use search_ontology to find related attributes and their descriptions
