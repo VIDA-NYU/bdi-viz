@@ -251,9 +251,9 @@ export default function Dashboard() {
         updateSearchResults(results);
     }, [updateSearchResults]);
 
-    const handleNewMatchingTask = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => {
-        console.log("New Matching Task: ", newCandidates, newSourceClusters, newMatchers);
-        handleFileUpload(newCandidates, newSourceClusters, newMatchers);
+    const handleNewMatchingTask = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => {
+        console.log("New Matching Task: ", newCandidates, newSourceClusters);
+        handleFileUpload(newCandidates, newSourceClusters);
         setSelectedCandidate(undefined);
         updateSourceColumn("all");
         updateCandidateType("all");

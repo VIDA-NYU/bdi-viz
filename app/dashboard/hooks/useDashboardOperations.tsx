@@ -92,9 +92,6 @@ export const {
                 cachedResultsCallback: (candidates: Candidate[]) => {
                     onCandidateUpdate(candidates);
                 },
-                matchersCallback: (matchers: Matcher[]) => {
-                    onMatchersUpdate(matchers);
-                },
                 userOperationHistoryCallback(userOperations: UserOperation[]) {
                     onUserOperationsUpdate(userOperations);
                 }
@@ -140,9 +137,6 @@ export const {
                 userOperations: [userOperation],
                 cachedResultsCallback: (candidates: Candidate[]) => {
                     onCandidateUpdate(candidates);
-                },
-                matchersCallback: (matchers: Matcher[]) => {
-                    onMatchersUpdate(matchers);
                 },
                 userOperationHistoryCallback(userOperations: UserOperation[]) {
                     onUserOperationsUpdate(userOperations);
@@ -190,9 +184,6 @@ export const {
                 userOperations: [userOperation],
                 cachedResultsCallback: (candidates: Candidate[]) => {
                     onCandidateUpdate(candidates);
-                },
-                matchersCallback: (matchers: Matcher[]) => {
-                    onMatchersUpdate(matchers);
                 },
                 userOperationHistoryCallback(userOperations: UserOperation[]) {
                     onUserOperationsUpdate(userOperations);

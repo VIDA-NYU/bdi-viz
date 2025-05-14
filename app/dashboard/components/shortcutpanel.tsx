@@ -78,7 +78,6 @@ const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
                   <ExportMatchingResultsButton onClick={exportMatchingResults} />
                   <FileUploading
                     callback={handleFileUpload}
-                    matchersCallback={handleMatchers}
                     ontologyCallback={handleTargetOntology}
                     uniqueValuesCallback={handleUniqueValues}
                     valueMatchesCallback={handleValueMatches}

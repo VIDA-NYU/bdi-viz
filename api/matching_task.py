@@ -149,7 +149,7 @@ class MatchingTask:
             # Generate new candidates
             else:
                 self._update_task_state(
-                    progress=50, current_step="Generating candidates", completed_steps=2
+                    progress=40, current_step="Generating candidates", completed_steps=2
                 )
                 candidates = self._generate_candidates(
                     source_hash, target_hash, is_candidates_cached
@@ -224,7 +224,7 @@ class MatchingTask:
         """Load matchers from cache"""
         # First load the default matchers
         default_matchers = {
-            "ct_learning": BDIKitMatcher("ct_learning"),
+            # "ct_learning": BDIKitMatcher("ct_learning"),
             "magneto_ft": BDIKitMatcher("magneto_ft"),
             "magneto_zs": BDIKitMatcher("magneto_zs"),
         }
@@ -339,9 +339,7 @@ class MatchingTask:
         # Step 4: Run matchers
         self._update_task_state(current_step=generation_steps[3])
         total_matchers = len(self.matchers)
-        for i, (matcher_name, matcher_instance) in enumerate(self.matchers.items()):
-            logger.info(f"Running matcher: {matcher_name}")
-            self._update_task_state(current_step=f"Running matcher: {matcher_name}")
+
         # Add candidates from matchers
         for matcher_name, matcher_instance in self.matchers.items():
             matcher_candidates = matcher_instance.top_matches(

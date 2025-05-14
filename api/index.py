@@ -49,8 +49,8 @@ def create_app() -> Flask:
     app = Flask("bdiviz_flask")
     app.config.from_mapping(
         CELERY=dict(
-            broker_url="redis://localhost:6379/0",
-            result_backend="redis://localhost:6379/0",
+            broker_url="redis://localhost:6380/0",
+            result_backend="redis://localhost:6380/0",
             task_ignore_result=False,
             task_track_started=True,
             task_time_limit=300,
