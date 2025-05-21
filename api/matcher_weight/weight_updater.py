@@ -45,13 +45,13 @@ class WeightUpdater:
             for rank, candidate in enumerate(candidates):
                 if candidate[0] == source_column and candidate[1] == target_column:
                     logger.info(
-                        f"[Accept] Updating weight for matcher {matcher} from {self.matchers[matcher].weight}....."
+                        f"[Accept] Updating weight for matcher {matcher} from {self.matchers[matcher]['weight']}....."
                     )
-                    self.matchers[matcher].weight += (
+                    self.matchers[matcher]["weight"] += (
                         self.alpha * candidate[2] / (rank + 1)
                     )
                     logger.info(
-                        f"[Accept] Updated weight for matcher {matcher} to {self.matchers[matcher].weight}"
+                        f"[Accept] Updated weight for matcher {matcher} to {self.matchers[matcher]['weight']}"
                     )
                     break
         self._normalize_weights()
@@ -63,21 +63,21 @@ class WeightUpdater:
             for rank, candidate in enumerate(candidates):
                 if candidate[0] == source_column and candidate[1] == target_column:
                     logger.info(
-                        f"[Reject] Updating weight for matcher {matcher} from {self.matchers[matcher].weight}....."
+                        f"[Reject] Updating weight for matcher {matcher} from {self.matchers[matcher]['weight']}....."
                     )
-                    self.matchers[matcher].weight -= (
+                    self.matchers[matcher]["weight"] -= (
                         self.beta * candidate[2] / (rank + 1)
                     )
                     logger.info(
-                        f"[Reject] Updated weight for matcher {matcher} to {self.matchers[matcher].weight}"
+                        f"[Reject] Updated weight for matcher {matcher} to {self.matchers[matcher]['weight']}"
                     )
                     break
         self._normalize_weights()
 
     def _normalize_weights(self):
-        total_weight = sum([matcher.weight for matcher in self.matchers.values()])
+        total_weight = sum([matcher["weight"] for matcher in self.matchers.values()])
         for matcher in self.matchers.values():
-            matcher.weight /= total_weight
+            matcher["weight"] /= total_weight
 
     def _preprocess_candidates(
         self, candidates: List[Dict[str, Any]]

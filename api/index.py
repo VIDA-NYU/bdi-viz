@@ -351,21 +351,94 @@ def get_matchers():
     return {"message": "success", "matchers": matchers}
 
 
+@celery.task(bind=True)
+def run_new_matcher_task(self, session, name, code, params):
+    try:
+        app.logger.info(f"Running new matcher task for session: {session}")
+        matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+        if matching_task.source_df is None or matching_task.target_df is None:
+            if os.path.exists(".source.csv"):
+                source = pd.read_csv(".source.csv")
+                if os.path.exists(".target.csv"):
+                    target = pd.read_csv(".target.csv")
+                else:
+                    target = pd.read_csv(GDC_DATA_PATH)
+                matching_task.update_dataframe(source_df=source, target_df=target)
+            _ = matching_task.get_candidates()
+        error, matchers = matching_task.new_matcher(name, code, params)
+
+        if error:
+            return {"status": "failed", "error": error, "matchers": None}
+
+        return {"status": "completed", "error": None, "matchers": matchers}
+    except Exception as e:
+        app.logger.error(f"Error in new matcher task: {str(e)}")
+        return {
+            "status": "failed",
+            "error": f"Error processing task: {str(e)}",
+            "matchers": None,
+        }
+
+
 @app.route("/api/matcher/new", methods=["POST"])
 def new_matcher():
     session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     data = request.json
     name = data["name"]
     params = data["params"]
     code = data["code"]
 
-    error, matchers = matching_task.new_matcher(name, code, params)
-    if error:
-        return {"message": "failure", "error": error, "matchers": None}
+    task = run_new_matcher_task.delay(session, name, code, params)
+    return {"task_id": task.id}
 
-    return {"message": "success", "error": error, "matchers": matchers}
+
+@app.route("/api/matcher/status", methods=["POST"])
+def matcher_status():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    data = request.json
+    task_id = data.get("taskId")
+
+    if not task_id:
+        return {"status": "error", "message": "No task_id provided"}, 400
+
+    task = run_new_matcher_task.AsyncResult(task_id)
+
+    app.logger.info(
+        f"Task state: {task.state}, {task.info}, {task.result}, {task.traceback}"
+    )
+
+    if task.state == "PENDING":
+        response = {
+            "status": "pending",
+            "message": "Task is pending",
+            "taskState": None,
+        }
+    elif task.state == "FAILURE":
+        response = {"status": "failed", "message": str(task.info), "taskState": None}
+    elif task.state == "SUCCESS":
+        result = task.result
+        app.logger.info(f"Result: {result}")
+        if result["status"] == "completed":
+            _ = matching_task.get_candidates()
+
+        response = {
+            "status": result["status"],
+            "message": result["error"] if result["status"] == "failed" else "success",
+            "taskState": matching_task._load_task_state(),
+            "matchers": matching_task.get_matchers(),
+        }
+    else:
+        response = {
+            "status": task.state,
+            "message": "Task is in progress",
+            "taskState": matching_task._load_task_state(),
+        }
+
+    return response
 
 
 @app.route("/api/agent", methods=["POST"])
@@ -579,8 +652,11 @@ def user_operation():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     operation_objs = request.json["userOperations"]
-    agent = get_agent()
+    app.logger.info(f"Hahahahahahaah")
 
+    # agent = get_agent()
+
+    app.logger.info(f"User operations: {operation_objs}")
     for operation_obj in operation_objs:
         operation = operation_obj["operation"]
         candidate = operation_obj["candidate"]
@@ -588,10 +664,10 @@ def user_operation():
 
         matching_task.apply_operation(operation, candidate, references)
 
-        if operation == "accept":
-            agent.remember_fn(candidate)
-        elif operation == "reject":
-            agent.remember_fp(candidate)
+        # if operation == "accept":
+        # agent.remember_fn(candidate)
+        # elif operation == "reject":
+        # agent.remember_fp(candidate)
 
     return {"message": "success"}
 

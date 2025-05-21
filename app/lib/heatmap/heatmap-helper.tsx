@@ -484,33 +484,72 @@ interface newMatcherProps {
     name: string;
     code: string;
     params: object;
-    callback: (newMatchers: Matcher[], error: string | null) => void;
+    onResult: (matchers: Matcher[]) => void;
+    onError: (error: string) => void;
+    taskStateCallback: (taskState: TaskState) => void;
     signal?: AbortSignal;
 }
 
-const newMatcher = ({ name, code, params, callback, signal }: newMatcherProps) => {
-    return makeApiRequest<void>(
-        "/api/matcher/new",
-        { name, code, params },
-        signal,
-        (data) => {
-            const error = data?.error;
-            const matchers = data?.matchers;
-            if (error) {
-                console.log("newMatcher finished!");
-                callback([], error);
-                return;
-            } else if (matchers && Array.isArray(matchers)) {
-                const newMatchers = parseArray<Matcher>(matchers, "Matcher");
-                console.log("newMatcher finished!");
-                callback(newMatchers, null);
-                return;
-            } else {
-                throw new Error("Invalid results format");
-            }
-        }
-    );
+const startNewMatcher = async (name: string, code: string, params: object) => {
+    console.log("startNewMatcher", name);
+    const response = await axios.post("/api/matcher/new", { name, code, params });
+    return response.data.task_id;
+};
+
+interface MatcherStatusProps {
+    taskId: string;
+    onResult: (matchers: Matcher[]) => void;
+    onError: (error: string) => void;
+    taskStateCallback: (taskState: TaskState) => void;
+    signal?: AbortSignal;
 }
+
+const pollForMatcherStatus = async ({ 
+    taskId, 
+    onResult, 
+    onError,
+    taskStateCallback,
+    signal
+}: MatcherStatusProps) => {
+    const interval = setInterval(async () => {
+        try {
+            const response = await axios.post("/api/matcher/status", { taskId }, { signal });
+            const status = response.data.status;
+            const taskState = response.data.taskState as TaskState;
+            taskStateCallback(taskState);
+            if (status === "completed") {
+                clearInterval(interval);
+                console.log("Matcher task completed!");
+                if (response.data.matchers && Array.isArray(response.data.matchers)) {
+                    const matchers = parseArray<Matcher>(response.data.matchers, "Matcher");
+                    console.log("matchers", matchers);
+                    onResult(matchers);
+                } else {
+                    onError("Invalid matcher results format");
+                }
+            } else if (status === "failed") {
+                clearInterval(interval);
+                console.log("Matcher task failed!", response.data.error);
+                onError(response.data.error || "Unknown error");
+            }
+        } catch (error) {
+            console.error("Error polling for matcher status:", error);
+            onError("Error polling for matcher status");
+            clearInterval(interval);
+        }
+    }, 1000);
+};
+
+const newMatcher = async ({ name, code, params, onResult, onError, taskStateCallback, signal }: newMatcherProps) => {
+    try {
+        const taskId = await startNewMatcher(name, code, params);
+        console.log("New matcher task started with taskId:", taskId);
+        pollForMatcherStatus({ taskId, onResult, onError, taskStateCallback, signal });
+    } catch (error) {
+        console.error("Error creating new matcher:", error);
+        onError("Error creating new matcher");
+    }
+};
     
 export { 
     runMatchingTask,

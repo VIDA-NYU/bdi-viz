@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, forwardRef } from 'react';
+import { useState, useRef, forwardRef, useContext } from 'react';
+import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import { 
     Dialog,
     DialogTitle,
@@ -22,12 +23,13 @@ import CodeIcon from '@mui/icons-material/Code';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { toastify } from '@/app/lib/toastify/toastify-helper';
-import { newMatcher } from '@/app/lib/heatmap/heatmap-helper';
+import { newMatcher, getMatchers } from '@/app/lib/heatmap/heatmap-helper';
 
 interface NewMatcherDialogProps {
     open: boolean;
     onClose: () => void;
     onSubmit: (matchers: Matcher[]) => void;
+    matchersCallback: (matchers: Matcher[]) => void;
 }
 
 interface ParamItem {
@@ -36,11 +38,11 @@ interface ParamItem {
 }
 
 const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
-    ({ open, onClose, onSubmit }, ref) => {
+    ({ open, onClose, onSubmit, matchersCallback }, ref) => {
+        const { isLoadingGlobal, setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext); 
         const [name, setName] = useState('');
         const [code, setCode] = useState('');
         const [paramItems, setParamItems] = useState<ParamItem[]>([{ name: '', value: '' }]);
-        const [isSubmitting, setIsSubmitting] = useState(false);
         const [errors, setErrors] = useState({
             name: false,
             code: false
@@ -87,25 +89,31 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                 return;
             }
             
-            setIsSubmitting(true);
+            setIsLoadingGlobal(true);
             try {
                 const params = buildParamsObject();
                 await newMatcher({ 
                     name, 
                     code, 
                     params, 
-                    callback: (newMatchers, error) => {
-                        if (error) {
-                            toastify("error", <p>Error creating matcher: {error}</p>);
-                            setErrorMessage(error);
-                            setErrors({
-                                name: false,
-                                code: true,
-                            });
-                            return;
-                        }
+                    onResult: (newMatchers) => {
                         onSubmit(newMatchers);
-                    } 
+                        getMatchers({ callback: matchersCallback });
+                        setIsLoadingGlobal(false);
+                    },
+                    onError: (error) => {
+                        toastify("error", <p>Error creating matcher: {error}</p>);
+                        setErrorMessage(error);
+                        setErrors({
+                            name: false,
+                            code: true,
+                        });
+                        // setIsLoadingGlobal(false);
+                    },
+                    taskStateCallback: (taskState) => {
+                        console.log("Task state:", taskState);
+                        setTaskState(taskState);
+                    }
                 });
                 // Reset form
                 setName('');
@@ -116,8 +124,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
             } catch (error) {
                 console.error("Error creating matcher:", error);
                 toastify("error", <p>Failed to create matcher. Please try again.</p>);
-            } finally {
-                setIsSubmitting(false);
+                setIsLoadingGlobal(false);
             }
         };
 
@@ -296,7 +303,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                     <Button 
                         onClick={onClose} 
                         sx={{ color: 'white' }}
-                        disabled={isSubmitting}
+                        disabled={isLoadingGlobal}
                     >
                         Cancel
                     </Button>
@@ -304,10 +311,10 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                         onClick={handleSubmit} 
                         variant="contained" 
                         color="primary"
-                        disabled={isSubmitting}
-                        startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
+                        disabled={isLoadingGlobal}
+                        startIcon={isLoadingGlobal ? <CircularProgress size={20} /> : null}
                     >
-                        {isSubmitting ? 'Creating...' : 'Create Matcher'}
+                        {isLoadingGlobal ? 'Creating...' : 'Create Matcher'}
                     </Button>
                 </DialogActions>
             </Dialog>

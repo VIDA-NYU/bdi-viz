@@ -422,6 +422,7 @@ export default function Dashboard() {
                 open={openNewMatcherDialog}
                 onClose={() => setOpenNewMatcherDialog(false)}
                 onSubmit={handleNewMatcherSubmit}
+                matchersCallback={handleNewMatcherSubmit}
             />
         </RootContainer>
     );
