@@ -1,6 +1,14 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Candidate } from '../types';
-import { getCachedResults, getMatchers, getValueBins, getValueMatches, getUserOperationHistory, getTargetOntology, getGDCAttribute } from '@/app/lib/heatmap/heatmap-helper';
+import {
+    getCachedResults,
+    getMatchers,
+    getValueBins,
+    getValueMatches,
+    getUserOperationHistory,
+    getTargetOntology,
+    getGDCAttribute
+} from '@/app/lib/heatmap/heatmap-helper';
 import { getMockData } from '../components/utils/mock';
 
 type DashboardCandidateState = {

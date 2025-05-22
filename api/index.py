@@ -239,7 +239,6 @@ def get_unique_values():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
-        _ = matching_task.get_candidates()
     results = matching_task.unique_values_to_frontend_json()
 
     return {"message": "success", "results": results}
@@ -347,6 +346,16 @@ def get_candidates_results():
 def get_matchers():
     session = extract_session_name(request)
     matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    if matching_task.source_df is None or matching_task.target_df is None:
+        if os.path.exists(".source.csv"):
+            source = pd.read_csv(".source.csv")
+            if os.path.exists(".target.csv"):
+                target = pd.read_csv(".target.csv")
+            else:
+                target = pd.read_csv(GDC_DATA_PATH)
+            matching_task.update_dataframe(source_df=source, target_df=target)
+        _ = matching_task.get_candidates()
     matchers = matching_task.get_matchers()
     return {"message": "success", "matchers": matchers}
 
