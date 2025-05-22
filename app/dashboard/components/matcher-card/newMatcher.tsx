@@ -24,6 +24,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { toastify } from '@/app/lib/toastify/toastify-helper';
 import { newMatcher, getMatchers } from '@/app/lib/heatmap/heatmap-helper';
+import Editor from "@monaco-editor/react";
 
 interface NewMatcherDialogProps {
     open: boolean;
@@ -38,14 +39,17 @@ interface ParamItem {
     required?: boolean;
 }
 
-const DEFAULT_MATCHER_CODE = `class MyCustomMatcher():
+const DEFAULT_MATCHER_CODE = `# Add your import lines here
+
+class MyCustomMatcher():
     def __init__(self, name, weight=1, **params):
-        # Do not change!!!
+        # Make sure that the name and weight are presented!
         self.name = name
         self.weight = 1
         # Initialize with params if needed
 
     def top_matches(self, source, target, top_k=20, **kwargs):
+        
         # Implement your matching logic here
         return []
 `;
@@ -121,6 +125,12 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                 if (match && match[1]) {
                     setName(match[1]);
                 }
+            }
+        };
+
+        const handleEditorChange = (value: string | undefined) => {
+            if (value !== undefined) {
+                handleCodeChange(value);
             }
         };
 
@@ -325,31 +335,33 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                             </Alert>
                         )}
                         
-                        <TextField
-                            required
-                            fullWidth
-                            id="matcher-code"
-                            name="code"
-                            multiline
-                            rows={12}
-                            placeholder="Paste your matcher code here..."
-                            value={code}
-                            onChange={(e) => handleCodeChange(e.target.value)}
-                            error={errors.code}
-                            helperText={errors.code ? "Code is required" : ""}
-                            sx={{
-                                fontFamily: 'monospace',
-                                '& .MuiOutlinedInput-root': {
-                                    fontFamily: 'monospace',
-                                    '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
-                                    '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.5)' },
-                                },
-                                '& .MuiInputBase-input': { 
-                                    color: 'white',
-                                    fontFamily: 'monospace'
-                                }
-                            }}
-                        />
+                        <Box sx={{ 
+                            height: '400px', 
+                            border: errors.code ? '1px solid #f44336' : '1px solid rgba(255, 255, 255, 0.23)',
+                            borderRadius: '4px',
+                            overflow: 'hidden'
+                        }}>
+                            <Editor
+                                height="100%"
+                                defaultLanguage="python"
+                                value={code}
+                                onChange={handleEditorChange}
+                                theme="vs-dark"
+                                options={{
+                                    minimap: { enabled: false },
+                                    fontSize: 14,
+                                    lineNumbers: 'on',
+                                    scrollBeyondLastLine: false,
+                                    automaticLayout: true,
+                                    wordWrap: 'on'
+                                }}
+                            />
+                        </Box>
+                        {errors.code && (
+                            <Typography color="error" variant="caption" sx={{ mt: 0.5, display: 'block' }}>
+                                Code is required
+                            </Typography>
+                        )}
                     </Box>
                 </DialogContent>
                 
