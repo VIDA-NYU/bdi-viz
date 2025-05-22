@@ -1,0 +1,215 @@
+
+import { useState, useEffect } from 'react';
+import { 
+    ListItem,
+    ListItemText,
+    Box,
+    Stack,
+    Typography,
+    Chip,
+    Tooltip,
+    IconButton,
+    Collapse
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+
+interface MatcherCardProps {
+    matcher: MatcherAnalysis;
+}
+
+function MatcherCard({ matcher }: MatcherCardProps) {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <ListItem
+            disablePadding
+            sx={{
+                mb: 0.5,
+                borderRadius: 1,
+                border: 1,
+                borderColor: 'divider',
+                borderLeft: `4px solid #4dabf5`,
+                position: 'relative',
+                overflow: 'hidden',
+                px: 0.5,
+                paddingBottom: 0.3,
+                backgroundColor: '#2a3441',
+                color: '#e0e0e0',
+                transition: 'all 0.2s',
+                '&:hover': {
+                    backgroundColor: '#354150',
+                    boxShadow: '0 0 10px rgba(77, 171, 245, 0.5)',
+                },
+                boxShadow: expanded ? '0 0 15px rgba(77, 171, 245, 0.6)' : '0 0 5px rgba(77, 171, 245, 0.3)',
+                cursor: 'pointer',
+                '& .MuiTypography-root': {
+                    color: '#e0e0e0',
+                },
+                '& .MuiChip-root': {
+                }
+            }}
+        >
+            <ListItemText
+                primary={
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Stack spacing={0.5} sx={{ width: '80%' }}>
+                            <Typography sx={{ 
+                                fontWeight: 800,
+                                fontSize: '0.9rem',
+                                color: 'text.primary'
+                            }}>
+                                {matcher.name}
+                            </Typography>
+                            <Box sx={{ 
+                                display: 'flex', 
+                                alignItems: 'center',
+                                height: '30px',
+                                width: '100%',
+                                position: 'relative',
+                                borderRadius: '4px',
+                                overflow: 'hidden',
+                            }}>
+                                <Box sx={{ 
+                                    display: 'flex',
+                                    width: '100%',
+                                    height: '100%'
+                                }}>
+                                    <Tooltip title={`MRR: ${matcher.mrr.toFixed(2)}`}>
+                                        <Box sx={{ 
+                                            height: '100%', 
+                                            width: `${matcher.mrr * 33}%`,
+                                            backgroundColor: 'rgba(77, 171, 245, 0.8)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: 'white',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 'bold'
+                                        }}>
+                                            MRR
+                                        </Box>
+                                    </Tooltip>
+                                    <Tooltip title={`F1: ${matcher.f1Score.toFixed(2)}`}>
+                                        <Box sx={{ 
+                                            height: '100%', 
+                                            width: `${matcher.f1Score * 33}%`,
+                                            backgroundColor: 'rgba(102, 187, 106, 0.8)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: 'white',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 'bold'
+                                        }}>
+                                            F1
+                                        </Box>
+                                    </Tooltip>
+                                    <Tooltip title={`Recall: ${matcher.recallGt.toFixed(2)}`}>
+                                        <Box sx={{ 
+                                            height: '100%', 
+                                            width: `${matcher.recallGt * 33}%`,
+                                            backgroundColor: 'rgba(255, 152, 0, 0.8)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: 'white',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 'bold'
+                                        }}>
+                                            RCL
+                                        </Box>
+                                    </Tooltip>
+                                </Box>
+                            </Box>
+                        </Stack>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Tooltip title={expanded ? "Collapse" : "Expand"}>
+                                <IconButton 
+                                    size="small" 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpanded(!expanded);
+                                    }}
+                                    sx={{ 
+                                        backgroundColor: '#2a3441',
+                                        color: 'white',
+                                        '&:hover': {
+                                            backgroundColor: '#3a4a5c'
+                                        }
+                                    }}
+                                >
+                                    {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
+                    </Box>
+                }
+
+                secondary={
+                    <Collapse in={expanded} timeout="auto" unmountOnExit>
+                        <Box sx={{ mt: 1 }}>
+                            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: 'text.primary' }}>
+                                {matcher.description}
+                            </Typography>
+                            <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                                <Chip 
+                                    label={`MRR: ${matcher.mrr.toFixed(2)}`} 
+                                    size="small" 
+                                    sx={{ color: 'white', backgroundColor: 'rgba(77, 171, 245, 0.5)' }}
+                                />
+                                <Chip 
+                                    label={`F1: ${matcher.f1Score.toFixed(2)}`} 
+                                    size="small" 
+                                    sx={{ color: 'white', backgroundColor: 'rgba(102, 187, 106, 0.5)' }}
+                                />
+                                <Chip 
+                                    label={`Recall: ${matcher.recallGt.toFixed(2)}`} 
+                                    size="small" 
+                                    sx={{ color: 'white', backgroundColor: 'rgba(255, 152, 0, 0.5)' }}
+                                />
+                            </Box>
+                            {matcher.code && matcher.params && (
+                                <Box sx={{ mt: 2 }}>
+                                    <Typography variant="subtitle2" sx={{ fontSize: '0.85rem', fontWeight: 'bold', mb: 1 }}>
+                                        Matcher Configuration
+                                    </Typography>
+                                    <Box 
+                                        sx={{ 
+                                            backgroundColor: 'rgba(0, 0, 0, 0.05)', 
+                                            p: 1.5, 
+                                            borderRadius: 1,
+                                            maxHeight: '200px',
+                                            overflow: 'auto'
+                                        }}
+                                    >
+                                        <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 'medium' }}>
+                                            Parameters:
+                                        </Typography>
+                                        <pre style={{ margin: 0, fontSize: '0.75rem', overflow: 'auto' }}>
+                                            {JSON.stringify(matcher.params, null, 2)}
+                                        </pre>
+                                        
+                                        <Typography variant="caption" sx={{ display: 'block', mt: 2, mb: 1, fontWeight: 'medium' }}>
+                                            Code:
+                                        </Typography>
+                                        <pre style={{ margin: 0, fontSize: '0.75rem', overflow: 'auto' }}>
+                                            {matcher.code}
+                                        </pre>
+                                    </Box>
+                                </Box>
+                            )}
+                        </Box>
+                    </Collapse>
+                }
+                sx={{
+                    margin: 0,
+                    padding: 0,
+                }}
+            />
+        </ListItem>
+    )
+}
+
+export default MatcherCard;

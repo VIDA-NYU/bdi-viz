@@ -124,6 +124,8 @@ declare interface ActionResponse {
 declare interface Matcher {
     name: string;
     weight: number;
+    params?: object;
+    code?: string;
 }
 
 declare interface GDCAttribute {
@@ -162,4 +164,16 @@ declare interface TaskLog {
     timestamp: string;
     step: string;
     progress: number;
+}
+
+declare interface MatcherAnalysis {
+    name: string;
+    description: string;
+    mrr: number;
+    recallGt: number;
+    f1Score: number;
+    falsePositives: Candidate[];
+    falseNegatives: Candidate[];
+    params?: object;
+    code?: string;
 }

@@ -13,6 +13,7 @@ import AgentSuggestionsPopup from "./components/langchain/suggestion";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
+import NewMatcherDialog from "./components/matcher-card/newMatcher";
 import { getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
@@ -28,9 +29,11 @@ import {
     MainColumn,
 } from "./layout/components";
 import { useDashboardHighlight } from "./hooks/useDashboardHighlight";
+import { useMatcherAnalysis } from "./hooks/useMatcherAnalysis";
 
 export default function Dashboard() {
     const [openSuggestionsPopup, setOpenSuggestionsPopup] = useState(false);
+    const [openNewMatcherDialog, setOpenNewMatcherDialog] = useState(false);
     const [suggestions, setSuggestions] = useState<AgentSuggestions>();
     const {
         isLoadingGlobal,
@@ -61,8 +64,8 @@ export default function Dashboard() {
         targetOntologies,
         gdcAttribute,
         handleFileUpload,
+        handleMatchers,
         setSelectedCandidate,
-        setMatchers,
         handleUserOperationsUpdate: setUserOperations,
         handleUniqueValues,
         handleValueMatches,
@@ -116,6 +119,7 @@ export default function Dashboard() {
         selectedCandidate,
         selectedExplanations,
         onCandidateUpdate: handleFileUpload,
+        onMatchersUpdate: handleMatchers,
         onCandidateSelect: setSelectedCandidate,
         onExplanation: generateExplanations,
         onSuggestions: handleSuggestions,
@@ -123,6 +127,9 @@ export default function Dashboard() {
         onUserOperationsUpdate: handleUserOperationsUpdate,
         onRelatedOuterSources: setRelatedOuterSources,
     });
+
+
+    const { matcherMetrics } = useMatcherAnalysis({ candidates, matchers, enabled: developerMode });
 
     const {
         filteredSourceCluster,
@@ -244,19 +251,26 @@ export default function Dashboard() {
         updateSearchResults(results);
     }, [updateSearchResults]);
 
-    const handleNewMatchingTask = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => {
-        console.log("New Matching Task: ", newCandidates, newSourceClusters, newMatchers);
-        handleFileUpload(newCandidates, newSourceClusters, newMatchers);
+    const handleNewMatchingTask = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => {
+        console.log("New Matching Task: ", newCandidates, newSourceClusters);
+        handleFileUpload(newCandidates, newSourceClusters);
         setSelectedCandidate(undefined);
         updateSourceColumn("all");
         updateCandidateType("all");
         updateSimilarSources(1);
         updateCandidateThreshold(0.5);
     }, [handleFileUpload, setSelectedCandidate, updateSourceColumn, updateCandidateType, updateSimilarSources, updateCandidateThreshold]);
+    
+    const handleNewMatcherSubmit = useCallback((matchers: Matcher[]) => {
+        console.log("New Matchers: ", matchers);
+        handleMatchers(matchers);
+        toastify("success", <p>New matchers created successfully!</p>);
+        getCachedResults({ callback: handleFileUpload });
+    }, [handleMatchers, handleFileUpload]);
 
     const matchersSelectHandler = useCallback((matchers: Matcher[]) => {
-        setMatchers(matchers);
-    }, [setMatchers]);
+        handleMatchers(matchers);
+    }, [handleMatchers]);
 
     const headerContent = useMemo(() => (
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
@@ -323,9 +337,11 @@ export default function Dashboard() {
                     state={{ sourceColumn, candidateType, similarSources, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleNewMatchingTask}
+                    handleMatchers={handleMatchers}
                     handleTargetOntology={handleTargetOntology}
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}
+                    setOpenNewMatcherDialog={setOpenNewMatcherDialog}
                 />
 
                 {/* Middle Column - Main Visualizations */}
@@ -387,6 +403,7 @@ export default function Dashboard() {
                     onGenerateExplanation={onGenerateExplanation}
                     gdcAttribute={gdcAttribute}
                     relatedOuterSources={relatedOuterSources}
+                    matcherAnalysis={matcherMetrics}
                 />
             </MainContent>
 
@@ -399,6 +416,13 @@ export default function Dashboard() {
                 setOpen={setOpenSuggestionsPopup}
                 data={suggestions}
                 onSelectedActions={onSelectedActions}
+            />
+
+            <NewMatcherDialog
+                open={openNewMatcherDialog}
+                onClose={() => setOpenNewMatcherDialog(false)}
+                onSubmit={handleNewMatcherSubmit}
+                matchersCallback={handleNewMatcherSubmit}
             />
         </RootContainer>
     );

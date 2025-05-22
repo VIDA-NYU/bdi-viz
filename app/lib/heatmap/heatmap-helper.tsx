@@ -84,12 +84,7 @@ const makeApiRequest = async <T,>(
     processResponse?: (response: any) => T
 ): Promise<T> => {
     return new Promise<T>((resolve, reject) => {
-        const config = {
-            ...getHttpAgents(),
-            ...data
-        };
-
-        axios.post(endpoint, config, { signal })
+        axios.post(endpoint, data, { ...getHttpAgents(), signal })
             .then((response) => {
                 if (processResponse) {
                     try {
@@ -127,7 +122,7 @@ const parseArray = <T,>(data: any[], typeName: string): T[] => {
 };
 
 interface getCachedResultsProps {
-    callback: (newCandidates: Candidate[], newSourceCluster: SourceCluster[], newMatchers: Matcher[]) => void;
+    callback: (newCandidates: Candidate[], newSourceCluster: SourceCluster[]) => void;
     signal?: AbortSignal;
 }
 
@@ -143,14 +138,32 @@ const getCachedResults = (prop: getCachedResultsProps) => {
                 
                 const candidates = parseArray<Candidate>(results.candidates, "Candidate");
                 const sourceClusters = parseArray<SourceCluster>(results.sourceClusters, "SourceCluster");
-                const matchers = parseArray<Matcher>(results.matchers, "Matcher");
 
                 console.log("getCachedResults finished!");
-                prop.callback(candidates, sourceClusters, matchers);
+                prop.callback(candidates, sourceClusters);
                 return;
             } else {
                 throw new Error("Invalid results format");
             }
+        }
+    );
+};
+
+interface getMatchersProps {
+    callback: (matchers: Matcher[]) => void;
+    signal?: AbortSignal;
+}
+
+const getMatchers = (prop: getMatchersProps) => {
+    return makeApiRequest<void>(
+        "/api/matchers",
+        {},
+        prop.signal,
+        (data) => {
+            const matchers = parseArray<Matcher>(data?.matchers, "Matcher");
+            console.log("getMatchers finished!", matchers);
+            prop.callback(matchers);
+            return;
         }
     );
 };
@@ -467,9 +480,81 @@ const updateSourceValue = ({ column, value, newValue, valueMatchesCallback, sign
     );
 };
 
+interface newMatcherProps {
+    name: string;
+    code: string;
+    params: object;
+    onResult: (matchers: Matcher[]) => void;
+    onError: (error: string) => void;
+    taskStateCallback: (taskState: TaskState) => void;
+    signal?: AbortSignal;
+}
+
+const startNewMatcher = async (name: string, code: string, params: object) => {
+    console.log("startNewMatcher", name);
+    const response = await axios.post("/api/matcher/new", { name, code, params });
+    return response.data.task_id;
+};
+
+interface MatcherStatusProps {
+    taskId: string;
+    onResult: (matchers: Matcher[]) => void;
+    onError: (error: string) => void;
+    taskStateCallback: (taskState: TaskState) => void;
+    signal?: AbortSignal;
+}
+
+const pollForMatcherStatus = async ({ 
+    taskId, 
+    onResult, 
+    onError,
+    taskStateCallback,
+    signal
+}: MatcherStatusProps) => {
+    const interval = setInterval(async () => {
+        try {
+            const response = await axios.post("/api/matcher/status", { taskId }, { signal });
+            const status = response.data.status;
+            const taskState = response.data.taskState as TaskState;
+            taskStateCallback(taskState);
+            if (status === "completed") {
+                clearInterval(interval);
+                console.log("Matcher task completed!");
+                if (response.data.matchers && Array.isArray(response.data.matchers)) {
+                    const matchers = parseArray<Matcher>(response.data.matchers, "Matcher");
+                    console.log("matchers", matchers);
+                    onResult(matchers);
+                } else {
+                    onError("Invalid matcher results format");
+                }
+            } else if (status === "failed") {
+                clearInterval(interval);
+                console.log("Matcher task failed!", response.data.error);
+                onError(response.data.error || "Unknown error");
+            }
+        } catch (error) {
+            console.error("Error polling for matcher status:", error);
+            onError("Error polling for matcher status");
+            clearInterval(interval);
+        }
+    }, 1000);
+};
+
+const newMatcher = async ({ name, code, params, onResult, onError, taskStateCallback, signal }: newMatcherProps) => {
+    try {
+        const taskId = await startNewMatcher(name, code, params);
+        console.log("New matcher task started with taskId:", taskId);
+        pollForMatcherStatus({ taskId, onResult, onError, taskStateCallback, signal });
+    } catch (error) {
+        console.error("Error creating new matcher:", error);
+        onError("Error creating new matcher");
+    }
+};
+    
 export { 
     runMatchingTask,
     getCachedResults, 
+    getMatchers,
     getValueBins, 
     getValueMatches, 
     getUserOperationHistory, 
@@ -480,5 +565,6 @@ export {
     getExactMatches, 
     getGDCAttribute, 
     getCandidatesResult, 
-    updateSourceValue 
+    updateSourceValue,
+    newMatcher,
 };

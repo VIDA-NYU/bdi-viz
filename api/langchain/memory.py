@@ -295,7 +295,7 @@ class MemoryRetriver:
         await self.store.aput(namespace, key, value)
 
     def search(self, namespace: Tuple, query: Any, limit: int = 10):
-        logger.critical(f"namespace: {namespace}, query: {query}, limit: {limit}")
+        logger.info(f"namespace: {namespace}, query: {query}, limit: {limit}")
         items = self.store.search(namespace, query=query, limit=limit)
         return [item.value for item in items]
 

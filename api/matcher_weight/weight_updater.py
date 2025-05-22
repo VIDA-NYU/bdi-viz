@@ -14,90 +14,78 @@ class WeightUpdater:
     ):
         """
         Args:
-            matchers (Dict[str, Any]): A dictionary where the key is the matcher name and the value is the matcher object.
-            alpha (float): Learning rate when a user accepts a candidate.
-            beta (float): Learning rate when a user rejects a candidate.
+            matchers: Dict[str, Any]
+                Dictionary where the key is the matcher name and the value is the matcher object.
+            alpha: float
+                Learning rate when a user accepts a candidate.
+            beta: float
+                Learning rate when a user rejects a candidate.
         """
         self.matchers = matchers
         self.alpha = alpha
         self.beta = beta
-
         self.candidates = self._preprocess_candidates(candidates)
         self._normalize_weights()
 
     def update_weights(self, operation: str, source_column: str, target_column: str):
         """
+        Update matcher weights based on user operation.
         Args:
-            operation (str): The operation to perform, either "accept" or "reject".
-            source_column (str): The source column name.
-            target_column (str): The target column name.
+            operation: "accept" or "reject"
+            source_column: Source column name
+            target_column: Target column name
         """
+        if operation not in {"accept", "reject"}:
+            logger.warning(f"Unknown operation '{operation}' for weight update.")
+            return
+        self._handle_update(operation, source_column, target_column)
+        self._normalize_weights()
 
-        if operation == "accept":
-            self._handle_accept(source_column, target_column)
-        elif operation == "reject":
-            self._handle_reject(source_column, target_column)
-
-    def _handle_accept(self, source_column: str, target_column: str):
+    def _handle_update(self, operation: str, source_column: str, target_column: str):
+        """Handle accept/reject update in a unified way."""
+        factor = self.alpha if operation == "accept" else -self.beta
         for matcher, candidates in self.candidates.items():
             if matcher not in self.matchers:
                 continue
-            for rank, candidate in enumerate(candidates):
-                if candidate[0] == source_column and candidate[1] == target_column:
+            for rank, (src, tgt, score) in enumerate(candidates):
+                if src == source_column and tgt == target_column:
+                    old_weight = self.matchers[matcher]["weight"]
+                    delta = factor * score / (rank + 1)
+                    self.matchers[matcher]["weight"] += delta
                     logger.info(
-                        f"[Accept] Updating weight for matcher {matcher} from {self.matchers[matcher].weight}....."
-                    )
-                    self.matchers[matcher].weight += (
-                        self.alpha * candidate[2] / (rank + 1)
-                    )
-                    logger.info(
-                        f"[Accept] Updated weight for matcher {matcher} to {self.matchers[matcher].weight}"
+                        f"[{operation.capitalize()}] Matcher '{matcher}': "
+                        f"weight {old_weight:.4f} -> {self.matchers[matcher]['weight']:.4f} "
+                        f"(delta {delta:+.4f}, rank {rank}, score {score:.4f})"
                     )
                     break
-        self._normalize_weights()
-
-    def _handle_reject(self, source_column: str, target_column: str):
-        for matcher, candidates in self.candidates.items():
-            if matcher not in self.matchers:
-                continue
-            for rank, candidate in enumerate(candidates):
-                if candidate[0] == source_column and candidate[1] == target_column:
-                    logger.info(
-                        f"[Reject] Updating weight for matcher {matcher} from {self.matchers[matcher].weight}....."
-                    )
-                    self.matchers[matcher].weight -= (
-                        self.beta * candidate[2] / (rank + 1)
-                    )
-                    logger.info(
-                        f"[Reject] Updated weight for matcher {matcher} to {self.matchers[matcher].weight}"
-                    )
-                    break
-        self._normalize_weights()
 
     def _normalize_weights(self):
-        total_weight = sum([matcher.weight for matcher in self.matchers.values()])
-        for matcher in self.matchers.values():
-            matcher.weight /= total_weight
+        total_weight = sum(matcher["weight"] for matcher in self.matchers.values())
+        if total_weight == 0:
+            logger.warning(
+                "Total matcher weight is zero. Resetting to uniform weights."
+            )
+            n = len(self.matchers)
+            for matcher in self.matchers.values():
+                matcher["weight"] = 1.0 / n if n else 1.0
+        else:
+            for matcher in self.matchers.values():
+                matcher["weight"] /= total_weight
 
     def _preprocess_candidates(
         self, candidates: List[Dict[str, Any]]
     ) -> Dict[str, List[Tuple[str, str, float]]]:
-        processed_candidates = {}
+        """Group and sort candidates by matcher and score."""
+        processed = {}
         for candidate in candidates:
             matcher = candidate["matcher"]
-            if matcher not in processed_candidates:
-                processed_candidates[matcher] = []
-            processed_candidates[matcher].append(
-                [
+            processed.setdefault(matcher, []).append(
+                (
                     candidate["sourceColumn"],
                     candidate["targetColumn"],
                     candidate["score"],
-                ]
+                )
             )
-
-        for matcher, candidates in processed_candidates.items():
-            processed_candidates[matcher] = sorted(
-                candidates, key=lambda x: x[2], reverse=True
-            )
-
-        return processed_candidates
+        for matcher, cand_list in processed.items():
+            processed[matcher] = sorted(cand_list, key=lambda x: x[2], reverse=True)
+        return processed

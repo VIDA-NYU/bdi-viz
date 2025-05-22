@@ -19,7 +19,6 @@ interface LeftPanelProps {
     onSimilarSourcesSelect: (num: number) => void;
     onCandidateThresholdSelect: (num: number) => void;
     onMatchersSelect: (matchers: Matcher[]) => void;
-
     state: {
         sourceColumn: string;
         candidateType: string;
@@ -41,9 +40,11 @@ interface LeftPanelProps {
 
     // File Uploading Props
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
+    handleMatchers: (matchers: Matcher[]) => void;
     handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
+    setOpenNewMatcherDialog: (open: boolean) => void;
 }
 
 const ShortcutPanelMemo = memo(ShortcutPanel);
@@ -74,15 +75,19 @@ const LeftPanel = ({
     userOperations,
     // File Uploading Props
     handleFileUpload,
+    handleMatchers,
     handleTargetOntology,
     handleUniqueValues,
     handleValueMatches,
+    // New Matcher Props
+    setOpenNewMatcherDialog,
 }: LeftPanelProps) => {
 
     return (
         <LeftColumn>
             <ShortcutPanelMemo
                 handleFileUpload={handleFileUpload}
+                handleMatchers={handleMatchers}
                 handleTargetOntology={handleTargetOntology}
                 handleUniqueValues={handleUniqueValues}
                 handleValueMatches={handleValueMatches}
@@ -92,6 +97,7 @@ const LeftPanel = ({
                 undo={undo}
                 redo={redo}
                 exportMatchingResults={exportMatchingResults}
+                setOpenNewMatcherDialog={setOpenNewMatcherDialog}
             />
             <ControlPanelMemo
                 sourceColumns={sourceColumns}

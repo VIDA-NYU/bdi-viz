@@ -11,6 +11,7 @@ type DashboardOperationProps = {
     selectedCandidate: Candidate | undefined;
     selectedExplanations?: Explanation[];
     onCandidateUpdate: (candidates: Candidate[], sourceCluster?: SourceCluster[]) => void;
+    onMatchersUpdate: (matchers: Matcher[]) => void;
     onCandidateSelect: (candidate: Candidate | undefined) => void;
     onExplanation?: (candidate: Candidate, explanation: CandidateExplanation | undefined) => void;
     onSuggestions?: (suggestions: AgentSuggestions | undefined) => void;
@@ -42,6 +43,7 @@ export const {
         selectedCandidate,
         selectedExplanations,
         onCandidateUpdate,
+        onMatchersUpdate,
         onCandidateSelect,
         onExplanation,
         onSuggestions,

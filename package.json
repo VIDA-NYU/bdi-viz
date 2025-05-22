@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "redis-server": "redis-server",
+    "redis-server": "redis-server --port 6380",
     "celery-dev": "celery -A api.index.celery worker --pool threads --loglevel=debug",
     "flask-dev": "FLASK_DEBUG=1 python3 -m flask --app api/index run -p 5328 --debug",
     "next-dev": "next dev",
