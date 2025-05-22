@@ -236,14 +236,13 @@ class MatchingTask:
                 )
                 # Load cached matchers if they exist
                 if "matchers" in cached_json and cached_json["matchers"]:
-                    logger.critical(f"cached_json 1111: {cached_json['matchers']}")
                     self._load_cached_matchers(
                         copy.deepcopy(cached_json["matchers"]),
                         copy.deepcopy(cached_json["matcher_code"])
                         if "matcher_code" in cached_json
                         else {},
                     )
-                    logger.critical(
+                    logger.info(
                         f"cached_matchers: {self.cached_candidates['matchers']}"
                     )
             # Check if we can use the in-memory cache
@@ -388,10 +387,8 @@ class MatchingTask:
         }
         # Initialize matchers dictionaries with defaults
         matchers = default_matchers.copy()
-        logger.critical(f"cached_matchers 2222: {cached_matchers}")
         # Load custom matchers from cache
         for matcher_name, matcher_info in cached_matchers.items():
-            logger.critical(f"matcher_name: {matcher_name}.....")
             # Skip default matchers as they're already loaded
             if matcher_name in default_matchers:
                 continue
@@ -1029,7 +1026,7 @@ class MatchingTask:
                 self._update_task_state(
                     status="running",
                     progress=0,
-                    current_step=f"Running new matcher: {name}",
+                    current_step=f"Task start",
                     log_message=f"Starting new matcher task '{name}'. Logs cleared.",
                 )
 

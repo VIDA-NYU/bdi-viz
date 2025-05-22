@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, forwardRef, useContext } from 'react';
+import { useState, useRef, forwardRef, useContext, useEffect } from 'react';
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import { 
     Dialog,
@@ -35,12 +35,25 @@ interface NewMatcherDialogProps {
 interface ParamItem {
     name: string;
     value: string;
+    required?: boolean;
 }
+
+const DEFAULT_MATCHER_CODE = `class MyCustomMatcher():
+    def __init__(self, name, weight=1, **params):
+        # Do not change!!!
+        self.name = name
+        self.weight = 1
+        # Initialize with params if needed
+
+    def top_matches(self, source, target, top_k=20, **kwargs):
+        # Implement your matching logic here
+        return []
+`;
 
 const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
     ({ open, onClose, onSubmit, matchersCallback }, ref) => {
         const { isLoadingGlobal, setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext); 
-        const [name, setName] = useState('');
+        const [name, setName] = useState('MyCustomMatcher');
         const [code, setCode] = useState('');
         const [paramItems, setParamItems] = useState<ParamItem[]>([{ name: '', value: '' }]);
         const [errors, setErrors] = useState({
@@ -48,18 +61,38 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
             code: false
         });
         const [errorMessage, setErrorMessage] = useState('');
+        const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
+
+        useEffect(() => {
+            if (open) {
+                // Set default code if empty
+                setCode((prev) => prev || DEFAULT_MATCHER_CODE);
+                // Ensure 'name' param is present and required as the first param
+                setParamItems((prev) => {
+                    if (!prev.length || prev[0].name !== 'name') {
+                        return [{ name: 'name', value: '', required: true }, ...prev.filter(p => p.name !== 'name')];
+                    }
+                    return prev;
+                });
+                setNameManuallyEdited(false); // Reset manual edit tracking on open
+            }
+        }, [open]);
 
         const handleAddParam = () => {
             setParamItems([...paramItems, { name: '', value: '' }]);
         };
 
         const handleRemoveParam = (index: number) => {
+            // Prevent removing the 'name' parameter
+            if (paramItems[index].name === 'name') return;
             const newParams = [...paramItems];
             newParams.splice(index, 1);
-            setParamItems(newParams.length ? newParams : [{ name: '', value: '' }]);
+            setParamItems(newParams.length ? newParams : [{ name: 'name', value: '', required: true }]);
         };
 
         const handleParamChange = (index: number, field: 'name' | 'value', value: string) => {
+            // Prevent changing the name of the required 'name' parameter
+            if (index === 0 && field === 'name') return;
             const newParams = [...paramItems];
             newParams[index][field] = value;
             setParamItems(newParams);
@@ -73,6 +106,22 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                 }
             });
             return params;
+        };
+
+        const handleNameChange = (value: string) => {
+            setName(value);
+            setNameManuallyEdited(true);
+        };
+
+        const handleCodeChange = (value: string) => {
+            setCode(value);
+            // Only auto-update name if user hasn't manually edited it
+            if (!nameManuallyEdited) {
+                const match = value.match(/class\s+(\w+)/);
+                if (match && match[1]) {
+                    setName(match[1]);
+                }
+            }
         };
 
         const handleSubmit = async () => {
@@ -163,7 +212,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                             name="name"
                             autoFocus
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            onChange={(e) => handleNameChange(e.target.value)}
                             error={errors.name}
                             helperText={errors.name ? "Name is required" : ""}
                             sx={{
@@ -198,6 +247,10 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                                             label="Parameter Name"
                                             value={param.name}
                                             onChange={(e) => handleParamChange(index, 'name', e.target.value)}
+                                            required={index === 0}
+                                            InputProps={{
+                                                readOnly: index === 0, // Make 'name' param not editable
+                                            }}
                                             sx={{
                                                 '& .MuiOutlinedInput-root': {
                                                     '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
@@ -214,6 +267,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                                             label="Parameter Value"
                                             value={param.value}
                                             onChange={(e) => handleParamChange(index, 'value', e.target.value)}
+                                            required={index === 0}
                                             sx={{
                                                 '& .MuiOutlinedInput-root': {
                                                     '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
@@ -226,7 +280,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                                     <Grid item xs={2} sx={{ display: 'flex', alignItems: 'center' }}>
                                         <IconButton 
                                             onClick={() => handleRemoveParam(index)}
-                                            disabled={paramItems.length === 1}
+                                            disabled={index === 0}
                                             sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
                                         >
                                             <DeleteIcon />
@@ -280,7 +334,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                             rows={12}
                             placeholder="Paste your matcher code here..."
                             value={code}
-                            onChange={(e) => setCode(e.target.value)}
+                            onChange={(e) => handleCodeChange(e.target.value)}
                             error={errors.code}
                             helperText={errors.code ? "Code is required" : ""}
                             sx={{
