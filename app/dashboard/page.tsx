@@ -297,17 +297,25 @@ export default function Dashboard() {
         return (
             <Box sx={{
                 position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
                 bottom: 0,
+                left: 0,
+                width: '400px',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                zIndex: 1300,
+                alignItems: 'flex-end',
+                justifyContent: 'flex-start',
+                pointerEvents: 'none',
+                zIndex: 1200,
             }}>
-                <LoadingPopup taskState={taskState} />
+                <Box sx={{ 
+                    pointerEvents: 'auto',
+                    mb: 2,
+                    ml: 2,
+                    boxShadow: 3,
+                    borderRadius: 2,
+                    overflow: 'hidden'
+                }}>
+                    <LoadingPopup taskState={taskState} />
+                </Box>
             </Box>
         );
     }, [isLoadingGlobal, taskState]);

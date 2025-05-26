@@ -289,7 +289,12 @@ class MatchingTask:
 
             return candidates
 
-    def _update_task_state(self, log_message: Optional[str] = None, **kwargs) -> None:
+    def _update_task_state(
+        self,
+        log_message: Optional[str] = None,
+        replace_last_log: bool = False,
+        **kwargs,
+    ) -> None:
         """Update task state with provided values in a uniform way"""
         updated = False
         for key in kwargs:
@@ -307,7 +312,12 @@ class MatchingTask:
             }
             if log_message:
                 log_entry["message"] = log_message
-            self.task_state["logs"].append(log_entry)
+
+            if replace_last_log and self.task_state["logs"]:
+                self.task_state["logs"][-1] = log_entry
+            else:
+                self.task_state["logs"].append(log_entry)
+
             logger.info(
                 f"Task step: {log_entry['step']} - Progress: {log_entry['progress']}%"
                 + (f" - {log_message}" if log_message else "")
@@ -1059,7 +1069,8 @@ class MatchingTask:
                     )
                     if idx % 10 == 0:
                         self._update_task_state(
-                            log_message=f"Generated value matches for {idx+1}/{len(new_matcher_candidates)} candidates in matcher '{name}'."
+                            log_message=f"Generated value matches for {idx+1}/{len(new_matcher_candidates)} candidates in matcher '{name}'.",
+                            replace_last_log=True,
                         )
 
                 # Add new candidates to existing ones

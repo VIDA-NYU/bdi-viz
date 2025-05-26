@@ -1,59 +1,66 @@
-
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Box, Paper, Typography, LinearProgress, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
 
 interface LoadingPopupProps {
-    taskState: TaskState;
+    taskState: TaskState | null;
 }
 
 const LoadingPopup = ({ taskState }: LoadingPopupProps) => {
-    const { status, progress, current_step, completed_steps, total_steps, logs } = taskState;
-    
+    const { 
+        status = 'processing',
+        progress = 0,
+        current_step = 'Loading...',
+        completed_steps = 0,
+        total_steps = 1,
+        logs = []
+    } = taskState || {};
+
+    const logsEndRef = useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = () => {
+        logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [logs]);
+
     return (
         <Paper
             elevation={3}
             sx={{
-                position: 'fixed',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '500px',
-                maxWidth: '90vw',
-                p: 3,
-                zIndex: 1400,
+                width: '350px',
+                p: 2,
                 borderRadius: 2,
+                bgcolor: 'background.paper',
             }}
         >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <CircularProgress size={24} sx={{ mr: 2 }} />
-                <Typography variant="h6" component="div">
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                <CircularProgress size={20} sx={{ mr: 1.5 }} />
+                <Typography variant="subtitle1" component="div" noWrap>
                     {current_step}
                 </Typography>
             </Box>
             
-            <Box sx={{ mb: 2 }}>
+            <Box sx={{ mb: 1.5 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary">
                         {`Step ${completed_steps} of ${total_steps}`}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary">
                         {`${progress}%`}
                     </Typography>
                 </Box>
                 <LinearProgress 
                     variant="determinate" 
                     value={progress} 
-                    sx={{ height: 8, borderRadius: 4 }}
+                    sx={{ height: 6, borderRadius: 3 }}
                 />
             </Box>
             
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Task Logs:
-            </Typography>
-            
             <Box 
                 sx={{ 
-                    maxHeight: '200px', 
+                    maxHeight: '120px', 
                     overflowY: 'auto',
                     border: '1px solid #e0e0e0',
                     borderRadius: 1,
@@ -65,21 +72,32 @@ const LoadingPopup = ({ taskState }: LoadingPopupProps) => {
                         <ListItem key={index} sx={{ py: 0.5, borderBottom: index < logs.length - 1 ? '1px solid #e0e0e0' : 'none' }}>
                             <ListItemText
                                 primary={log.step}
-                                secondary={`${log.timestamp.split('T')[0]} ${log.timestamp.split('T')[1].substring(0, 8)} - ${log.progress}%`}
-                                primaryTypographyProps={{ variant: 'body2', fontWeight: 'medium' }}
-                                secondaryTypographyProps={{ variant: 'caption' }}
+                                secondary={
+                                    <Box>
+                                        <Typography variant="caption" component="div">
+                                            {`${log.timestamp.split('T')[1].substring(0, 8)} - ${log.progress}%`}
+                                        </Typography>
+                                        {log.message && (
+                                            <Typography variant="caption" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                                                {log.message}
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                }
+                                primaryTypographyProps={{ variant: 'caption', fontWeight: 'medium' }}
                             />
                         </ListItem>
                     ))}
+                    <div ref={logsEndRef} />
                 </List>
             </Box>
             
             <Typography 
-                variant="body2" 
+                variant="caption" 
                 color="text.secondary" 
-                sx={{ mt: 2, fontStyle: 'italic', textAlign: 'center' }}
+                sx={{ mt: 1, fontStyle: 'italic', textAlign: 'center', display: 'block' }}
             >
-                {status === 'complete' ? 'Task completed successfully' : 'Processing your request...'}
+                {status === 'complete' ? 'Task completed successfully' : 'Processing...'}
             </Typography>
         </Paper>
     );
