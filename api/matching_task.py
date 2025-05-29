@@ -53,12 +53,14 @@ class MatchingTask:
     ) -> None:
         self.lock = threading.Lock()
         self.top_k = top_k
-        self.nodes = []  # Store nodes for filtering
+        # Remove self.nodes - only use self.cached_candidates["nodes"]
 
         self.candidate_quadrants = None
         # Store matcher objects separately from matcher metadata
         self.matcher_objs = {
-            # "jaccard_distance_matcher": ValentineMatcher("jaccard_distance_matcher"),
+            # "jaccard_distance_matcher": ValentineMatcher(
+            #     "jaccard_distance_matcher"
+            # ),
             # "ct_learning": BDIKitMatcher("ct_learning"),
             "magneto_ft": BDIKitMatcher("magneto_ft"),
             "magneto_zs": BDIKitMatcher("magneto_zs"),
@@ -85,7 +87,7 @@ class MatchingTask:
         if cached_json and "matchers" in cached_json:
             self.cached_candidates = cached_json
             # Restore nodes from cache if they exist
-            self.nodes = cached_json.get("nodes", [])
+            self.cached_candidates["nodes"] = cached_json.get("nodes", [])
         else:
             # Initialize with default matchers if no cache exists
             self.cached_candidates = {
@@ -204,32 +206,23 @@ class MatchingTask:
                 logger.info("[MatchingTask] Source dataframe updated!")
             if target_df is not None:
                 self.target_df = target_df
-                self.nodes = []  # Reset nodes when target dataframe is updated
+                # Reset nodes when target dataframe is updated
+                self.cached_candidates["nodes"] = []
                 logger.info("[MatchingTask] Target dataframe updated!")
 
         self._initialize_value_matches()
 
     def set_nodes(self, nodes: List[str]) -> None:
         """Set the nodes to filter target data by."""
-        # Check if nodes have actually changed
-        current_nodes = self.nodes or []
-        new_nodes = nodes or []
-
-        if set(current_nodes) != set(new_nodes):
-            # Nodes have changed, invalidate cache
-            self.nodes = nodes
-            # Update nodes in cache but invalidate hashes to force regeneration
-            self.cached_candidates["nodes"] = nodes
-            # Invalidate cache by clearing hashes
-            self.cached_candidates["source_hash"] = None
-            self.cached_candidates["target_hash"] = None
-            logger.info(f"Set nodes for filtering: {nodes}, cache invalidated")
-        else:
-            logger.info(f"Nodes unchanged: {nodes}, keeping cache valid")
+        self.cached_candidates["nodes"] = nodes
+        # Update nodes in cache but invalidate hashes to force regeneration
+        self.cached_candidates["source_hash"] = None
+        self.cached_candidates["target_hash"] = None
+        logger.info(f"Set nodes for filtering: {nodes}, cache invalidated")
 
     def _filter_target_by_nodes(self) -> None:
         """Filter target dataframe based on nodes if they are set."""
-        if not self.nodes:
+        if not self.cached_candidates["nodes"]:
             return
 
         # Load flat ontology to get node information
@@ -239,7 +232,7 @@ class MatchingTask:
         valid_columns = []
         for col in self.target_df.columns:
             col_info = ontology_flat.get(col)
-            if col_info and col_info.get("node") in self.nodes:
+            if col_info and col_info.get("node") in self.cached_candidates["nodes"]:
                 valid_columns.append(col)
 
         # Only filter if we found valid columns
@@ -247,7 +240,7 @@ class MatchingTask:
             self.target_df = self.target_df[valid_columns]
             logger.info(
                 f"Filtered target dataframe to {len(valid_columns)} columns "
-                f"from nodes: {self.nodes}"
+                f"from nodes: {self.cached_candidates['nodes']}"
             )
         else:
             logger.info("No columns found for specified nodes, keeping all columns")
@@ -518,18 +511,11 @@ class MatchingTask:
 
         # Check if nodes filter has changed
         cached_nodes = cache.get("nodes", [])
-        current_nodes = self.nodes or []
 
-        if not current_nodes:
-            self.nodes = cached_nodes
-            self.cached_candidates["nodes"] = cached_nodes
+        if cached_nodes == self.cached_candidates["nodes"]:
             return True
-
-        # Compare nodes lists (order doesn't matter)
-        if set(cached_nodes) != set(current_nodes):
+        else:
             return False
-
-        return True
 
     def _generate_candidates(
         self, source_hash: int, target_hash: int, is_candidates_cached: bool
@@ -662,7 +648,7 @@ class MatchingTask:
                 "value_matches": self.cached_candidates["value_matches"],
                 "matchers": matcher_cache,
                 "matcher_code": matcher_code_cache,
-                "nodes": self.nodes,  # Preserve nodes in cache
+                "nodes": self.cached_candidates["nodes"],  # Preserve nodes in cache
             }
             self._export_cache_to_json(self.cached_candidates)
             self._update_task_state(log_message="Cache exported to JSON.")
