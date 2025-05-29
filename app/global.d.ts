@@ -164,6 +164,7 @@ declare interface TaskLog {
     timestamp: string;
     step: string;
     progress: number;
+    message: string;
 }
 
 declare interface MatcherAnalysis {

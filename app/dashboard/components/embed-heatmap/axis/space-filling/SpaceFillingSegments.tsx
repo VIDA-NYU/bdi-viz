@@ -158,7 +158,9 @@ export function renderSpaceFillingSegments(
   layoutConfig: LayoutConfig,
   superCategoryY: number,
   categoryY: number,
-  categoryColorScale: (id: string) => string
+  categoryColorScale: (id: string) => string,
+  selectedNodes: string[],
+  setSelectedNodes: (nodes: string[]) => void
 ) {
   const { theme, globalQuery, hierarchyHeight } = layoutConfig;
   
@@ -212,9 +214,13 @@ export function renderSpaceFillingSegments(
         .attr('width', d.width)
         .attr('height', hierarchyHeight)
         .attr('rx', 3)
-        .attr('fill', superCategoryColorScale(d.id))
+        .attr('fill', (() => {
+          const color = d3.color(superCategoryColorScale(d.id));
+          return color ? color.darker(0).toString() : superCategoryColorScale(d.id);
+        })())
         .attr('stroke', theme.palette.text.primary)
-        .attr('stroke-width', 1);
+        .attr('stroke-width', 1)
+        .style('cursor', 'pointer');
       
       // Label text
       group.append('text')
@@ -226,81 +232,23 @@ export function renderSpaceFillingSegments(
         .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
         .attr('font-size', '0.9rem')
         .attr('font-weight', '500')
+        .attr('letter-spacing', '0')
         .html(highlightText(d.id, globalQuery, theme));
-    }).on('mouseover', function(event, d: SuperCategoryData) {
-      // Highlight this super category
-      d3.select(this)
-        .attr('stroke-width', 2.5)
-        .attr('stroke-opacity', 1)
-        .attr('stroke-dasharray', '0');
+    })
+    .on('click', function(event, d: SuperCategoryData) {
+      // Get child categories
+      const childCategories = categoriesBySuper.get(d.id) || [];
       
-      // Fade other super categories
-      superCategoryData.forEach(sc => {
-        if (sc.id !== d.id) {
-          g.select(`#super-category-${sc.id}`)
-            .attr('opacity', 0.2)
-            .select('rect')
-            .attr('stroke-width', 1);
-        }
-      });
+      // Toggle selection of child categories
+      const allChildrenSelected = childCategories.every(catId => selectedNodes.includes(catId));
       
-      // Get related categories and columns
-      const relatedCategoryIds = categoriesBySuper.get(d.id) || [];
-      const relatedColumnIds = columnsBySuperCategory.get(d.id) || [];
-      
-      // Highlight related categories
-      relatedCategoryIds.forEach(catId => {
-        g.select(`#category-${catId}`)
-          .attr('opacity', 1)
-          .select('rect')
-          .attr('stroke-width', 2);
-        
-        g.select(`category-super-connection-${catId}-${d.id}`).call(applyHighlightStyleOnEdge);
-      });
-      
-      // Fade unrelated categories
-      categoryData.forEach(cat => {
-        if (!relatedCategoryIds.includes(cat.id)) {
-          g.select(`#category-${cat.id}`)
-            .attr('opacity', 0.2)
-            .select('rect')
-            .attr('stroke-width', 1);
-          
-          g.select(`category-super-connection-${cat.id}-${cat.superCategory}`).call(applyBackgroundStyleOnEdge);
-        }
-      });
-      
-      // Highlight related columns
-      columnData.forEach(column => {
-        if (relatedColumnIds.includes(column.id)) {
-          g.select(`#column-${column.id}`).call(applyHighlightOnColumn);
-          g.select(`#edge-${column.id}-${column.category}`).call(applyHighlightStyleOnEdge);
-        } else {
-          g.select(`#column-${column.id}`).call(applyBackgroundStyleOnColumn);
-          g.select(`#edge-${column.id}-${column.category}`).call(applyBackgroundStyleOnEdge);
-        }
-      });
-    }).on('mouseout', function(event, d: SuperCategoryData) {
-      // Reset all elements
-      g.selectAll('.category')
-        .attr('opacity', 1)
-        .select('rect')
-        .attr('stroke-width', 1);
-      
-      g.selectAll('.super-category')
-        .attr('opacity', 1)
-        .select('rect')
-        .attr('stroke-width', 1);
-      
-      // Reset all columns and edges
-      columnData.forEach(column => {
-        g.select(`#column-${column.id}`).call(applyDefaultStyleOnColumn);
-        g.select(`#edge-${column.id}-${column.category}`).call(applyDefaultStyleOnEdge);
-      });
-      
-      g.selectAll('.category-super-connection').each(function() {
-        d3.select(this).call(applyDefaultStyleOnEdge);
-      });
+      if (allChildrenSelected) {
+        // Remove all child categories from selection
+        setSelectedNodes(selectedNodes.filter(node => !childCategories.includes(node)));
+      } else {
+        // Add all child categories to selection
+        setSelectedNodes([...selectedNodes, ...childCategories]);
+      }
     });
 
   // Create category segments
@@ -322,9 +270,13 @@ export function renderSpaceFillingSegments(
         .attr('width', d.width)
         .attr('height', hierarchyHeight)
         .attr('rx', 2)
-        .attr('fill', categoryColorScale(d.id))
-        .attr('stroke', theme.palette.text.primary)
-        .attr('stroke-width', 1);
+        .attr('fill', (() => {
+          const color = d3.color(categoryColorScale(d.id));
+          return color ? color.darker(selectedNodes.includes(d.id) ? 0.4 : 0).toString() : categoryColorScale(d.id);
+        })())
+        .attr('stroke', selectedNodes.includes(d.id) ? theme.palette.primary.main : theme.palette.text.primary)
+        .attr('stroke-width', selectedNodes.includes(d.id) ? 3 : 1)
+        .style('cursor', 'pointer');
       
       // Label text
       group.append('text')
@@ -335,13 +287,38 @@ export function renderSpaceFillingSegments(
         .attr('fill', theme.palette.common.white)
         .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
         .attr('font-size', '0.8rem')
+        .attr('font-weight', selectedNodes.includes(d.id) ? '700' : '400')
+        .attr('letter-spacing', selectedNodes.includes(d.id) ? '0.3px' : '0')
         .html(highlightText(d.id, globalQuery, theme));
-    }).on('mouseover', function(event, d: CategoryData) {
-      // Highlight this category
+    })
+    .on('click', function(event, d: CategoryData) {
+      // Toggle selection of this category
+      const isSelected = selectedNodes.includes(d.id);
+      
+      if (isSelected) {
+        setSelectedNodes(selectedNodes.filter(node => node !== d.id));
+      } else {
+        setSelectedNodes([...selectedNodes, d.id]);
+      }
+      
+      // Update visual state
       d3.select(this)
-        .attr('stroke-width', 2.5)
-        .attr('stroke-opacity', 1)
-        .attr('stroke-dasharray', '0');
+        .select('rect')
+        .attr('stroke-width', isSelected ? 1 : 3)
+        .attr('stroke', isSelected ? theme.palette.text.primary : theme.palette.primary.main);
+    })
+    .on('mouseover', function(event, d: CategoryData) {
+      const isSelected = selectedNodes.includes(d.id);
+      
+      // Only apply hover effects if not selected
+      if (!isSelected) {
+        d3.select(this)
+          .select('rect')
+          .attr('stroke-width', 3)
+          .attr('stroke', theme.palette.primary.main)
+          .attr('stroke-opacity', 1)
+          .attr('stroke-dasharray', '0');
+      }
       
       const relatedColumnIds = columnsByCategory.get(d.id) || [];
       
@@ -371,11 +348,22 @@ export function renderSpaceFillingSegments(
       });
     })
     .on('mouseout', function(event, d: CategoryData) {
-      // Reset all elements
-      g.selectAll('.category')
-        .attr('opacity', 1)
-        .select('rect')
-        .attr('stroke-width', 1);
+      // Only reset if not selected
+      if (!selectedNodes.includes(d.id)) {
+        d3.select(this)
+          .select('rect')
+          .attr('fill', (() => {
+            const color = d3.color(categoryColorScale(d.id));
+            return color ? color.darker(0).toString() : categoryColorScale(d.id);
+          })())
+          .attr('stroke-width', 1)
+          .attr('stroke', theme.palette.text.primary);
+        
+        d3.select(this)
+          .select('text')
+          .attr('font-weight', '400')
+          .attr('letter-spacing', '0');
+      }
       
       // Reset all columns and edges
       columnData.forEach(column => {

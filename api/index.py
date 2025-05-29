@@ -81,7 +81,7 @@ def get_agent():
 
 
 @celery.task(bind=True)
-def run_matching_task(self, session):
+def run_matching_task(self, session, nodes=None):
     try:
         app.logger.info(f"Running matching task for session: {session}")
         matching_task = SESSION_MANAGER.get_session(session).matching_task
@@ -92,6 +92,7 @@ def run_matching_task(self, session):
 
             matching_task.update_dataframe(source_df=source, target_df=target)
             matching_task._initialize_task_state()
+            matching_task.set_nodes(nodes)
             candidates = matching_task.get_candidates()
 
             return {"status": "completed", "candidates_count": len(candidates)}
@@ -728,3 +729,19 @@ def update_value():
     matching_task.set_source_value(column, value, new_value)
 
     return {"message": "success"}
+
+
+@app.route("/api/matching/rematch", methods=["POST"])
+def rematch():
+    session = extract_session_name(request)
+    data = request.json
+    nodes = data.get("nodes", [])  # Get nodes from request body
+
+    if not os.path.exists(".source.csv") or not os.path.exists(".target.csv"):
+        return {"status": "failed", "message": "Source or target files not found"}, 400
+
+    # Start a new matching task with the specified nodes
+
+    app.logger.info(f"Rematch task start with nodes: {nodes}")
+    task = run_matching_task.delay(session, nodes)
+    return {"task_id": task.id}

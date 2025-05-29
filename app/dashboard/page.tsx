@@ -1,6 +1,6 @@
 'use client';
 import { useContext, useState, useCallback, useMemo } from "react";
-import { Box, CircularProgress, Typography, Switch } from "@mui/material";
+import { Box, Typography, Switch } from "@mui/material";
 import { toastify } from "@/app/lib/toastify/toastify-helper";
 
 import SearchBar from "./components/search/searchBar";
@@ -14,6 +14,7 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
 import NewMatcherDialog from "./components/matcher-card/newMatcher";
+import RematchButton from "./components/control-inputs/rematch-button";
 import { getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
@@ -382,6 +383,12 @@ export default function Dashboard() {
                         valueMatches={valueMatches}
                     />
                     <Box sx={{ position: 'absolute', right: 320, display: 'flex', alignItems: 'center' }}>
+                        <RematchButton 
+                            callback={handleNewMatchingTask}
+                            ontologyCallback={handleTargetOntology}
+                            uniqueValuesCallback={handleUniqueValues}
+                            valueMatchesCallback={handleValueMatches}
+                        />
                         <Typography sx={{ fontSize: "0.7rem", fontWeight: "300", marginRight: 0 }}>Expand On Hover</Typography>
                         <Switch
                             checked={hoverMode}

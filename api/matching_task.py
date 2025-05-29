@@ -22,6 +22,7 @@ from .utils import (
     is_candidate_for_category,
     load_gdc_ontology,
     load_ontology,
+    load_ontology_flat,
     load_property,
     verify_new_matcher,
 )
@@ -52,6 +53,7 @@ class MatchingTask:
     ) -> None:
         self.lock = threading.Lock()
         self.top_k = top_k
+        self.nodes = []  # Store nodes for filtering
 
         self.candidate_quadrants = None
         # Store matcher objects separately from matcher metadata
@@ -78,26 +80,35 @@ class MatchingTask:
         self._load_cached_matchers_async()
 
     def _initialize_cache(self) -> None:
-        self.cached_candidates = {
-            "source_hash": None,
-            "target_hash": None,
-            "candidates": [],
-            "source_clusters": None,
-            "value_matches": {},
-            "matchers": {
-                "magneto_ft": {
-                    "name": "magneto_ft",
-                    "weight": 1.0,
-                    "params": {},
+        # Try to load existing cache first
+        cached_json = self._import_cache_from_json()
+        if cached_json and "matchers" in cached_json:
+            self.cached_candidates = cached_json
+            # Restore nodes from cache if they exist
+            self.nodes = cached_json.get("nodes", [])
+        else:
+            # Initialize with default matchers if no cache exists
+            self.cached_candidates = {
+                "source_hash": None,
+                "target_hash": None,
+                "candidates": [],
+                "source_clusters": None,
+                "value_matches": {},
+                "matchers": {
+                    "magneto_ft": {
+                        "name": "magneto_ft",
+                        "weight": 0.5,  # Initialize with normalized weights
+                        "params": {},
+                    },
+                    "magneto_zs": {
+                        "name": "magneto_zs",
+                        "weight": 0.5,  # Initialize with normalized weights
+                        "params": {},
+                    },
                 },
-                "magneto_zs": {
-                    "name": "magneto_zs",
-                    "weight": 1.0,
-                    "params": {},
-                },
-            },
-            "matcher_code": {},
-        }
+                "matcher_code": {},
+                "nodes": [],  # Initialize empty nodes list
+            }
 
     def _initialize_task_state(self) -> None:
         self.task_state = {
@@ -193,9 +204,53 @@ class MatchingTask:
                 logger.info("[MatchingTask] Source dataframe updated!")
             if target_df is not None:
                 self.target_df = target_df
+                self.nodes = []  # Reset nodes when target dataframe is updated
                 logger.info("[MatchingTask] Target dataframe updated!")
 
         self._initialize_value_matches()
+
+    def set_nodes(self, nodes: List[str]) -> None:
+        """Set the nodes to filter target data by."""
+        # Check if nodes have actually changed
+        current_nodes = self.nodes or []
+        new_nodes = nodes or []
+
+        if set(current_nodes) != set(new_nodes):
+            # Nodes have changed, invalidate cache
+            self.nodes = nodes
+            # Update nodes in cache but invalidate hashes to force regeneration
+            self.cached_candidates["nodes"] = nodes
+            # Invalidate cache by clearing hashes
+            self.cached_candidates["source_hash"] = None
+            self.cached_candidates["target_hash"] = None
+            logger.info(f"Set nodes for filtering: {nodes}, cache invalidated")
+        else:
+            logger.info(f"Nodes unchanged: {nodes}, keeping cache valid")
+
+    def _filter_target_by_nodes(self) -> None:
+        """Filter target dataframe based on nodes if they are set."""
+        if not self.nodes:
+            return
+
+        # Load flat ontology to get node information
+        ontology_flat = load_ontology_flat()
+
+        # Get columns that belong to the specified nodes
+        valid_columns = []
+        for col in self.target_df.columns:
+            col_info = ontology_flat.get(col)
+            if col_info and col_info.get("node") in self.nodes:
+                valid_columns.append(col)
+
+        # Only filter if we found valid columns
+        if valid_columns:
+            self.target_df = self.target_df[valid_columns]
+            logger.info(
+                f"Filtered target dataframe to {len(valid_columns)} columns "
+                f"from nodes: {self.nodes}"
+            )
+        else:
+            logger.info("No columns found for specified nodes, keeping all columns")
 
     def get_candidates(self, is_candidates_cached: bool = True) -> Dict[str, list]:
         with self.lock:
@@ -223,6 +278,17 @@ class MatchingTask:
 
             cached_json = self._import_cache_from_json()
             candidates = []
+
+            # Filter target by categories before proceeding
+            num_of_columns = len(self.target_df.columns)
+            self._filter_target_by_nodes()
+            num_of_columns_after_filtering = len(self.target_df.columns)
+            self._update_task_state(
+                progress=50,
+                current_step="Filtering target by nodes",
+                completed_steps=2,
+                log_message=f"Filtering target by nodes, {num_of_columns - num_of_columns_after_filtering} columns removed",
+            )
 
             # Check if we can use the cached JSON file
             if self._is_cache_valid(cached_json, source_hash, target_hash):
@@ -268,6 +334,7 @@ class MatchingTask:
                     source_hash, target_hash, is_candidates_cached
                 )
 
+            # Always initialize weight updater with current matchers and candidates
             if self.update_matcher_weights:
                 self._update_task_state(
                     current_step="Updating matcher weights",
@@ -279,12 +346,17 @@ class MatchingTask:
                     alpha=0.1,
                     beta=0.1,
                 )
+                # Ensure weights are normalized
+                self.weight_updater._normalize_weights()
+                # Update the cached matchers with normalized weights
+                self.cached_candidates["matchers"] = self.weight_updater.matchers
+                self._export_cache_to_json(self.cached_candidates)
                 self._update_task_state(
                     progress=100,
                     current_step="Complete",
                     status="complete",
                     completed_steps=4,
-                    log_message="Matcher weights updated.",
+                    log_message="Matcher weights updated and normalized.",
                 )
 
             return candidates
@@ -412,6 +484,8 @@ class MatchingTask:
             if matcher_name in cached_matcher_code:
                 matchers[matcher_name]["code"] = cached_matcher_code[matcher_name]
         self.cached_candidates["matchers"] = matchers
+        # Preserve matcher code in the cache
+        self.cached_candidates["matcher_code"] = cached_matcher_code.copy()
 
     def update_exact_matches(self) -> List[Dict[str, Any]]:
         return self.get_candidates()
@@ -434,11 +508,28 @@ class MatchingTask:
     def _is_cache_valid(
         self, cache: Dict[str, Any], source_hash: int, target_hash: int
     ) -> bool:
-        return (
+        # Check if cache exists and hashes match
+        if not (
             cache
             and cache["source_hash"] == source_hash
             and cache["target_hash"] == target_hash
-        )
+        ):
+            return False
+
+        # Check if nodes filter has changed
+        cached_nodes = cache.get("nodes", [])
+        current_nodes = self.nodes or []
+
+        if not current_nodes:
+            self.nodes = cached_nodes
+            self.cached_candidates["nodes"] = cached_nodes
+            return True
+
+        # Compare nodes lists (order doesn't matter)
+        if set(cached_nodes) != set(current_nodes):
+            return False
+
+        return True
 
     def _generate_candidates(
         self, source_hash: int, target_hash: int, is_candidates_cached: bool
@@ -542,7 +633,8 @@ class MatchingTask:
             )
             if idx % 10 == 0:
                 self._update_task_state(
-                    log_message=f"Generated value matches for {idx+1}/{len(layered_candidates)} candidates."
+                    log_message=f"Generated value matches for {idx+1}/{len(layered_candidates)} candidates.",
+                    replace_last_log=True,
                 )
 
         self._update_task_state(
@@ -553,7 +645,7 @@ class MatchingTask:
         if is_candidates_cached:
             # Cache matcher information
             matcher_cache = {}
-            matcher_code_cache = {}
+            matcher_code_cache = self.cached_candidates["matcher_code"].copy()
 
             for name, matcher_info in self.cached_candidates["matchers"].items():
                 matcher_cache[name] = matcher_info
@@ -570,6 +662,7 @@ class MatchingTask:
                 "value_matches": self.cached_candidates["value_matches"],
                 "matchers": matcher_cache,
                 "matcher_code": matcher_code_cache,
+                "nodes": self.nodes,  # Preserve nodes in cache
             }
             self._export_cache_to_json(self.cached_candidates)
             self._update_task_state(log_message="Cache exported to JSON.")
@@ -600,7 +693,10 @@ class MatchingTask:
 
     def _generate_ontology(self) -> List[Dict]:
         candidates = self.get_cached_candidates()
-        return load_ontology(candidates)
+        target_columns = set()
+        for candidate in candidates:
+            target_columns.add(candidate["targetColumn"])
+        return load_ontology(target_columns)
 
     def _initialize_value_matches(self) -> None:
         self.cached_candidates["value_matches"] = {}

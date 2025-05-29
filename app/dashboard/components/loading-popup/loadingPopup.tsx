@@ -69,22 +69,58 @@ const LoadingPopup = ({ taskState }: LoadingPopupProps) => {
             >
                 <List dense sx={{ py: 0 }}>
                     {logs && logs.map((log, index) => (
-                        <ListItem key={index} sx={{ py: 0.5, borderBottom: index < logs.length - 1 ? '1px solid #e0e0e0' : 'none' }}>
+                        <ListItem 
+                            key={index} 
+                            sx={{ 
+                                py: 0.75, 
+                                px: 1.5,
+                                borderBottom: index < logs.length - 1 ? '1px solid #e0e0e0' : 'none',
+                                '&:hover': {
+                                    bgcolor: 'rgba(0, 0, 0, 0.02)'
+                                }
+                            }}
+                        >
                             <ListItemText
                                 primary={log.step}
                                 secondary={
-                                    <Box>
-                                        <Typography variant="caption" component="div">
+                                    <Box sx={{ mt: 0.5 }}>
+                                        <Typography 
+                                            variant="caption" 
+                                            component="div"
+                                            sx={{ 
+                                                fontSize: '0.7rem',
+                                                color: 'text.secondary',
+                                                fontWeight: 500
+                                            }}
+                                        >
                                             {`${log.timestamp.split('T')[1].substring(0, 8)} - ${log.progress}%`}
                                         </Typography>
                                         {log.message && (
-                                            <Typography variant="caption" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                                            <Typography 
+                                                variant="caption" 
+                                                component="div" 
+                                                sx={{ 
+                                                    color: 'text.secondary', 
+                                                    mt: 0.25,
+                                                    fontSize: '0.65rem',
+                                                    lineHeight: 1.2,
+                                                    opacity: 0.8
+                                                }}
+                                            >
                                                 {log.message}
                                             </Typography>
                                         )}
                                     </Box>
                                 }
-                                primaryTypographyProps={{ variant: 'caption', fontWeight: 'medium' }}
+                                primaryTypographyProps={{ 
+                                    variant: 'body2', 
+                                    fontWeight: 600,
+                                    sx: { 
+                                        fontSize: '0.8rem',
+                                        color: 'text.primary',
+                                        lineHeight: 1.3
+                                    }
+                                }}
                             />
                         </ListItem>
                     ))}
