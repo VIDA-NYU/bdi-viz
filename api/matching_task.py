@@ -862,6 +862,12 @@ class MatchingTask:
                 return json.load(f)
         return None
 
+    def sync_cache(self) -> None:
+        """Sync the cache with the current state of the task."""
+        cached_json = self._import_cache_from_json()
+        self.cached_candidates = cached_json
+        logger.info("Cache synced with current state of the task.")
+
     def _bucket_column(self, df: pd.DataFrame, col: str) -> List[Dict[str, Any]]:
         col_obj = df[col].dropna()
 

@@ -169,9 +169,8 @@ def matching_status():
         source = pd.read_csv(".source.csv")
         target = pd.read_csv(".target.csv")
         matching_task.update_dataframe(source_df=source, target_df=target)
-        cached_json = matching_task._import_cache_from_json()
-        matching_task.cached_candidates = cached_json
-        matching_task.get_candidates()
+        matching_task.sync_cache()
+        # matching_task.get_candidates()
 
         response = {
             "status": "completed",
