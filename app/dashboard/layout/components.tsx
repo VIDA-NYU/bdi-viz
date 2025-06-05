@@ -75,7 +75,6 @@ export const Header = styled(Box)(({ theme }) => ({
   paddingRight: theme.spacing(2),
   backgroundColor: theme.palette.primary.main,
   color: theme.palette.primary.contrastText,
-  height: '55px',
 }));
 
 export const MainContent = styled(Box)(({ theme }) => ({

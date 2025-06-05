@@ -3,7 +3,7 @@ import { useContext, useState, useCallback, useMemo } from "react";
 import { Box, Typography, Switch } from "@mui/material";
 import { toastify } from "@/app/lib/toastify/toastify-helper";
 
-import SearchBar from "./components/search/searchBar";
+import SearchMenu from "./components/search/searchMenu";
 import LeftPanel from "./leftpanel";
 import UpperTabs from "./components/upperTabs";
 import LowerTabs from "./components/lowerTabs";
@@ -14,7 +14,6 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
 import NewMatcherDialog from "./components/matcher-card/newMatcher";
-import RematchButton from "./components/control-inputs/rematch-button";
 import { getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
@@ -277,8 +276,14 @@ export default function Dashboard() {
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
             <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
                 <Typography sx={{ fontSize: "1.2rem", fontWeight: "200" }}>BDI Visualization System</Typography>
-                <Box display="flex" alignItems="center" width="400pt">
-                    <SearchBar agentSearchResultCallback={handleSearchResults} />
+                <Box display="flex" alignItems="center">
+                    <SearchMenu
+                        agentSearchResultCallback={handleSearchResults}
+                        rematchCallback={handleNewMatchingTask}
+                        ontologyCallback={handleTargetOntology}
+                        uniqueValuesCallback={handleUniqueValues}
+                        valueMatchesCallback={handleValueMatches}
+                    />
                 </Box>
                 <Box display="flex" alignItems="center">
                     <Typography sx={{ fontSize: "1rem", fontWeight: "300", marginRight: 0 }}>Developer Mode</Typography>
@@ -290,7 +295,7 @@ export default function Dashboard() {
                 </Box>
             </Box>
         </Box>
-    ), [developerMode, setDeveloperMode, handleSearchResults]);
+    ), [developerMode, setDeveloperMode]);
 
     const loadingOverlay = useMemo(() => {
         if (!isLoadingGlobal) return null;
@@ -383,12 +388,6 @@ export default function Dashboard() {
                         valueMatches={valueMatches}
                     />
                     <Box sx={{ position: 'absolute', right: 320, display: 'flex', alignItems: 'center' }}>
-                        <RematchButton 
-                            callback={handleNewMatchingTask}
-                            ontologyCallback={handleTargetOntology}
-                            uniqueValuesCallback={handleUniqueValues}
-                            valueMatchesCallback={handleValueMatches}
-                        />
                         <Typography sx={{ fontSize: "0.7rem", fontWeight: "300", marginRight: 0 }}>Expand On Hover</Typography>
                         <Switch
                             checked={hoverMode}
