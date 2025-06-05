@@ -550,7 +550,31 @@ const newMatcher = async ({ name, code, params, onResult, onError, taskStateCall
         onError("Error creating new matcher");
     }
 };
-    
+
+interface RematchTaskProps {
+    nodes: string[];
+    onResult: (result: any) => void;
+    onError: (error: any) => void;
+    taskStateCallback: (taskState: TaskState) => void;
+}
+
+const startRematchTask = async (nodes: string[]) => {
+    console.log("startRematchTask", nodes);
+    const response = await axios.post("/api/matching/rematch", { nodes });
+    return response.data.task_id;
+};
+
+const runRematchTask = async ({ nodes, onResult, onError, taskStateCallback }: RematchTaskProps) => {
+    try {
+        const taskId = await startRematchTask(nodes);
+        console.log("Rematch task started with taskId:", taskId);
+        pollForMatchingStatus({ taskId, taskStateCallback, onResult, onError });
+    } catch (error) {
+        console.error("Error running rematch task:", error);
+        onError(error);
+    }
+};
+
 export { 
     runMatchingTask,
     getCachedResults, 
@@ -567,4 +591,5 @@ export {
     getCandidatesResult, 
     updateSourceValue,
     newMatcher,
+    runRematchTask,
 };

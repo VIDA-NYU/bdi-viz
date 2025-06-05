@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from io import StringIO
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 
 import pandas as pd
 import requests
@@ -233,7 +233,13 @@ def parse_llm_generated_ontology(ontology: Dict[str, Any]) -> Dict[str, Any]:
     return json_dict
 
 
-def load_ontology(candidates: List[Dict[str, Any]]) -> List[Dict]:
+def load_ontology_flat() -> Dict[str, Any]:
+    with open(".target.json", "r") as f:
+        ontology_flat = json.load(f)
+    return ontology_flat
+
+
+def load_ontology(target_columns: Set[str] = None) -> List[Dict]:
     """
     Load the ontology from a JSON file.
 
@@ -244,11 +250,13 @@ def load_ontology(candidates: List[Dict[str, Any]]) -> List[Dict]:
         ontology_flat = json.load(f)
 
     hiarchies = {}
-    target_columns = set()
-    for candidate in candidates:
-        target_columns.add(candidate["targetColumn"])
 
-    for target_column in list(target_columns):
+    # If target_columns is empty, use all columns from the ontology
+    columns_to_process = (
+        list(target_columns) if target_columns else list(ontology_flat.keys())
+    )
+
+    for target_column in columns_to_process:
         if target_column not in ontology_flat:
             continue
         ontology = ontology_flat[target_column]
