@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import threading
+import fcntl
 from typing import Any, Dict, List, Optional, Tuple
 import copy
 
@@ -206,8 +207,8 @@ class MatchingTask:
                 logger.info("[MatchingTask] Source dataframe updated!")
             if target_df is not None:
                 self.target_df = target_df
-                # Reset nodes when target dataframe is updated
-                self.cached_candidates["nodes"] = []
+                # Only clear nodes if you really want to discard the old filter
+                # self.cached_candidates["nodes"] = []
                 logger.info("[MatchingTask] Target dataframe updated!")
 
         self._initialize_value_matches()
@@ -851,15 +852,32 @@ class MatchingTask:
         ]
 
     def _export_cache_to_json(self, json_obj: Dict) -> None:
+        """Export cache to JSON file with file locking to ensure atomic operations"""
         output_path = os.path.join(os.path.dirname(__file__), "matching_results.json")
         with open(output_path, "w") as f:
-            json.dump(json_obj, f, indent=4)
+            # Acquire exclusive lock
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                json.dump(json_obj, f, indent=4)
+                # Ensure data is written to disk
+                f.flush()
+                os.fsync(f.fileno())
+            finally:
+                # Release lock
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def _import_cache_from_json(self) -> Optional[Dict]:
+        """Import cache from JSON file with file locking to ensure atomic operations"""
         output_path = os.path.join(os.path.dirname(__file__), "matching_results.json")
         if os.path.exists(output_path):
             with open(output_path, "r") as f:
-                return json.load(f)
+                # Acquire shared lock
+                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                try:
+                    return json.load(f)
+                finally:
+                    # Release lock
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         return None
 
     def sync_cache(self) -> None:
