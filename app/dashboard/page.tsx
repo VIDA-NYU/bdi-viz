@@ -431,10 +431,12 @@ export default function Dashboard() {
             {loadingOverlay}
 
             {/* Popups */}
-            <OntologySearchPopup
-                selectedCandidate={selectedCandidate}
-                callback={handleOntologySearch}
-            />
+            {selectedCandidate && (
+                <OntologySearchPopup
+                    selectedCandidate={selectedCandidate}
+                    callback={handleOntologySearch}
+                />
+            )}
             <AgentSuggestionsPopup
                 open={openSuggestionsPopup}
                 setOpen={setOpenSuggestionsPopup}

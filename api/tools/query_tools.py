@@ -49,7 +49,7 @@ class QueryTools:
                 str: The description for the target attribute.
             """.strip(),
         )
-        
+
     def get_tools(self) -> List[StructuredTool]:
         logger.info("Initializing query tools")
         return [
@@ -74,7 +74,7 @@ class QueryTools:
             for candidate in candidates
             if candidate["sourceColumn"] == source_attribute
         ]
-    
+
     def _read_target_values(self, target_attribute: str) -> List[str]:
         """
         Read the values for a specific target attribute.
@@ -93,7 +93,7 @@ class QueryTools:
                     target_values = random.sample(target_values, 20)
                 return target_values
         return self.matching_task.get_target_unique_values(target_attribute)
-    
+
     def _read_target_description(self, target_attribute: str) -> str:
         """
         Read the description for a specific target attribute.

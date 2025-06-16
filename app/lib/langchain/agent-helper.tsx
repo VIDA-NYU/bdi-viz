@@ -245,11 +245,7 @@ const agentSearchOntology = async (query: string, candidate: Candidate) => {
             timeout: 10000000, // Set timeout to unlimited
         });
         console.log("agentSearchOntology: ", resp.data);
-        
-        if (resp.data.status === "success" && resp.data.candidates) {
-            return resp.data;
-        }
-        return null;
+        return resp.data as AgentState;
     } catch (error) {
         console.error("Error sending agent search ontology request:", error);
     }

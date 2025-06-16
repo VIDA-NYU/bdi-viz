@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from io import StringIO
-from typing import Any, Dict, List, Optional, Tuple, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pandas as pd
 import requests

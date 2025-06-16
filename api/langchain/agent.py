@@ -42,7 +42,11 @@ logger = logging.getLogger("bdiviz_flask.sub")
 
 
 class Agent:
-    def __init__(self, llm_model: Optional[BaseChatModel] = None) -> None:
+    def __init__(
+        self,
+        memory_retriever: MemoryRetriver,
+        llm_model: Optional[BaseChatModel] = None,
+    ) -> None:
         # OR claude-3-5-sonnet-20240620
         # self.llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
         # self.llm = ChatOllama(base_url='https://ollama-asr498.users.hsrn.nyu.edu', model='llama3.1:8b-instruct-fp16', temperature=0.2)
@@ -56,7 +60,7 @@ class Agent:
         self.agent_config = {"configurable": {"thread_id": "bdiviz-1"}}
 
         # self.memory = MemorySaver()
-        self.store = MemoryRetriver()
+        self.store = memory_retriever
 
         self.system_messages = [
             """
@@ -344,70 +348,6 @@ Diagnosis:
         )
         return response
 
-    def search_ontology(self, query: str, candidate: Dict[str, Any]) -> Ontology:
-        """
-        TBD: understand user's query, and search the ontology for the most relevant information
-        """
-
-        source_col = candidate["sourceColumn"]
-        # target_col = candidate["targetColumn"]
-        source_values = candidate["sourceValues"]
-        # target_values = candidate["targetValues"]
-
-        prompt = f"""
-Find the most relevant target attributes in the ontology for the user's query.
-
-User Query: {query}
-Source Column: {source_col}
-Source Values: {source_values}
-
-**Instructions**:
-1. Understand the user's query.
-2. Use "search_ontology" to find semantically related properties:
-   - Identify synonyms and related concepts.
-   - Use keywords from the query, source column, and values.
-   - Leverage domain-specific terminology.
-3. Rank results by:
-   - Query relevance
-   - Semantic similarity
-   - Data type compatibility
-   - Biomedical domain relevance
-4. Return a SearchResponse with top candidates.
-
-**Example**:
-User Query: What is ajcc?
-Source Column: ajcc_stage_pt
-Source Values: pT1, pT2, pT3
-
-**search_ontology input**:
-- query: AJCC: American Joint Committee on Cancer, ajcc_stage_pt, pT1, pT2, pT3
-- k: 10
-
-**search_ontology output**:
-- status: success
-- candidates: [
-    {{
-        "sourceColumn": "ajcc_stage_pt",
-        "targetColumn": "AJCC_Pathologic_T",
-        "score": 0.9
-    }}, ...
-]
-- terminologies: [
-    {{
-        "entry": "AJCC",
-        "description": "American Joint Committee on Cancer"
-    }}, ...
-]
-        """.strip()
-
-        logger.info(f"[SEARCH-ONTOLOGY] Prompt: {prompt}")
-        response = self.invoke(
-            prompt=prompt,
-            tools=[self.store.search_ontology_tool],
-            output_structure=SearchResponse,
-        )
-        return response
-
     def apply(
         self, session: str, action: Dict[str, Any], previous_operation: Dict[str, Any]
     ) -> Optional[ActionResponse]:
@@ -552,8 +492,8 @@ Prompt: {prompt}
 AGENT = None
 
 
-def get_agent():
+def get_agent(memory_retriever):
     global AGENT
     if AGENT is None:
-        AGENT = Agent()
+        AGENT = Agent(memory_retriever)
     return AGENT

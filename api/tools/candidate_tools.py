@@ -91,7 +91,9 @@ class CandidateTools:
         """
         Accept a biomedical attribute mapping as correct.
         """
-        logger.info(f"Tool called: accept_match for {source_attribute} -> {target_attribute}")
+        logger.info(
+            f"Tool called: accept_match for {source_attribute} -> {target_attribute}"
+        )
         try:
             self.matching_task.accept_cached_candidate(
                 {"sourceColumn": source_attribute, "targetColumn": target_attribute}
@@ -105,7 +107,9 @@ class CandidateTools:
         """
         Reject an incorrect biomedical attribute mapping.
         """
-        logger.info(f"Tool called: reject_match for {source_attribute} -> {target_attribute}")
+        logger.info(
+            f"Tool called: reject_match for {source_attribute} -> {target_attribute}"
+        )
         try:
             self.matching_task.reject_cached_candidate(
                 {"sourceColumn": source_attribute, "targetColumn": target_attribute}
@@ -127,7 +131,9 @@ class CandidateTools:
         Returns:
             bool: Success status of the operation.
         """
-        logger.info(f"Tool called: update_candidates for {source_attribute} with {len(candidates)} candidates")
+        logger.info(
+            f"Tool called: update_candidates for {source_attribute} with {len(candidates)} candidates"
+        )
         try:
             new_candidates = []
             cached_candidates = self.matching_task.get_cached_candidates()
@@ -162,7 +168,9 @@ class CandidateTools:
         Returns:
             bool: Success status of the operation.
         """
-        logger.info(f"Tool called: prune_candidates for {source_attribute} removing {len(target_attributes)} targets")
+        logger.info(
+            f"Tool called: prune_candidates for {source_attribute} removing {len(target_attributes)} targets"
+        )
         try:
             new_candidates = []
             cached_candidates = self.matching_task.get_cached_candidates()
@@ -198,9 +206,13 @@ class CandidateTools:
         Returns:
             bool: Success status of the operation.
         """
-        logger.info(f"Tool called: append_candidates for {source_attribute} with {len(candidates)} new candidates")
+        logger.info(
+            f"Tool called: append_candidates for {source_attribute} with {len(candidates)} new candidates"
+        )
         try:
-            self.matching_task.append_candidates_from_agent(source_attribute, candidates)
+            self.matching_task.append_candidates_from_agent(
+                source_attribute, candidates
+            )
             logger.info(
                 f"[CandidateButler] Appended {len(candidates)} candidates for "
                 f"source attribute: {source_attribute}"

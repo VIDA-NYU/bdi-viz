@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Dialog, DialogContent, TextField, Button, CircularProgress, Table, TableHead, TableRow, TableCell, Chip, TableBody } from '@mui/material';
 import { agentSearchOntology } from '@/app/lib/langchain/agent-helper';
 import SettingsGlobalContext from '@/app/lib/settings/settings-context';
+
 interface OntologySearchPopupProps {
     selectedCandidate: Candidate;
     callback: (candidates: Candidate[]) => void;
@@ -10,9 +11,7 @@ interface OntologySearchPopupProps {
 
 const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({ selectedCandidate, callback, terminalogiesCallback }) => {
     const [query, setQuery] = useState<string>('');
-    const [candidates, setCandidates] = useState<Candidate[]>([]);
-    const [terminologies, setTerminologies] = useState<RelevantKnowledge[]>([]);
-    const [response, setResponse] = useState<string>('');
+    const [agentState, setAgentState] = useState<AgentState | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [initialMousePosition, setInitialMousePosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
     const { ontologySearchPopupOpen, setOntologySearchPopupOpen } = useContext(SettingsGlobalContext);
@@ -33,23 +32,11 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({ selectedCandi
 
     const handleSearch = async () => {
         setLoading(true);
-        const results = await agentSearchOntology(query, selectedCandidate);
-        console.log("results: ", results);
-        const candidates = results.candidates;
-        const terminologies = results.terminologies;
-        const response = results.response;
+        const result = await agentSearchOntology(query, selectedCandidate);
+        setAgentState(result);
+        setLoading(false);
 
-        if (candidates) {
-            setCandidates(candidates);
-            callback(candidates);
-        }
-        if (terminologies) {
-            setTerminologies(terminologies);
-            // terminalogiesCallback(terminologies);
-        }
-        if (response) {
-            setResponse(response);
-        }
+        if (result.candidates) callback(result.candidates);
 
         setLoading(false);
     };
@@ -100,34 +87,23 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({ selectedCandi
                     <CircularProgress size={24} style={{ display: 'block', margin: '10px auto' }} />
                 ) : (
                     <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '4px', padding: '6px', fontSize: '0.8rem', fontFamily: 'monospace', backgroundColor: '#f5f5f5' }}>
-                        {response && (
+                        {agentState?.message && agentState.message.length > 0 && (
                             <div style={{ marginBottom: '10px' }}>
                                 <div style={{ fontWeight: 'bold', color: '#0066cc', borderBottom: '1px solid #ccc', paddingBottom: '4px', marginBottom: '6px' }}>
-                                    Response:
+                                    Agent Thoughts:
                                 </div>
-                                <span>{response}</span>
-                            </div>
-                        )}
-                        
-                        {terminologies.length > 0 && (
-                            <div style={{ marginBottom: '10px' }}>
-                                <div style={{ fontWeight: 'bold', color: '#0066cc', borderBottom: '1px solid #ccc', paddingBottom: '4px', marginBottom: '6px' }}>
-                                    Terminologies Found:
-                                </div>
-                                {terminologies.map((terminology, index) => (
-                                    <div key={index} style={{ padding: '4px', borderLeft: '3px solid #0066cc', marginBottom: '4px', backgroundColor: '#f0f8ff' }}>
-                                        <span style={{ fontWeight: 'bold' }}>{terminology.entry}</span>: {terminology.description}
-                                    </div>
+                                {agentState.message.map((msg, idx) => (
+                                    <div key={idx}>{msg}</div>
                                 ))}
                             </div>
                         )}
-                        
-                        {candidates.length > 0 && (
+
+                        {agentState?.candidates && agentState.candidates.length > 0 && (
                             <div>
                                 <div style={{ fontWeight: 'bold', color: '#006600', borderBottom: '1px solid #ccc', paddingBottom: '4px', marginBottom: '6px' }}>
-                                    Candidates Found ({candidates.length}):
+                                    Candidates Found ({agentState.candidates.length}):
                                 </div>
-                                {candidates.map((candidate, index) => (
+                                {agentState.candidates.map((candidate, index) => (
                                     <div key={index} style={{ padding: '4px', borderLeft: '3px solid #006600', marginBottom: '6px', backgroundColor: '#f0fff0' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                                             <span style={{ fontWeight: 'bold' }}>Source:</span> 
@@ -145,8 +121,32 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({ selectedCandi
                                 ))}
                             </div>
                         )}
-                        
-                        {terminologies.length === 0 && candidates.length === 0 && (
+
+                        {agentState?.candidates_to_append && agentState.candidates_to_append.length > 0 && (
+                            <div>
+                                <div style={{ fontWeight: 'bold', color: '#cc6600', borderBottom: '1px solid #ccc', paddingBottom: '4px', marginBottom: '6px', marginTop: '10px' }}>
+                                    Candidates To Append ({agentState.candidates_to_append.length}):
+                                </div>
+                                {agentState.candidates_to_append.map((candidate, index) => (
+                                    <div key={index} style={{ padding: '4px', borderLeft: '3px solid #cc6600', marginBottom: '6px', backgroundColor: '#fffaf0' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                                            <span style={{ fontWeight: 'bold' }}>Source:</span> 
+                                            <span style={{ wordBreak: 'break-word', maxWidth: '80%' }}>{candidate.sourceColumn}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                                            <span style={{ fontWeight: 'bold' }}>Target:</span> 
+                                            <span style={{ wordBreak: 'break-word', maxWidth: '80%' }}>{candidate.targetColumn}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                                            <span style={{ fontWeight: 'bold' }}>Score:</span> 
+                                            <span>{candidate.score?.toFixed(2) || 'N/A'}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {(!agentState || (agentState.candidates.length === 0 && agentState.candidates_to_append.length === 0 && (!agentState.message || agentState.message.length === 0))) && (
                             <div style={{ color: '#666', textAlign: 'center', padding: '10px' }}>
                                 No results found. Try a different search query.
                             </div>

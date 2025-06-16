@@ -1,10 +1,9 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
-from uuid import uuid4
+from typing import Any, Dict, List, Optional
 
 from langchain.tools import StructuredTool
+from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 from langgraph.store.memory import InMemoryStore
 
@@ -103,13 +102,32 @@ class MemoryRetriver:
     ]
 
     def __init__(self):
-        # embeddings = init_embeddings("openai:text-embedding-3-large")
+        # Initialize embeddings with a model that matches the expected dimensions
         embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
+            model_name="sentence-transformers/all-mpnet-base-v2",  # 768 dimensions
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
         )
         self.store = InMemoryStore()  # Keep for backward compatibility
-        self.vector_store = InMemoryVectorStore(embeddings)
-        self.user_id = "bdi_viz_user"
+
+        # Initialize Chroma with proper configuration
+        self.vector_store = Chroma(
+            embedding_function=embeddings,
+            persist_directory="./chroma_db",
+            collection_name="agent_memory",
+            collection_metadata={
+                "hnsw:space": "cosine",
+                "hnsw:construction_ef": 100,
+                "hnsw:search_ef": 100,
+                "hnsw:M": 16,
+            },
+        )
+
+        # Clear existing collection to handle dimension mismatch
+        try:
+            self.vector_store._collection.delete()
+        except Exception:
+            pass  # Collection might not exist yet
 
         self.query_candidates_tool = StructuredTool.from_function(
             func=self.query_candidates,
@@ -149,20 +167,14 @@ class MemoryRetriver:
     ) -> List[Dict[str, Any]]:
         query = " ".join(keywords)
 
-        # Build filter function based on source and target columns
-        def filter_func(doc: Document) -> bool:
-            if doc.metadata.get("namespace") != "candidates":
-                return False
+        # Build filter based on source and target columns
+        filter = {"namespace": "candidates"}
+        if source_column:
+            filter["sourceColumn"] = source_column
+        if target_column:
+            filter["targetColumn"] = target_column
 
-            if source_column and doc.metadata.get("sourceColumn") != source_column:
-                return False
-
-            if target_column and doc.metadata.get("targetColumn") != target_column:
-                return False
-
-            return True
-
-        results = self._search_vector_store(query, limit, filter_func)
+        results = self._search_vector_store(query, limit, filter)
         return [doc.metadata for doc in results]
 
     # puts
@@ -370,49 +382,48 @@ Explanations: {formatted_explanations}
 
     # Search
     def search_target_schema(self, query: str, limit: int = 10):
-        def filter_func(doc: Document) -> bool:
-            return doc.metadata.get("namespace") == "schema"
-
-        return self._search_vector_store(query, limit, filter_func)
+        logger.info(
+            f"Tool called: search_target_schema with query='{query}', limit={limit}"
+        )
+        filter = {"namespace": "schema"}
+        results = self._search_vector_store(query, limit, filter)
+        logger.info(
+            f"Tool result: search_target_schema returned {len(results)} results"
+        )
+        return results
 
     def search_candidates(self, query: str, limit: int = 10):
-        def filter_func(doc: Document) -> bool:
-            return (
-                doc.metadata.get("namespace") == "candidates"
-                and doc.metadata.get("user_id") == self.user_id
-            )
-
-        results = self._search_vector_store(query, limit, filter_func)
+        logger.info(
+            f"Tool called: search_candidates with query='{query}', limit={limit}"
+        )
+        filter = {"namespace": "candidates", "user_id": self.user_id}
+        results = self._search_vector_store(query, limit, filter)
+        logger.info(f"Tool result: search_candidates returned {len(results)} results")
         return [doc.page_content for doc in results]
 
     def search_mismatches(self, query: str, limit: int = 10):
-        def filter_func(doc: Document) -> bool:
-            return (
-                doc.metadata.get("namespace") == "mismatches"
-                and doc.metadata.get("user_id") == self.user_id
-            )
-
-        results = self._search_vector_store(query, limit, filter_func)
+        logger.info(
+            f"Tool called: search_mismatches with query='{query}', limit={limit}"
+        )
+        filter = {"namespace": "mismatches", "user_id": self.user_id}
+        results = self._search_vector_store(query, limit, filter)
+        logger.info(f"Tool result: search_mismatches returned {len(results)} results")
         return [doc.page_content for doc in results]
 
     def search_matches(self, query: str, limit: int = 10):
-        def filter_func(doc: Document) -> bool:
-            return (
-                doc.metadata.get("namespace") == "matches"
-                and doc.metadata.get("user_id") == self.user_id
-            )
-
-        results = self._search_vector_store(query, limit, filter_func)
+        logger.info(f"Tool called: search_matches with query='{query}', limit={limit}")
+        filter = {"namespace": "matches", "user_id": self.user_id}
+        results = self._search_vector_store(query, limit, filter)
+        logger.info(f"Tool result: search_matches returned {len(results)} results")
         return [doc.page_content for doc in results]
 
     def search_explanations(self, query: str, limit: int = 10):
-        def filter_func(doc: Document) -> bool:
-            return (
-                doc.metadata.get("namespace") == "explanations"
-                and doc.metadata.get("user_id") == self.user_id
-            )
-
-        results = self._search_vector_store(query, limit, filter_func)
+        logger.info(
+            f"Tool called: search_explanations with query='{query}', limit={limit}"
+        )
+        filter = {"namespace": "explanations", "user_id": self.user_id}
+        results = self._search_vector_store(query, limit, filter)
+        logger.info(f"Tool result: search_explanations returned {len(results)} results")
         return [doc.page_content for doc in results]
 
     # Vector store operations
@@ -425,6 +436,21 @@ Explanations: {formatted_explanations}
         self,
         query: str,
         k: int = 10,
-        filter: Optional[Callable[[Document], bool]] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ):
-        return self.vector_store.similarity_search(query, k=k, filter=filter)
+        # Use Chroma's similarity search with filter
+        return self.vector_store.similarity_search(
+            query,
+            k=k,
+            filter=filter,
+        )
+
+
+MEMORY_RETRIEVER = None
+
+
+def get_memory_retriever():
+    global MEMORY_RETRIEVER
+    if MEMORY_RETRIEVER is None:
+        MEMORY_RETRIEVER = MemoryRetriver()
+    return MEMORY_RETRIEVER

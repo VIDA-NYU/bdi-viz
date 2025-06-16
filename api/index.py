@@ -68,6 +68,19 @@ def create_app() -> Flask:
 app = create_app()
 celery = app.extensions["celery"]
 
+
+_MEMORY_RETRIEVER = None
+
+
+def get_memory_retriever():
+    global _MEMORY_RETRIEVER
+    if _MEMORY_RETRIEVER is None:
+        from .langchain.memory import get_memory_retriever
+
+        _MEMORY_RETRIEVER = get_memory_retriever()
+    return _MEMORY_RETRIEVER
+
+
 # Lazy load the agent only when needed
 _AGENT = None
 
@@ -77,8 +90,20 @@ def get_agent():
     if _AGENT is None:
         from .langchain.agent import get_agent
 
-        _AGENT = get_agent()
+        _AGENT = get_agent(get_memory_retriever())
     return _AGENT
+
+
+_LANGGRAPH_AGENT = None
+
+
+def get_langgraph_agent():
+    global _LANGGRAPH_AGENT
+    if _LANGGRAPH_AGENT is None:
+        from .langgraph.langgraph import get_langgraph_agent
+
+        _LANGGRAPH_AGENT = get_langgraph_agent(get_memory_retriever())
+    return _LANGGRAPH_AGENT
 
 
 @celery.task(bind=True)
@@ -527,43 +552,6 @@ def agent_explanation():
     return response
 
 
-@app.route("/api/agent/search-ontology", methods=["POST"])
-def agent_search_ontology():
-    session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
-
-    data = request.json
-    query = data["query"]
-    candidate = data["candidate"]
-
-    source_col = candidate["sourceColumn"]
-    target_col = candidate["targetColumn"]
-    source_values = matching_task.get_source_unique_values(source_col)
-    target_values = matching_task.get_target_unique_values(target_col)
-
-    agent = get_agent()
-    response = agent.search_ontology(
-        query,
-        candidate={
-            "sourceColumn": source_col,
-            "targetColumn": target_col,
-            "sourceValues": source_values,
-            "targetValues": target_values,
-        },
-    )
-    search_response = response.model_dump()
-
-    status = search_response["status"] if search_response["status"] else "failure"
-    candidates = search_response["candidates"] if search_response["candidates"] else []
-    terminologies = (
-        search_response["terminologies"] if search_response["terminologies"] else []
-    )
-
-    matching_task.append_candidates_from_agent(source_col, candidates)
-
-    return {"status": status, "candidates": candidates, "terminologies": terminologies}
-
-
 @app.route("/api/agent/explore", methods=["POST"])
 def agent_explore():
     session = extract_session_name(request)
@@ -584,9 +572,9 @@ def agent_explore():
         "targetValues": target_values,
     }
 
-    agent = get_agent()
-    response = agent.explore_candidates(session, candidate, query)
-    response = response.model_dump()
+    agent = get_langgraph_agent()
+    response = agent.invoke(query, source_col, target_col)
+    app.logger.critical(f"Response: {response}")
 
     return response
 

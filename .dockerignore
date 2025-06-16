@@ -32,3 +32,6 @@ docs/_build/
 tmp*/
 **/tmp*/
 *.rdb
+
+chroma_db/
+**/chroma_db/

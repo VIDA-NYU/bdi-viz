@@ -1,12 +1,12 @@
 import concurrent.futures
+import copy
+import fcntl
 import hashlib
 import json
 import logging
 import os
 import threading
-import fcntl
 from typing import Any, Dict, List, Optional, Tuple
-import copy
 
 import numpy as np
 import pandas as pd
@@ -1097,7 +1097,7 @@ class MatchingTask:
             ):
                 candidates[index]["status"] = candidate["status"]
         self.set_cached_candidates(candidates)
-    
+
     def append_cached_candidate(self, candidate: Dict[str, Any]) -> None:
         cached_candidates = self.get_cached_candidates()
         source_col = candidate["sourceColumn"]
