@@ -248,7 +248,6 @@ Score: {value['score']}
             "targetColumn": value["targetColumn"],
             "score": value["score"],
             "namespace": "candidates",
-            "user_id": self.user_id,
         }
 
         if "matcher" in value:
@@ -276,7 +275,6 @@ Target Column: {value['targetColumn']}
             "sourceColumn": value["sourceColumn"],
             "targetColumn": value["targetColumn"],
             "namespace": "matches",
-            "user_id": self.user_id,
         }
 
         self._add_vector_store(key, page_content, metadata)
@@ -304,7 +302,6 @@ Target Column: {value['targetColumn']}
             "sourceColumn": value["sourceColumn"],
             "targetColumn": value["targetColumn"],
             "namespace": "mismatches",
-            "user_id": self.user_id,
         }
 
         self._add_vector_store(key, page_content, metadata)
@@ -337,7 +334,6 @@ Target Column: {value['targetColumn']}
             return (
                 doc.metadata.get("namespace") == "explanations"
                 and doc.metadata.get("key") == key
-                and doc.metadata.get("user_id") == self.user_id
             )
 
         existing_docs = self._search_vector_store("", k=1, filter=filter_func)
@@ -371,7 +367,6 @@ Explanations: {formatted_explanations}
             "sourceColumn": user_operation["candidate"]["sourceColumn"],
             "targetColumn": user_operation["candidate"]["targetColumn"],
             "namespace": "explanations",
-            "user_id": self.user_id,
         }
 
         # Remove existing document if it exists
@@ -383,47 +378,49 @@ Explanations: {formatted_explanations}
     # Search
     def search_target_schema(self, query: str, limit: int = 10):
         logger.info(
-            f"Tool called: search_target_schema with query='{query}', limit={limit}"
+            f"🧰Tool called: search_target_schema with query='{query}', limit={limit}"
         )
         filter = {"namespace": "schema"}
         results = self._search_vector_store(query, limit, filter)
         logger.info(
-            f"Tool result: search_target_schema returned {len(results)} results"
+            f"🧰Tool result: search_target_schema returned {len(results)} results"
         )
         return results
 
     def search_candidates(self, query: str, limit: int = 10):
         logger.info(
-            f"Tool called: search_candidates with query='{query}', limit={limit}"
+            f"🧰Tool called: search_candidates with query='{query}', limit={limit}"
         )
-        filter = {"namespace": "candidates", "user_id": self.user_id}
+        filter = {"namespace": "candidates"}
         results = self._search_vector_store(query, limit, filter)
-        logger.info(f"Tool result: search_candidates returned {len(results)} results")
+        logger.info(f"🧰Tool result: search_candidates returned {len(results)} results")
         return [doc.page_content for doc in results]
 
     def search_mismatches(self, query: str, limit: int = 10):
         logger.info(
-            f"Tool called: search_mismatches with query='{query}', limit={limit}"
+            f"🧰Tool called: search_mismatches with query='{query}', limit={limit}"
         )
-        filter = {"namespace": "mismatches", "user_id": self.user_id}
+        filter = {"namespace": "mismatches"}
         results = self._search_vector_store(query, limit, filter)
-        logger.info(f"Tool result: search_mismatches returned {len(results)} results")
+        logger.info(f"🧰Tool result: search_mismatches returned {len(results)} results")
         return [doc.page_content for doc in results]
 
     def search_matches(self, query: str, limit: int = 10):
-        logger.info(f"Tool called: search_matches with query='{query}', limit={limit}")
-        filter = {"namespace": "matches", "user_id": self.user_id}
+        logger.info(f"🧰Tool called: search_matches with query='{query}', limit={limit}")
+        filter = {"namespace": "matches"}
         results = self._search_vector_store(query, limit, filter)
-        logger.info(f"Tool result: search_matches returned {len(results)} results")
+        logger.info(f"🧰Tool result: search_matches returned {len(results)} results")
         return [doc.page_content for doc in results]
 
     def search_explanations(self, query: str, limit: int = 10):
         logger.info(
-            f"Tool called: search_explanations with query='{query}', limit={limit}"
+            f"🧰Tool called: search_explanations with query='{query}', limit={limit}"
         )
-        filter = {"namespace": "explanations", "user_id": self.user_id}
+        filter = {"namespace": "explanations"}
         results = self._search_vector_store(query, limit, filter)
-        logger.info(f"Tool result: search_explanations returned {len(results)} results")
+        logger.info(
+            f"🧰Tool result: search_explanations returned {len(results)} results"
+        )
         return [doc.page_content for doc in results]
 
     # Vector store operations

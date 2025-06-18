@@ -67,13 +67,17 @@ class QueryTools:
         Returns:
             List[Dict[str, Any]]: All candidates for the source attribute.
         """
-        logger.info(f"Tool called: read_source_candidates for {source_attribute}")
         candidates = self.matching_task.get_cached_candidates()
-        return [
+        results = [
             candidate
             for candidate in candidates
             if candidate["sourceColumn"] == source_attribute
         ]
+        logger.info(
+            f"🧰Tool called: read_source_candidates for {source_attribute} "
+            f"found {len(results)} candidates"
+        )
+        return results
 
     def _read_target_values(self, target_attribute: str) -> List[str]:
         """
@@ -84,15 +88,20 @@ class QueryTools:
         Returns:
             List[str]: All values for the target attribute.
         """
-        logger.info(f"Tool called: read_target_values for {target_attribute}")
         target_properties = load_property(target_attribute)
         if target_properties is not None:
             if "enum" in target_properties:
                 target_values = target_properties["enum"]
                 if len(target_values) >= 20:
                     target_values = random.sample(target_values, 20)
-                return target_values
-        return self.matching_task.get_target_unique_values(target_attribute)
+                results = target_values
+        else:
+            results = self.matching_task.get_target_unique_values(target_attribute)
+        logger.info(
+            f"🧰Tool called: read_target_values for {target_attribute} "
+            f"found {len(results)} values"
+        )
+        return results
 
     def _read_target_description(self, target_attribute: str) -> str:
         """
@@ -103,9 +112,14 @@ class QueryTools:
         Returns:
             str: The description for the target attribute.
         """
-        logger.info(f"Tool called: read_target_description for {target_attribute}")
         target_properties = load_property(target_attribute)
         if target_properties is not None:
             if "description" in target_properties:
-                return target_properties["description"]
-        return ""
+                results = target_properties["description"]
+        else:
+            results = ""
+        logger.info(
+            f"🧰Tool called: read_target_description for {target_attribute} "
+            f"found {len(results)} values"
+        )
+        return results

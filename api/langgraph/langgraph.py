@@ -229,15 +229,15 @@ class LangGraphAgent:
 
     def _ontology_prompt(self) -> str:
         return """
-        You are an ontology agent. Your job is to search for relevant terminology and candidates based on the user's intent and the current state.
+        You are an ontology agent. Your job is to search for relevant candidates based on the user's intent and the current state.
         
         User Input: {query}
         Source attribute: {source_column}
         Source values: {source_values}
         
         INTENT DETECTION:
-        1. If the user's intent is only to get information or explanation (e.g., about the target attribute), do NOT call any tools. Just pass the state to the candidate agent with an explanatory message.
-        2. If the user's intent is to search for candidates, use the search_ontology tool with as much detail as possible (source_column, source_values, etc.), append the results to candidates_to_append, and set next_agents to ["candidate"].
+        1. If the user's intent is to search for candidates, use the search_ontology tool with as much detail as possible (source_column, source_values, etc.), append the results to candidates_to_append, and set next_agents to ["candidate"].
+        2. Make sure the candidates searched are scored based on their correlation to the source attribute unless the user specifies otherwise, use your best judgement based on the source attribute and values for scoring.
         3. For any other intent, update the state and pass to the next agent as appropriate.
         
         TODOS:
@@ -271,6 +271,7 @@ class LangGraphAgent:
         
         TODOS:
         - Detect the user's intent from the state and query.
+        - **Infer that if the queried or existing candidates should be rescored based on their correlation to the source attribute and values, use your best judgement.
         - Only call tools if the intent is to manipulate or append candidates.
         - If only explanation is needed, do not call tools, just update the message and return the state.
         - Add a message explaining your reasoning and what you updated.
@@ -304,7 +305,7 @@ class LangGraphAgent:
                 future = executor.submit(
                     self._stream_responses, agent_executor, prompt, self.session_id
                 )
-                responses = future.result(timeout=30)
+                responses = future.result(timeout=300000)
         except Exception as e:
             logger.error(f"Agent execution error: {e}\nPrompt was:\n{prompt}")
             logger.error(traceback.format_exc())

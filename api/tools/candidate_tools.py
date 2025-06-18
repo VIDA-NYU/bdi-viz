@@ -92,7 +92,7 @@ class CandidateTools:
         Accept a biomedical attribute mapping as correct.
         """
         logger.info(
-            f"Tool called: accept_match for {source_attribute} -> {target_attribute}"
+            f"🧰Tool called: accept_match for {source_attribute} -> {target_attribute}"
         )
         try:
             self.matching_task.accept_cached_candidate(
@@ -108,7 +108,7 @@ class CandidateTools:
         Reject an incorrect biomedical attribute mapping.
         """
         logger.info(
-            f"Tool called: reject_match for {source_attribute} -> {target_attribute}"
+            f"🧰Tool called: reject_match for {source_attribute} -> {target_attribute}"
         )
         try:
             self.matching_task.reject_cached_candidate(
@@ -132,7 +132,7 @@ class CandidateTools:
             bool: Success status of the operation.
         """
         logger.info(
-            f"Tool called: update_candidates for {source_attribute} with {len(candidates)} candidates"
+            f"🧰Tool called: update_candidates for {source_attribute} with {len(candidates)} candidates"
         )
         try:
             new_candidates = []
@@ -169,7 +169,7 @@ class CandidateTools:
             bool: Success status of the operation.
         """
         logger.info(
-            f"Tool called: prune_candidates for {source_attribute} removing {len(target_attributes)} targets"
+            f"🧰Tool called: prune_candidates for {source_attribute} removing {len(target_attributes)} targets"
         )
         try:
             new_candidates = []
@@ -207,7 +207,7 @@ class CandidateTools:
             bool: Success status of the operation.
         """
         logger.info(
-            f"Tool called: append_candidates for {source_attribute} with {len(candidates)} new candidates"
+            f"🧰Tool called: append_candidates for {source_attribute} with {len(candidates)} new candidates"
         )
         try:
             self.matching_task.append_candidates_from_agent(
