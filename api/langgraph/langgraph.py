@@ -1,10 +1,10 @@
+import os
+from dotenv import load_dotenv
 import concurrent.futures
 import json
 import logging
-import random
 import traceback
 from enum import Enum
-from functools import partial
 from typing import Any, Callable, Dict, Hashable, List, Optional, Set
 
 from langchain.output_parsers import PydanticOutputParser
@@ -15,11 +15,13 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import Graph, StateGraph
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
+from portkey_ai import createHeaders
 
 from ..langchain.memory import MemoryRetriver
 from ..tools.candidate_tools import CandidateTools
 from ..tools.query_tools import QueryTools
-from ..utils import load_property
+
+load_dotenv()
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
@@ -69,8 +71,23 @@ class AgentType(str, Enum):
 
 class LangGraphAgent:
     def __init__(self, memory_retriever: MemoryRetriver, session_id: str = "default"):
-        self.master_llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
-        self.worker_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+        portkey_headers = createHeaders(
+            api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
+            virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+        )
+
+        self.master_llm = ChatOpenAI(
+            model="gemini-2.5-pro",
+            temperature=0.2,
+            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            default_headers=portkey_headers,
+        )
+        self.worker_llm = ChatOpenAI(
+            model="gemini-2.5-pro",
+            temperature=0.2,
+            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            default_headers=portkey_headers,
+        )
         self.memory_retriever = memory_retriever
         self.session_id = session_id
         self._state = self._init_state()

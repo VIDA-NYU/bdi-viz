@@ -1,9 +1,11 @@
+import os
 import logging
 import random
 from typing import Any, Dict, Generator, List, Optional
 
 import pandas as pd
 from dotenv import load_dotenv
+from portkey_ai import createHeaders
 
 # Only set pandas display options when needed, not at module level
 # pd.set_option("display.max_columns", None)
@@ -495,5 +497,14 @@ AGENT = None
 def get_agent(memory_retriever):
     global AGENT
     if AGENT is None:
-        AGENT = Agent(memory_retriever)
+        portkey_headers = createHeaders(
+            api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
+            virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+        )
+        llm_model = ChatOpenAI(
+            model="gemini-2.5-flash",
+            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            default_headers=portkey_headers,
+        )
+        AGENT = Agent(memory_retriever, llm_model=llm_model)
     return AGENT
