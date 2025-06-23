@@ -178,3 +178,17 @@ declare interface MatcherAnalysis {
     params?: object;
     code?: string;
 }
+
+  
+declare interface AgentState {
+    message: string[];
+    query: string;
+    source_column?: string | null;
+    source_values?: string[] | null;
+    target_column?: string | null;
+    target_values?: string[] | null;
+    target_description?: string | null;
+    next_agents: string[];
+    candidates: Candidate[];
+    candidates_to_append: Candidate[];
+}

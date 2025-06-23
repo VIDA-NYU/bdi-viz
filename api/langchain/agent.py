@@ -1,9 +1,11 @@
 import logging
+import os
 import random
 from typing import Any, Dict, Generator, List, Optional
 
 import pandas as pd
 from dotenv import load_dotenv
+from portkey_ai import createHeaders
 
 # Only set pandas display options when needed, not at module level
 # pd.set_option("display.max_columns", None)
@@ -29,19 +31,24 @@ from ..utils import load_gdc_property, load_property
 from .memory import MemoryRetriver
 from .pydantic import (
     ActionResponse,
+    AgentResponse,
     AgentSuggestions,
+    AttributeProperties,
     CandidateExplanation,
     Ontology,
     RelatedSources,
     SearchResponse,
-    SuggestedValueMappings,
 )
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
 
 class Agent:
-    def __init__(self, llm_model: Optional[BaseChatModel] = None) -> None:
+    def __init__(
+        self,
+        memory_retriever: MemoryRetriver,
+        llm_model: Optional[BaseChatModel] = None,
+    ) -> None:
         # OR claude-3-5-sonnet-20240620
         # self.llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
         # self.llm = ChatOllama(base_url='https://ollama-asr498.users.hsrn.nyu.edu', model='llama3.1:8b-instruct-fp16', temperature=0.2)
@@ -55,7 +62,7 @@ class Agent:
         self.agent_config = {"configurable": {"thread_id": "bdiviz-1"}}
 
         # self.memory = MemorySaver()
-        self.store = MemoryRetriver()
+        self.store = memory_retriever
 
         self.system_messages = [
             """
@@ -78,7 +85,7 @@ class Agent:
             if self._llm_model is not None:
                 self._llm = self._llm_model
             else:
-                self._llm = ChatOpenAI(model="gpt-4o", temperature=0)
+                self._llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
         return self._llm
 
     def search(self, query: str) -> SearchResponse:
@@ -166,32 +173,59 @@ class Agent:
         )
         return response
 
-    def suggest_value_mapping(
-        self, candidate: Dict[str, Any]
-    ) -> SuggestedValueMappings:
-        logger.info(f"[Agent] Suggesting value mapping...")
+    def explore_candidates(
+        self, session: str, candidate: Dict[str, Any], query: str
+    ) -> AgentResponse:
+        source_attribute = candidate["sourceColumn"]
+        logger.info(
+            f"[Agent] Exploring candidates for {source_attribute} with query: {query}"
+        )
+        candidate_butler = CandidateButler(session)
+
+        tools = [
+            # Manipulate the existing candidates
+            candidate_butler.read_candidates_tool,
+            candidate_butler.update_candidates_tool,
+            candidate_butler.prune_candidates_tool,
+            candidate_butler.append_candidates_tool,
+            # Search within the target ontology
+            self.store.search_ontology_tool,
+        ]
 
         prompt = f"""
-        Analyze the following lists of values and determine the best mapping from each source value to one of the target values.
+        Analyze the user's query and perform the appropriate actions using the available tools.
         
-        Source Column: {candidate["sourceColumn"]}
-        Target Column: {candidate["targetColumn"]}
-        Source Values: {candidate["sourceValues"]}
-        Target Values: {candidate["targetValues"]}
-
+        Source Attribute: {source_attribute}
+        User Query: {query}
+        
         Instructions:
-        1. For every source value, identify the most appropriate corresponding target value.
-        2. If no clear match exists for a source value, return an empty string for that value.
+        1. If the user wants to filter, discard, or remove candidates:
+           - Use read_candidates to retrieve current candidates
+           - Filter based on user criteria
+           - Pass the filtered list to update_candidates to save the filtered list
+        
+        2. If the user wants to explore or find new matches:
+           - Use search_ontology to find relevant target attributes
+           - Consider domain-specific terminology (like AJCC, FIGO, etc.)
+           - Pass the candidates list found by search_ontology to append_candidates
+        
+        3. If the user wants information about specific terminology:
+           - Use search_ontology to find related attributes and their descriptions
+        
+        Respond under AgentResponse schema:
+        - status: success or failure
+        - tool_uses: the tool(s) used
+        - response: the response to the user's query
+        - candidates: the candidates found, empty if you did not manipulate the candidates list
+        - terminologies: the terminologies found, empty if you did not search the ontology
         """
 
-        logger.info(f"[SUGGEST-VALUE-MAPPING] Prompt: {prompt}")
-
+        logger.info(f"[EXPLORE] Prompt: {prompt}")
         response = self.invoke(
             prompt=prompt,
-            tools=[],
-            output_structure=SuggestedValueMappings,
+            tools=tools,
+            output_structure=AgentResponse,
         )
-
         return response
 
     def make_suggestion(
@@ -287,16 +321,25 @@ Diagnosis:
         pd.reset_option("display.max_columns")
 
         prompt = f"""
-    You are given a pandas DataFrame containing target data.
-    Review the preview below and determine the ontology for each column.
+    Analyze the target DataFrame preview below to create an ontology for each column.
 
     DataFrame Preview:
     {df_preview}
 
-    Instructions:
-    1. For EVERY column, create an AttributeProperties object that describes its ontology FOR EACH OF THEM.
-    2. There should be **no more than 3 categories and 10 nodes**.
-    3. Return your answer strictly as a JSON object following the Ontology schema, with no extra text.
+    Task:
+    Create an AttributeProperties object for EACH column with the following information:
+    - column_name: The exact name of the column
+    - category: Group columns into at most 3 high-level categories (grandparent level)
+    - node: Group columns into at most 10 mid-level nodes (parent level)
+    - type: Classify as "enum" (categorical), "number", "string", "boolean", or "other"
+    - description: A clear description of what the column represents
+    - enum: For categorical columns, list observed and inferred possible values
+    - maximum/minimum: For numerical columns, provide range constraints if applicable
+
+    Important:
+    - Organize columns into NO MORE THAN 3 categories and 10 nodes total
+    - For "enum" types, include all observed values plus likely additional values
+    - Return ONLY a valid JSON object following the Ontology schema with no additional text
     """
 
         logger.info(f"[INFER-ONTOLOGY] Prompt: {prompt}")
@@ -384,6 +427,12 @@ Candidate: {candidate}
         for candidate in candidates:
             self.store.put_candidate(candidate)
 
+    def remember_ontology(self, ontology: Dict[str, AttributeProperties]) -> None:
+        logger.info(f"[Agent] Remembering the ontology...")
+        for _, property in ontology.items():
+            self.store.put_target_schema(property)
+        logger.info(f"[Agent] Ontology remembered!")
+
     def invoke(
         self, prompt: str, tools: List, output_structure: BaseModel
     ) -> BaseModel:
@@ -445,8 +494,17 @@ Prompt: {prompt}
 AGENT = None
 
 
-def get_agent():
+def get_agent(memory_retriever):
     global AGENT
     if AGENT is None:
-        AGENT = Agent()
+        portkey_headers = createHeaders(
+            api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
+            virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+        )
+        llm_model = ChatOpenAI(
+            model="gemini-2.5-flash",
+            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            default_headers=portkey_headers,
+        )
+        AGENT = Agent(memory_retriever, llm_model=llm_model)
     return AGENT

@@ -1,8 +1,9 @@
 import { BaseExpandedCellProps, ExpandedCellProps, ExpandedCellType } from "./types";
 import {HistogramCell} from './HistogramCell';
-import { FC } from "react";
+import { FC, useContext } from "react";
 import { ScatterCell } from "./ScatterCell";
 import { useTheme } from "@mui/material";
+import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 
 const expandedCellComponents: Record<ExpandedCellType, FC<ExpandedCellProps>> = {
     histogram: HistogramCell,
@@ -15,9 +16,15 @@ const BaseExpandedCell: FC<BaseExpandedCellProps & {
 
     const theme = useTheme();
     const ChartComponent = expandedCellComponents[type];
+    const { setOntologySearchPopupOpen } = useContext(SettingsGlobalContext);
     return (
       <g
-        transform={`translate(${props.x},${props.y})`} onClick={props.onClick}
+        transform={`translate(${props.x},${props.y})`} 
+        onClick={props.onClick}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setOntologySearchPopupOpen(true);
+        }}
         >
         <rect className="expanded-cell-background"
           width={props.width}

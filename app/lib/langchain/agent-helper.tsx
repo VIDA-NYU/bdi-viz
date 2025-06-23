@@ -230,4 +230,25 @@ const agentGetRelatedSources = async (candidate: Candidate) => {
 }
 
 
-export { candidateExplanationRequest, agentSuggestionsRequest, agentSuggestValueMappings, agentActionRequest, agentSearchRequest, agentThumbRequest, agentGetRelatedSources };
+
+const agentSearchOntology = async (query: string, candidate: Candidate) => {
+    try {
+        const httpAgent = new http.Agent({ keepAlive: true });
+        const httpsAgent = new https.Agent({ keepAlive: true });
+
+        const resp = await axios.post("/api/agent/explore", {
+            candidate,
+            query,
+        }, {
+            httpAgent,
+            httpsAgent,
+            timeout: 10000000, // Set timeout to unlimited
+        });
+        console.log("agentSearchOntology: ", resp.data);
+        return resp.data as AgentState;
+    } catch (error) {
+        console.error("Error sending agent search ontology request:", error);
+    }
+}
+
+export { candidateExplanationRequest, agentSuggestionsRequest, agentSuggestValueMappings, agentActionRequest, agentSearchRequest, agentThumbRequest, agentGetRelatedSources, agentSearchOntology };

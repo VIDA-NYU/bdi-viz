@@ -15,6 +15,7 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
         total_steps: 0,
         logs: [],
     });
+    const [ontologySearchPopupOpen, setOntologySearchPopupOpen] = useState(false);
 
     const value = {
         isLoadingGlobal,
@@ -25,6 +26,8 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
         setHoverMode,
         taskState,
         setTaskState,
+        ontologySearchPopupOpen,
+        setOntologySearchPopupOpen,
     }
 
     return (

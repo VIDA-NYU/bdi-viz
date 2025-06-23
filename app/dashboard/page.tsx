@@ -14,6 +14,7 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
 import NewMatcherDialog from "./components/matcher-card/newMatcher";
+import OntologySearchPopup from "./components/ontology-search/ontologySearchPopup";
 import { getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
@@ -179,6 +180,11 @@ export default function Dashboard() {
             });
         }
     };
+
+    function handleOntologySearch(candidates: Candidate[]) {
+        console.log("Ontology Search Candidates: ", candidates);
+        getCachedResults({ callback: handleFileUpload });
+    }
 
     function handleUserOperationsUpdate(userOperations: UserOperation[]) {
         setUserOperations(userOperations);
@@ -425,6 +431,12 @@ export default function Dashboard() {
             {loadingOverlay}
 
             {/* Popups */}
+            {selectedCandidate && (
+                <OntologySearchPopup
+                    selectedCandidate={selectedCandidate}
+                    callback={handleOntologySearch}
+                />
+            )}
             <AgentSuggestionsPopup
                 open={openSuggestionsPopup}
                 setOpen={setOpenSuggestionsPopup}

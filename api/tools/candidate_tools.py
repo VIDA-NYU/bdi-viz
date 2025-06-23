@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from langchain.tools.base import StructuredTool
 
@@ -8,34 +8,9 @@ from ..session_manager import SESSION_MANAGER
 logger = logging.getLogger("bdiviz_flask.sub")
 
 
-class CandidateButler:
+class CandidateTools:
     def __init__(self, session: str):
         self.matching_task = SESSION_MANAGER.get_session(session).matching_task
-
-        self.search_candidates_tool = StructuredTool.from_function(
-            func=self.search_candidates,
-            name="search_candidates",
-            description="""
-            Search for candidates matching specific biomedical attributes.
-            Args:
-                source_column (Optional[str]): Source biomedical attribute.
-                target_column (Optional[str]): Target biomedical attribute.
-            Returns:
-                List[Dict[str, Any]]: Matching candidate attributes.
-            """.strip(),
-        )
-
-        self.read_candidates_tool = StructuredTool.from_function(
-            func=self.source_candidates_read,
-            name="read_candidates",
-            description="""
-            Retrieve all candidate matches for a specific biomedical attribute.
-            Args:
-                source_attribute (str): The biomedical attribute to analyze.
-            Returns:
-                List[Dict[str, Any]]: Potential attribute mappings.
-            """.strip(),
-        )
 
         self.update_candidates_tool = StructuredTool.from_function(
             func=self.source_candidates_update,
@@ -76,55 +51,73 @@ class CandidateButler:
             """.strip(),
         )
 
-    def source_candidates_append(
-        self, source_attribute: str, candidates: List[Dict[str, Any]]
-    ):
-        """
-        Add domain-knowledge suggested mappings for a biomedical attribute.
-        """
-        self.matching_task.append_candidates_from_agent(source_attribute, candidates)
+        self.accept_match_tool = StructuredTool.from_function(
+            func=self.accept_match,
+            name="accept_match",
+            description="""
+            Accept a biomedical attribute mapping as correct.
+            Args:
+                source_attribute (str): The source biomedical attribute.
+                target_attribute (str): The target biomedical attribute.
+            Returns:
+                bool: Success status of the operation.
+            """.strip(),
+        )
 
-    def accept_mapping(self, source_attribute: str, target_attribute: str) -> bool:
+        self.reject_match_tool = StructuredTool.from_function(
+            func=self.reject_match,
+            name="reject_match",
+            description="""
+            Reject a biomedical attribute mapping as incorrect.
+            Args:
+                source_attribute (str): The source biomedical attribute.
+                target_attribute (str): The target biomedical attribute.
+            Returns:
+                bool: Success status of the operation.
+            """.strip(),
+        )
+
+    def get_tools(self) -> List[StructuredTool]:
+        logger.info("Initializing candidate tools")
+        return [
+            self.accept_match_tool,
+            self.reject_match_tool,
+            self.update_candidates_tool,
+            self.prune_candidates_tool,
+            self.append_candidates_tool,
+        ]
+
+    def accept_match(self, source_attribute: str, target_attribute: str) -> bool:
         """
         Accept a biomedical attribute mapping as correct.
         """
+        logger.info(
+            f"🧰Tool called: accept_match for {source_attribute} -> {target_attribute}"
+        )
         try:
             self.matching_task.accept_cached_candidate(
                 {"sourceColumn": source_attribute, "targetColumn": target_attribute}
             )
             return True
         except Exception as e:
-            logger.error(f"Failed to accept mapping: {str(e)}")
+            logger.error(f"Failed to accept match: {str(e)}")
             return False
 
-    def reject_mapping(self, source_attribute: str, target_attribute: str) -> bool:
+    def reject_match(self, source_attribute: str, target_attribute: str) -> bool:
         """
         Reject an incorrect biomedical attribute mapping.
         """
+        logger.info(
+            f"🧰Tool called: reject_match for {source_attribute} -> {target_attribute}"
+        )
         try:
             self.matching_task.reject_cached_candidate(
                 {"sourceColumn": source_attribute, "targetColumn": target_attribute}
             )
             return True
         except Exception as e:
-            logger.error(f"Failed to reject mapping: {str(e)}")
+            logger.error(f"Failed to reject match: {str(e)}")
             return False
-
-    def source_candidates_read(self, source_attribute: str) -> List[Dict[str, Any]]:
-        """
-        Read existing candidates for a specific source attribute.
-
-        Args:
-            source_attribute (str): The source biomedical attribute to read.
-        Returns:
-            List[Dict[str, Any]]: All candidates for the source attribute.
-        """
-        candidates = self.matching_task.get_cached_candidates()
-        return [
-            candidate
-            for candidate in candidates
-            if candidate["sourceColumn"] == source_attribute
-        ]
 
     def source_candidates_update(
         self, source_attribute: str, candidates: List[Dict[str, Any]]
@@ -138,6 +131,9 @@ class CandidateButler:
         Returns:
             bool: Success status of the operation.
         """
+        logger.info(
+            f"🧰Tool called: update_candidates for {source_attribute} with {len(candidates)} candidates"
+        )
         try:
             new_candidates = []
             cached_candidates = self.matching_task.get_cached_candidates()
@@ -148,7 +144,18 @@ class CandidateButler:
                     new_candidates.append(candidate)
 
             # Add the new candidates for this source attribute
-            new_candidates.extend(candidates)
+            new_candidates.extend(
+                [
+                    {
+                        "sourceColumn": candidate["sourceColumn"],
+                        "targetColumn": candidate["targetColumn"],
+                        "score": candidate["score"],
+                        "matcher": "agent",
+                        "status": "idle",
+                    }
+                    for candidate in candidates
+                ]
+            )
 
             self.matching_task.set_cached_candidates(new_candidates)
             logger.info(
@@ -172,6 +179,9 @@ class CandidateButler:
         Returns:
             bool: Success status of the operation.
         """
+        logger.info(
+            f"🧰Tool called: prune_candidates for {source_attribute} removing {len(target_attributes)} targets"
+        )
         try:
             new_candidates = []
             cached_candidates = self.matching_task.get_cached_candidates()
@@ -195,33 +205,30 @@ class CandidateButler:
             logger.error(f"Failed to delete candidates: {str(e)}")
             return False
 
-    def search_candidates(
-        self,
-        source_column: Optional[str],
-        target_column: Optional[str],
-        top_k: int = 20,
+    def source_candidates_append(
+        self, source_attribute: str, candidates: List[Dict[str, Any]]
     ):
         """
-        Search for biomedical attribute mappings with optional filtering.
+        Add domain-knowledge suggested mappings for a biomedical attribute.
+
         Args:
-            source_column (Optional[str]): Source biomedical attribute.
-            target_column (Optional[str]): Target biomedical attribute.
-            top_k (int): Maximum number of results to return.
+            source_attribute (str): The source biomedical attribute.
+            candidates (List[Dict[str, Any]]): New candidates to set.
         Returns:
-            List[Dict[str, Any]]: Ranked potential attribute mappings.
+            bool: Success status of the operation.
         """
-        candidates = self.matching_task.get_cached_candidates()
-        if source_column is not None:
-            candidates = [
-                candidate
-                for candidate in candidates
-                if candidate["sourceColumn"] == source_column
-            ]
-        if target_column is not None:
-            candidates = [
-                candidate
-                for candidate in candidates
-                if candidate["targetColumn"] == target_column
-            ]
-        candidates = sorted(candidates, key=lambda x: x["score"], reverse=True)
-        return candidates[:top_k]
+        logger.info(
+            f"🧰Tool called: append_candidates for {source_attribute} with {len(candidates)} new candidates"
+        )
+        try:
+            self.matching_task.append_candidates_from_agent(
+                source_attribute, candidates
+            )
+            logger.info(
+                f"[CandidateButler] Appended {len(candidates)} candidates for "
+                f"source attribute: {source_attribute}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to append candidates: {str(e)}")
+            return False

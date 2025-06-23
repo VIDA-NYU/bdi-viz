@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import threading
 from uuid import uuid4
 
 import pandas as pd
@@ -67,6 +68,19 @@ def create_app() -> Flask:
 app = create_app()
 celery = app.extensions["celery"]
 
+
+_MEMORY_RETRIEVER = None
+
+
+def get_memory_retriever():
+    global _MEMORY_RETRIEVER
+    if _MEMORY_RETRIEVER is None:
+        from .langchain.memory import get_memory_retriever
+
+        _MEMORY_RETRIEVER = get_memory_retriever()
+    return _MEMORY_RETRIEVER
+
+
 # Lazy load the agent only when needed
 _AGENT = None
 
@@ -76,8 +90,20 @@ def get_agent():
     if _AGENT is None:
         from .langchain.agent import get_agent
 
-        _AGENT = get_agent()
+        _AGENT = get_agent(get_memory_retriever())
     return _AGENT
+
+
+_LANGGRAPH_AGENT = None
+
+
+def get_langgraph_agent():
+    global _LANGGRAPH_AGENT
+    if _LANGGRAPH_AGENT is None:
+        from .langgraph.langgraph import get_langgraph_agent
+
+        _LANGGRAPH_AGENT = get_langgraph_agent(get_memory_retriever())
+    return _LANGGRAPH_AGENT
 
 
 @celery.task(bind=True)
@@ -221,7 +247,14 @@ def get_results():
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
         _ = matching_task.get_candidates()
-        # get_agent().remember_candidates(candidates)
+        # AGENT.remember_candidates(candidates)
+        if os.path.exists(".target.json"):
+            target_json = json.load(open(".target.json", "r"))
+            # Start the ontology remembering process asynchronously
+            agent = get_agent()
+            threading.Thread(
+                target=agent.remember_ontology, args=(target_json,)
+            ).start()
 
     results = matching_task.to_frontend_json()
 
@@ -519,28 +552,29 @@ def agent_explanation():
     return response
 
 
-@app.route("/api/agent/value-mapping", methods=["POST"])
-def agent_suggest_value_mapping():
+@app.route("/api/agent/explore", methods=["POST"])
+def agent_explore():
     session = extract_session_name(request)
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     data = request.json
+    query = data["query"]
+    candidate = data["candidate"]
 
-    source_col = data["sourceColumn"]
-    target_col = data["targetColumn"]
+    source_col = candidate["sourceColumn"]
+    target_col = candidate["targetColumn"]
     source_values = matching_task.get_source_unique_values(source_col)
     target_values = matching_task.get_target_unique_values(target_col)
+    candidate = {
+        "sourceColumn": source_col,
+        "targetColumn": target_col,
+        "sourceValues": source_values,
+        "targetValues": target_values,
+    }
 
-    agent = get_agent()
-    response = agent.suggest_value_mapping(
-        {
-            "sourceColumn": source_col,
-            "targetColumn": target_col,
-            "sourceValues": source_values,
-            "targetValues": target_values,
-        }
-    )
-    response = response.model_dump()
+    agent = get_langgraph_agent()
+    response = agent.invoke(query, source_col, target_col)
+    app.logger.critical(f"Response: {response}")
 
     return response
 
