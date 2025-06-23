@@ -144,7 +144,18 @@ class CandidateTools:
                     new_candidates.append(candidate)
 
             # Add the new candidates for this source attribute
-            new_candidates.extend(candidates)
+            new_candidates.extend(
+                [
+                    {
+                        "sourceColumn": candidate["sourceColumn"],
+                        "targetColumn": candidate["targetColumn"],
+                        "score": candidate["score"],
+                        "matcher": "agent",
+                        "status": "idle",
+                    }
+                    for candidate in candidates
+                ]
+            )
 
             self.matching_task.set_cached_candidates(new_candidates)
             logger.info(

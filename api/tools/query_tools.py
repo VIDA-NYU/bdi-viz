@@ -50,10 +50,23 @@ class QueryTools:
             """.strip(),
         )
 
+        self.read_source_values_tool = StructuredTool.from_function(
+            func=self._read_source_values,
+            name="read_source_values",
+            description="""
+            Read the values for a specific source attribute.
+            Args:
+                source_attribute (str): The source biomedical attribute to read.
+            Returns:
+                List[str]: All values for the source attribute.
+            """.strip(),
+        )
+
     def get_tools(self) -> List[StructuredTool]:
         logger.info("Initializing query tools")
         return [
             self.read_source_candidates_tool,
+            self.read_source_values_tool,
             self.read_target_values_tool,
             self.read_target_description_tool,
         ]
@@ -68,11 +81,36 @@ class QueryTools:
             List[Dict[str, Any]]: All candidates for the source attribute.
         """
         candidates = self.matching_task.get_cached_candidates()
-        results = [
+        # Filter candidates by source attribute and group by sourceColumn and targetColumn
+        filtered_candidates = [
             candidate
             for candidate in candidates
             if candidate["sourceColumn"] == source_attribute
         ]
+
+        # Group by sourceColumn and targetColumn, averaging scores for multiple matchers
+        grouped_candidates = {}
+        for candidate in filtered_candidates:
+            key = (candidate["sourceColumn"], candidate["targetColumn"])
+            if key not in grouped_candidates:
+                grouped_candidates[key] = {
+                    "sourceColumn": candidate["sourceColumn"],
+                    "targetColumn": candidate["targetColumn"],
+                    "scores": [],
+                }
+            grouped_candidates[key]["scores"].append(candidate["score"])
+
+        # Calculate average scores and create final results
+        results = []
+        for key, group in grouped_candidates.items():
+            avg_score = sum(group["scores"]) / len(group["scores"])
+            results.append(
+                {
+                    "sourceColumn": group["sourceColumn"],
+                    "targetColumn": group["targetColumn"],
+                    "score": avg_score,
+                }
+            )
         logger.info(
             f"🧰Tool called: read_source_candidates for {source_attribute} "
             f"found {len(results)} candidates"
@@ -99,6 +137,30 @@ class QueryTools:
             results = self.matching_task.get_target_unique_values(target_attribute)
         logger.info(
             f"🧰Tool called: read_target_values for {target_attribute} "
+            f"found {len(results)} values"
+        )
+        return results
+
+    def _read_source_values(self, source_attribute: str) -> List[str]:
+        """
+        Read the values for a specific source attribute.
+
+        Args:
+            source_attribute (str): The source biomedical attribute to read.
+        Returns:
+            List[str]: All values for the source attribute.
+        """
+        source_properties = load_property(source_attribute)
+        if source_properties is not None:
+            if "enum" in source_properties:
+                source_values = source_properties["enum"]
+                if len(source_values) >= 20:
+                    source_values = random.sample(source_values, 20)
+                results = source_values
+        else:
+            results = self.matching_task.get_source_unique_values(source_attribute)
+        logger.info(
+            f"🧰Tool called: read_source_values for {source_attribute} "
             f"found {len(results)} values"
         )
         return results

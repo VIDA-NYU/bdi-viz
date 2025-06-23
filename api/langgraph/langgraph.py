@@ -1,12 +1,13 @@
-import os
-from dotenv import load_dotenv
 import concurrent.futures
 import json
 import logging
+import os
+import time
 import traceback
 from enum import Enum
-from typing import Any, Callable, Dict, Hashable, List, Optional, Set
+from typing import Any, Callable, Dict, Hashable, List, Optional
 
+from dotenv import load_dotenv
 from langchain.output_parsers import PydanticOutputParser
 from langchain.tools import BaseTool
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -14,8 +15,8 @@ from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import Graph, StateGraph
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, Field
 from portkey_ai import createHeaders
+from pydantic import BaseModel, Field
 
 from ..langchain.memory import MemoryRetriver
 from ..tools.candidate_tools import CandidateTools
@@ -30,8 +31,6 @@ class Candidate(BaseModel):
     sourceColumn: str = Field(description="The source column of the candidate")
     targetColumn: str = Field(description="The target column of the candidate")
     score: float = Field(description="The score of the candidate")
-    matcher: str = Field(default="agent", description="The matcher of the candidate")
-    status: str = Field(default="idle", description="The status of the candidate")
 
 
 class AgentState(BaseModel):
@@ -72,21 +71,28 @@ class AgentType(str, Enum):
 class LangGraphAgent:
     def __init__(self, memory_retriever: MemoryRetriver, session_id: str = "default"):
         portkey_headers = createHeaders(
-            api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
-            virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+            api_key=os.getenv("PORTKEY_API_KEY"),
+            virtual_key=os.getenv("PROVIDER_API_KEY"),
         )
+
+        # Configurable timeout from environment or default to 1000 seconds
+        llm_timeout = int(os.getenv("LLM_TIMEOUT", "1000"))
 
         self.master_llm = ChatOpenAI(
             model="gemini-2.5-pro",
-            temperature=0.2,
+            temperature=0,
             base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
             default_headers=portkey_headers,
+            timeout=llm_timeout,
+            max_retries=3,
         )
         self.worker_llm = ChatOpenAI(
-            model="gemini-2.5-pro",
-            temperature=0.2,
+            model="gemini-2.5-flash",
+            temperature=0,
             base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
             default_headers=portkey_headers,
+            timeout=llm_timeout,
+            max_retries=3,
         )
         self.memory_retriever = memory_retriever
         self.session_id = session_id
@@ -142,7 +148,7 @@ class LangGraphAgent:
             self._create_agent_node(
                 self._supervisor_prompt,
                 QueryTools(self.session_id).get_tools(),
-                self.master_llm,
+                self.worker_llm,
             ),
         )
 
@@ -160,7 +166,7 @@ class LangGraphAgent:
             self._create_agent_node(
                 self._candidate_prompt,
                 CandidateTools(self.session_id).get_tools(),
-                self.master_llm,
+                self.worker_llm,
             ),
         )
 
@@ -211,7 +217,8 @@ class LangGraphAgent:
                 prompt, tools, AgentState, llm, self.memory_retriever
             )
             logger.critical(
-                f"\nState after agent execution:\n{self._pretty_print_state(agent_state)}"
+                f"\nState after agent execution:\n"
+                f"{self._pretty_print_state(agent_state)}"
             )
             return agent_state
 
@@ -228,20 +235,18 @@ class LangGraphAgent:
         INTENT DETECTION:
         1. If the user wants information or explanation about the source or target attribute (e.g., "What does the target mean?", "Explain the target attribute", "Show me the description of X"), update the `target_description` (or `source_values`/`target_values` as appropriate) using the tools, add an explanatory message, set `next_agents` to ["candidate"].
         2. If the user wants to search for candidates related to a concept (e.g., "Find candidates related to biopsy"), update `source_column` and `source_values` using the tools, set `next_agents` to ["ontology"].
-        3. If the user wants to manipulate candidates (e.g., accept/reject/prune/update), set `next_agents` to ["candidate"].
-        4. For any other intent, update the state and route as appropriate.
+        3. If the user wants to manipulate candidates (e.g., accept/reject/prune/update, "Rerank candidates", "Sort candidates", "Filter candidates"), set `next_agents` to ["candidate"].
+        4. If the user asks a general knowledge question not directly tied to candidate management or specific dataset attributes (e.g., "What is metastasis?", "Explain the meaning of BRCA1"), do **not** call any tools. Provide a direct answer in the `message` field and set `next_agents` to [].
+        5. For any other intent, update the state and route as appropriate.
         
         TODOS:
         - Detect the user's intent and update the state fields accordingly.
         - Only call tools if needed for the intent (e.g., for explanations or candidate search).
+            - Call read_source_candidates tool and pass the result as "candidates" if the user wants to manipulate candidates.
+            - Call read_source_values tool and pass the result as "source_values" if the user wants to search for additional candidates.
+            - Call read_target_values tool and pass the result as "target_values" or "target_description" based on the user's intent (e.g. they want information or explanation).
         - Add a message explaining your reasoning and what you updated.
         - Set the next_agents list to the correct next agent(s).
-        - Do not call candidate manipulation tools unless the user explicitly requests manipulation.
-        
-        EXAMPLES:
-        - If the user asks for an explanation of the target attribute, update target_description and set next_agents to ["candidate"].
-        - If the user asks to search for candidates related to a concept, update source_column/source_values, set next_agents to ["ontology"].
-        - If the user asks to accept/reject/prune candidates, set next_agents to ["candidate"].
         """
 
     def _ontology_prompt(self) -> str:
@@ -281,6 +286,7 @@ class LangGraphAgent:
         New candidates: {candidates_to_append}
         
         INTENT DETECTION:
+        0. If the user's query is a generic knowledge question unrelated to candidate management or dataset attributes, simply answer the question in the `message` field without calling any tools, keep other state fields unchanged, and set `next_agents` to [].
         1. If the user's intent is only to get information or explanation (e.g., about the target attribute or candidates), do NOT call any tools. Just update the message with an explanation and return the state as is.
         2. If the user's intent is to append/search for new candidates, call append_candidates with candidates_to_append, update the candidates list, and add a message.
         3. If the user's intent is to accept/reject/prune/update candidates, call the appropriate tool(s) and update the candidates list and message.
@@ -317,16 +323,47 @@ class LangGraphAgent:
 
         agent_executor = create_react_agent(llm, tools, store=store)
 
-        try:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(
-                    self._stream_responses, agent_executor, prompt, self.session_id
+        # Retry logic with exponential backoff for handling gateway timeouts
+        max_retries = 3
+        base_delay = 1  # seconds
+
+        for attempt in range(max_retries):
+            try:
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        self._stream_responses, agent_executor, prompt, self.session_id
+                    )
+                    # Reduced timeout to 2 minutes for better error handling
+                    responses = future.result(timeout=120)
+                    break  # Success, exit retry loop
+            except concurrent.futures.TimeoutError:
+                logger.warning(
+                    f"Request timeout on attempt {attempt + 1}/{max_retries}"
                 )
-                responses = future.result(timeout=300000)
-        except Exception as e:
-            logger.error(f"Agent execution error: {e}\nPrompt was:\n{prompt}")
-            logger.error(traceback.format_exc())
-            return self._init_state()
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)  # Exponential backoff
+                    logger.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.error("All retry attempts exhausted due to timeouts")
+                    return self._init_state()
+            except Exception as e:
+                logger.error(f"Agent execution error: {e}\nPrompt was:\n{prompt}")
+                logger.error(traceback.format_exc())
+
+                # Handle specific gateway timeout errors
+                if "504" in str(e) or "Gateway Time-out" in str(e):
+                    logger.warning(
+                        f"Gateway timeout on attempt {attempt + 1}/{max_retries}"
+                    )
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2**attempt)
+                        logger.info(f"Retrying in {delay} seconds...")
+                        time.sleep(delay)
+                        continue
+
+                return self._init_state()
 
         if not responses:
             logger.error(f"Agent returned no responses. Prompt was:\n{prompt}")

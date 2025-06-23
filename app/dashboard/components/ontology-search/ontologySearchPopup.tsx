@@ -6,10 +6,9 @@ import SettingsGlobalContext from '@/app/lib/settings/settings-context';
 interface OntologySearchPopupProps {
     selectedCandidate: Candidate;
     callback: (candidates: Candidate[]) => void;
-    terminalogiesCallback: (terminologies: RelevantKnowledge[]) => void;
 }
 
-const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({ selectedCandidate, callback, terminalogiesCallback }) => {
+const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({ selectedCandidate, callback }) => {
     const [query, setQuery] = useState<string>('');
     const [agentState, setAgentState] = useState<AgentState | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
@@ -33,11 +32,10 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({ selectedCandi
     const handleSearch = async () => {
         setLoading(true);
         const result = await agentSearchOntology(query, selectedCandidate);
-        setAgentState(result);
-        setLoading(false);
-
-        if (result.candidates) callback(result.candidates);
-
+        if (result) {
+            setAgentState(result);
+            if (result.candidates) callback(result.candidates);
+        }
         setLoading(false);
     };
 
