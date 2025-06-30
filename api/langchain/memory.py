@@ -464,12 +464,16 @@ Explanations: {formatted_explanations}
         return "I have remembered that."
 
     def search_user_memory(self, query: str, limit: int = 5) -> List[str]:
+        filter = {"namespace": "user_memory"}
+        if self.user_memory_count == 0:
+            logger.info("🧰Tool result: search_user_memory, memory is empty...")
+            return []
+        elif self.user_memory_count < 5:
+            limit = self.user_memory_count
+
         logger.critical(
             f"🧰Tool called: search_user_memory with query='{query}', " f"limit={limit}"
         )
-        filter = {"namespace": "user_memory"}
-        if self.user_memory_count < 5:
-            limit = self.user_memory_count
         results = self._search_vector_store(query, limit, filter)
         logger.info(
             f"🧰Tool result: search_user_memory results keys: {[doc.page_content for doc in results]}"

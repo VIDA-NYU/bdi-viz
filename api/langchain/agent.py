@@ -513,6 +513,12 @@ def get_agent(memory_retriever):
         portkey_headers = createHeaders(
             api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
             virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+            config={
+                "retry": {"attempts": 3},
+                "cache": {"mode": "simple"},
+                "input_guardrails": ["pg-bdiviz-09d75c"],
+                "output_guardrails": ["pg-bdiviz-09d75c"],
+            },
         )
         llm_model = ChatOpenAI(
             model="gemini-2.5-flash",

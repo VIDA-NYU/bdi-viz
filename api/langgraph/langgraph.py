@@ -73,6 +73,12 @@ class LangGraphAgent:
         portkey_headers = createHeaders(
             api_key=os.getenv("PORTKEY_API_KEY"),
             virtual_key=os.getenv("PROVIDER_API_KEY"),
+            config={
+                "retry": {"attempts": 3},
+                "cache": {"mode": "simple"},
+                "input_guardrails": ["pg-bdiviz-09d75c"],
+                "output_guardrails": ["pg-bdiviz-09d75c"],
+            },
         )
 
         # Configurable timeout from environment or default to 1000 seconds
