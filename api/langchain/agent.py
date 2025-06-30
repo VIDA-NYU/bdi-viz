@@ -111,20 +111,22 @@ class Agent:
 
         return response
 
-    def explain(self, candidate: Dict[str, Any]) -> CandidateExplanation:
+    def explain(
+        self, candidate: Dict[str, Any], with_memory=True
+    ) -> CandidateExplanation:
         logger.info(f"[Agent] Explaining the candidate...")
         # logger.info(f"{diagnose}")
 
-        # search for related false negative / false positive candidates
-        related_matches = self.store.search_matches(candidate["sourceColumn"], limit=3)
-        related_mismatches = self.store.search_mismatches(
-            f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        )
+        # # search for related false negative / false positive candidates
+        # related_matches = self.store.search_matches(candidate["sourceColumn"], limit=3)
+        # related_mismatches = self.store.search_mismatches(
+        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
+        # )
 
-        # search for related explanations
-        related_explanations = self.store.search_explanations(
-            f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        )
+        # # search for related explanations
+        # related_explanations = self.store.search_explanations(
+        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
+        # )
 
         target_description = load_property(candidate["targetColumn"])
         target_values = candidate["targetValues"]
@@ -149,26 +151,37 @@ class Agent:
     - Source Sample Values: {candidate["sourceValues"]}
     - Target Sample Values: {target_values}
     - Target Description: {target_description}
+    """
 
-    Historical Data:
-    - Related Matches: {related_matches}
-    - Related Mismatches: {related_mismatches}
-    - Related Explanations: {related_explanations}
-
-    Instructions:
-    1. Review the operation details alongside the historical data.
+        instructions_with_memory = """
+    1. Review the operation details and use `recall_memory` to get more context if needed.
     2. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
     3. Conclude if the current candidate is a valid match based on:
         a. Your explanations,
         b. Similarity between the attribute names,
-        c. Consistency of the sample values, and descriptions provide
-        d. The history of false positives and negatives.
+        c. Consistency of the sample values, and descriptions provided,
+        d. The history of false positives and negatives,
+        e. The context from `recall_memory`.
     4. Include any additional context or keywords that might support or contradict the current mapping.
-        """
+    """
+
+        instructions_without_memory = """
+    1. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
+    2. Conclude if the current candidate is a valid match based on:
+        a. Your explanations,
+        b. Similarity between the attribute names,
+        c. Consistency of the sample values, and descriptions provided,
+        d. The history of false positives and negatives.
+    3. Include any additional context or keywords that might support or contradict the current mapping.
+    """
+
+        prompt += (
+            instructions_with_memory if with_memory else instructions_without_memory
+        )
         logger.info(f"[EXPLAIN] Prompt: {prompt}")
         response = self.invoke(
             prompt=prompt,
-            tools=[],
+            tools=[self.store.recall_memory_tool] if with_memory else [],
             output_structure=CandidateExplanation,
         )
         return response

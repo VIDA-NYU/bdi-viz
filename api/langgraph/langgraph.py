@@ -147,25 +147,32 @@ class LangGraphAgent:
             "supervisor",
             self._create_agent_node(
                 self._supervisor_prompt,
-                QueryTools(self.session_id).get_tools(),
+                QueryTools(self.session_id, self.memory_retriever).get_tools(),
                 self.worker_llm,
             ),
         )
 
+        ontology_agent_tools = QueryTools(
+            self.session_id, self.memory_retriever
+        ).get_tools() + [self.memory_retriever.search_ontology_tool]
         workflow.add_node(
             "ontology_agent",
             self._create_agent_node(
                 self._ontology_prompt,
-                [self.memory_retriever.search_ontology_tool],
+                ontology_agent_tools,
                 self.master_llm,
             ),
         )
 
+        candidate_agent_tools = (
+            QueryTools(self.session_id, self.memory_retriever).get_tools()
+            + CandidateTools(self.session_id).get_tools()
+        )
         workflow.add_node(
             "candidate_agent",
             self._create_agent_node(
                 self._candidate_prompt,
-                CandidateTools(self.session_id).get_tools(),
+                candidate_agent_tools,
                 self.worker_llm,
             ),
         )
@@ -200,7 +207,13 @@ class LangGraphAgent:
         def agent_node(state: AgentState) -> AgentState:
             # Get the prompt template string first
             template = prompt_template()
-            # Then format it with the state values
+            # Format conversation history for context
+            conversation_history = (
+                "\n".join(state.message)
+                if state.message
+                else "No previous conversation"
+            )
+            # Then format it with the state values including full conversation
             prompt = template.format(
                 query=state.query,
                 source_column=state.source_column,
@@ -209,6 +222,7 @@ class LangGraphAgent:
                 target_values=state.target_values,
                 target_description=state.target_description,
                 message=state.message,
+                conversation_history=conversation_history,
                 candidates=state.candidates,
                 candidates_to_append=state.candidates_to_append,
             )
@@ -216,89 +230,116 @@ class LangGraphAgent:
             agent_state = self._invoke(
                 prompt, tools, AgentState, llm, self.memory_retriever
             )
-            logger.critical(
-                f"\nState after agent execution:\n"
-                f"{self._pretty_print_state(agent_state)}"
-            )
             return agent_state
 
         return agent_node
 
     def _supervisor_prompt(self) -> str:
         return """
-        You are a supervisor agent. Your job is to analyze the user's query and determine their intent, then update the state accordingly and route to the correct agent.
+        You are a supervisor agent. Read source/target information, handle user 
+        memory requests, answer queries, and route to the correct agent.
+
+        CURRENT REQUEST: {query}
+        Source: {source_column} | Target: {target_column}
         
-        User Query: {query}
-        Source attribute: {source_column}
-        Target attribute: {target_column}
-        
-        INTENT DETECTION:
-        1. If the user wants information or explanation about the source or target attribute (e.g., "What does the target mean?", "Explain the target attribute", "Show me the description of X"), update the `target_description` (or `source_values`/`target_values` as appropriate) using the tools, add an explanatory message, set `next_agents` to ["candidate"].
-        2. If the user wants to search for candidates related to a concept (e.g., "Find candidates related to biopsy"), update `source_column` and `source_values` using the tools, set `next_agents` to ["ontology"].
-        3. If the user wants to manipulate candidates (e.g., accept/reject/prune/update, "Rerank candidates", "Sort candidates", "Filter candidates"), set `next_agents` to ["candidate"].
-        4. If the user asks a general knowledge question not directly tied to candidate management or specific dataset attributes (e.g., "What is metastasis?", "Explain the meaning of BRCA1"), do **not** call any tools. Provide a direct answer in the `message` field and set `next_agents` to [].
-        5. For any other intent, update the state and route as appropriate.
-        
-        TODOS:
-        - Detect the user's intent and update the state fields accordingly.
-        - Only call tools if needed for the intent (e.g., for explanations or candidate search).
-            - Call read_source_candidates tool and pass the result as "candidates" if the user wants to manipulate candidates.
-            - Call read_source_values tool and pass the result as "source_values" if the user wants to search for additional candidates.
-            - Call read_target_values tool and pass the result as "target_values" or "target_description" based on the user's intent (e.g. they want information or explanation).
-        - Add a message explaining your reasoning and what you updated.
-        - Set the next_agents list to the correct next agent(s).
+        CONVERSATION HISTORY:
+        {conversation_history}
+
+        RESPONSIBILITIES:
+        1. **Context awareness**: Use conversation history to understand follow-up
+           questions, clarifications, and user intent evolution.
+        2. **Read and pass information**: Use tools to read source/target data.
+        3. **Memory management**: Use `remember_this` for storing information.
+        4. **Query answering**: Use `recall_memory` for user questions.
+        5. **Smart routing**: Route based on current query + conversation context.
+
+        ROUTING LOGIC (consider conversation context):
+        - Search new candidates → read source info, route to ["ontology"]
+        - Manipulate existing candidates → read candidates, route to ["candidate"] 
+        - Store information → use `remember_this`, set `next_agents` = []
+        - Query stored info → use `recall_memory`, answer, set `next_agents` = []
+        - Follow-up/clarification → use conversation history to understand intent
+        - Unclear → ask clarification, set `next_agents` = []
+
+        Use conversation history to make smarter routing decisions and provide
+        better context to downstream agents.
         """
 
     def _ontology_prompt(self) -> str:
         return """
-        You are an ontology agent. Your job is to search for relevant candidates based on the user's intent and the current state.
+        You are an ontology agent. Search for relevant candidates using 
+        conversation context, metadata, and source information.
+
+        CURRENT REQUEST: {query}
+        Source: {source_column} | Values: {source_values}
         
-        User Input: {query}
-        Source attribute: {source_column}
-        Source values: {source_values}
-        
-        INTENT DETECTION:
-        1. If the user's intent is to search for candidates, use the search_ontology tool with as much detail as possible (source_column, source_values, etc.), append the results to candidates_to_append, and set next_agents to ["candidate"].
-        2. Make sure the candidates searched are scored based on their correlation to the source attribute unless the user specifies otherwise, use your best judgement based on the source attribute and values for scoring.
-        3. For any other intent, update the state and pass to the next agent as appropriate.
-        
-        TODOS:
-        - Detect the user's intent from the state and query.
-        - Only call tools if the intent is to search for candidates.
-        - If only explanation is needed, do not call tools, just update the message and pass the state.
-        - If searching, use all available information to make the search precise.
-        - Update candidates_to_append with new candidates if found.
-        - Add a message explaining your reasoning and what you updated.
-        - Set next_agents to ["candidate"].
+        CONVERSATION HISTORY:
+        {conversation_history}
+
+        INTELLIGENT WORKFLOW:
+        1. **Analyze conversation**: Review history to understand user's evolving
+           needs, previous searches, refinements, and clarifications.
+           
+        2. **Gather context**: Use `recall_memory` to retrieve relevant metadata
+           (papers, data types, domain knowledge) mentioned in conversation.
+           
+        3. **Smart search**: Use `search_ontology` with:
+           - Current source attribute and values
+           - Context from conversation history
+           - Retrieved metadata
+           - Understanding of user's refined requirements
+           
+        4. **Contextual scoring**: Score candidates based on:
+           - Relevance to source attribute
+           - Alignment with conversation context
+           - User's expressed preferences from history
+           
+        5. **Return results**: Append to `candidates_to_append`, route to 
+           ["candidate"] for further processing.
+
+        Use conversation history to provide more targeted and relevant candidates
+        that align with the user's evolving understanding and requirements.
         """
 
     def _candidate_prompt(self) -> str:
         return """
-        You are a candidate management agent. Your job is to handle candidate explanations and manipulations based on the user's intent and the current state.
-        
-        Manage candidates for query: {query}
-        Source attribute: {source_column}
-        Target attribute: {target_column}
-        Source values: {source_values}
-        Target values: {target_values}
+        You are a candidate management agent. Handle all candidate operations
+        with full conversation context awareness.
+
+        CURRENT REQUEST: {query}
+        Source: {source_column} | Target: {target_column}
+        Source values: {source_values} | Target values: {target_values}
         Target description: {target_description}
-        Current candidates: {candidates}
-        New candidates: {candidates_to_append}
+        Current: {candidates} | New: {candidates_to_append}
         
-        INTENT DETECTION:
-        0. If the user's query is a generic knowledge question unrelated to candidate management or dataset attributes, simply answer the question in the `message` field without calling any tools, keep other state fields unchanged, and set `next_agents` to [].
-        1. If the user's intent is only to get information or explanation (e.g., about the target attribute or candidates), do NOT call any tools. Just update the message with an explanation and return the state as is.
-        2. If the user's intent is to append/search for new candidates, call append_candidates with candidates_to_append, update the candidates list, and add a message.
-        3. If the user's intent is to accept/reject/prune/update candidates, call the appropriate tool(s) and update the candidates list and message.
-        4. For any other intent, update the state and message as appropriate.
-        
-        TODOS:
-        - Detect the user's intent from the state and query.
-        - **Infer that if the queried or existing candidates should be rescored based on their correlation to the source attribute and values, use your best judgement.
-        - Only call tools if the intent is to manipulate or append candidates.
-        - If only explanation is needed, do not call tools, just update the message and return the state.
-        - Add a message explaining your reasoning and what you updated.
-        - Set next_agents to [] (end of workflow).
+        CONVERSATION HISTORY:
+        {conversation_history}
+
+        INTELLIGENT CAPABILITIES:
+        1. **Context-aware decisions**: Use conversation history to understand:
+           - User's evolving preferences and criteria
+           - Previous explanations and clarifications given
+           - Patterns in user's acceptance/rejection decisions
+           - Follow-up questions and refinements
+           
+        2. **Smart operations**:
+           - Append new candidates with `append_candidates`
+           - Accept/reject/prune based on conversation patterns
+           - Read missing info with appropriate tools as needed
+           
+        3. **Contextual reranking**: Calculate scores considering:
+           - Conversation history and user feedback patterns
+           - Recalled metadata (use `recall_memory`)
+           - Source/target attributes and user-specified criteria
+           - Previous scoring rationales and adjustments
+           
+        4. **Informed explanations**: Provide explanations that:
+           - Reference previous conversation points
+           - Build on earlier explanations
+           - Address follow-up questions intelligently
+
+        Use conversation history to make smarter decisions, provide better
+        explanations, and anticipate user needs based on interaction patterns.
         """
 
     def _final_node(self, state: AgentState) -> AgentState:
@@ -393,15 +434,32 @@ class LangGraphAgent:
         query: str,
         source_column: Optional[str] = None,
         target_column: Optional[str] = None,
+        reset: bool = False,
     ) -> Dict[str, Any]:
-        """Invoke the LangGraph workflow."""
-        self._state = self._init_state()
+        """Invoke the LangGraph workflow.
+
+        This method maintains conversation context across multiple calls, similar to
+        ChatGPT sessions. To start a fresh session, pass ``reset=True``.
+        """
+
+        # Start a new session only when explicitly requested or on first run
+        if reset or self._state is None:
+            self._state = self._init_state()
+
+        # Update (but do not overwrite unless provided) the tracked attributes
         self._state.query = query
-        self._state.source_column = source_column
-        self._state.target_column = target_column
+        if source_column is not None:
+            self._state.source_column = source_column
+        if target_column is not None:
+            self._state.target_column = target_column
+
+        # Keep a simple running log of the conversation
+        if query:
+            self._state.message.append(f"USER: {query}")
 
         final_state = self.graph.invoke(self._state.model_dump())
-        logger.critical(f"\nFinal state:\n{self._pretty_print_state(final_state)}")
+
+        # Persist the updated state for the next turn
         self._state = AgentState(**final_state)
 
         return self._state.model_dump()
