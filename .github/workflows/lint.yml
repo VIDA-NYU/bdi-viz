@@ -1,0 +1,54 @@
+name: Lint & Format Check
+
+on: [push, pull_request]
+
+jobs:
+  python-lint:
+    name: Python Lint (ruff + black)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./api
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install black
+
+      - name: Run black with reviewdog
+        uses: reviewdog/action-black@v3
+        with:
+          github_token: ${{ secrets.github_token }}
+          workdir: ./api
+          reporter: github-pr-review
+
+  nextjs-lint:
+    name: Next.js Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run ESLint with reviewdog
+        uses: reviewdog/action-eslint@v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          eslint_flags: '--ext .js,.jsx,.ts,.tsx .'
+          reporter: github-pr-review
+          fail_level: error
