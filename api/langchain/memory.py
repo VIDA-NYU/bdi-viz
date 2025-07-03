@@ -7,6 +7,7 @@ from langchain.tools import StructuredTool
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.store.memory import InMemoryStore
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -117,6 +118,11 @@ class MemoryRetriver:
         )
         self.store = InMemoryStore()  # Keep for backward compatibility
         self.user_memory_count = 0
+
+        # Initialize text splitter for user memory
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=100, chunk_overlap=20, length_function=len
+        )
 
         # Handle existing chroma_db directory more gracefully
         if os.path.exists("./chroma_db"):
@@ -449,34 +455,43 @@ Explanations: {formatted_explanations}
     def put_user_memory(self, content: str) -> str:
         """
         Stores a piece of information from the user in the vector store.
+        Uses RecursiveCharacterTextSplitter to split content into chunks.
         """
         import uuid
 
-        key = str(uuid.uuid4())
-        page_content = content
-        metadata = {
-            "namespace": "user_memory",
-            "original_content": content,
-        }
-        self._add_vector_store(key, page_content, metadata)
-        logger.info(f"🧰Tool result: put_user_memory with key={key}")
-        self.user_memory_count += 1
-        return "I have remembered that."
+        # Split content into chunks using RecursiveCharacterTextSplitter
+        chunks = self.text_splitter.split_text(content)
+        content_uuid = str(uuid.uuid4())
+        # Store each chunk with a unique key
+        for i, chunk in enumerate(chunks):
+            chunk_key = f"{content_uuid}_chunk_{i}"
+            metadata = {
+                "namespace": "user_memory",
+                "uuid": content_uuid,
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+                "chunk_content": chunk,
+            }
+            self._add_vector_store(chunk_key, chunk, metadata)
+
+        logger.critical(f"🧰Tool result: put_user_memory with {len(chunks)} chunks")
+        self.user_memory_count += len(chunks)
+        return f"I have remembered that in {len(chunks)} chunks."
 
     def search_user_memory(self, query: str, limit: int = 5) -> List[str]:
         filter = {"namespace": "user_memory"}
         if self.user_memory_count == 0:
             logger.info("🧰Tool result: search_user_memory, memory is empty...")
             return []
-        elif self.user_memory_count < 5:
+        elif self.user_memory_count < limit:
             limit = self.user_memory_count
 
         logger.critical(
             f"🧰Tool called: search_user_memory with query='{query}', " f"limit={limit}"
         )
         results = self._search_vector_store(query, limit, filter)
-        logger.info(
-            f"🧰Tool result: search_user_memory results keys: {[doc.page_content for doc in results]}"
+        logger.critical(
+            f"🧰Tool result: search_user_memory found {len(results)} unique contents"
         )
         return [doc.page_content for doc in results]
 

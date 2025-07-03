@@ -664,42 +664,12 @@ def agent_thumb():
     return {"message": "success"}
 
 
-@app.route("/api/agent/apply", methods=["POST"])
-def agent_apply():
-    session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
-
-    reaction = request.json
-    actions = reaction["actions"]
-    previous_operation = reaction["previousOperation"]
-
-    app.logger.info(f"User Reaction: {reaction}")
-
-    responses = []
-    agent = get_agent()
-    for action in actions:
-        response = agent.apply(session, action, previous_operation)
-        if response:
-            response_obj = response.model_dump()
-            if response_obj["action"] == "undo":
-                user_operation = previous_operation["operation"]
-                candidate = previous_operation["candidate"]
-                references = previous_operation["references"]
-                matching_task.undo_operation(user_operation, candidate, references)
-            responses.append(response_obj)
-
-    return responses
-
-
 @app.route("/api/user-operation/apply", methods=["POST"])
 def user_operation():
     session = extract_session_name(request)
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     operation_objs = request.json["userOperations"]
-    app.logger.info(f"Hahahahahahaah")
-
-    # agent = get_agent()
 
     app.logger.info(f"User operations: {operation_objs}")
     for operation_obj in operation_objs:

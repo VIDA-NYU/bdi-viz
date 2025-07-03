@@ -105,20 +105,9 @@ declare interface AgentAction {
     confidence: number;
 }
 
-declare interface AgentSuggestions {
-    actions: AgentAction[];
-}
-
 declare interface UserReaction {
     actions: AgentAction[];
     previousOperation: UserOperation;
-}
-
-declare interface ActionResponse {
-    status: string;
-    response: string;
-    action: string;
-    targetCandidates: Candidate[];
 }
 
 declare interface Matcher {

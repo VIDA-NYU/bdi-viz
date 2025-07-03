@@ -69,3 +69,6 @@ tmp*/
 
 chroma_db/
 **/chroma_db/
+
+task_state.json
+**/task_state.json
