@@ -2,8 +2,8 @@ import { useState, useCallback, useContext } from 'react';
 import type { Candidate } from '../types';
 import { exportToJson, exportCsv } from '../components/utils/exportJson';
 import { toastify } from "@/app/lib/toastify/toastify-helper";
-import { applyUserOperation, undoUserOperation, redoUserOperation, getExactMatches, getCandidatesResult } from "@/app/lib/heatmap/heatmap-helper";
-import { candidateExplanationRequest, agentSuggestionsRequest, agentActionRequest, agentGetRelatedSources, agentSuggestValueMappings } from "@/app/lib/langchain/agent-helper";
+import { applyUserOperation, undoUserOperation, redoUserOperation, getCandidatesResult } from "@/app/lib/heatmap/heatmap-helper";
+import { candidateExplanationRequest, agentGetRelatedSources } from "@/app/lib/langchain/agent-helper";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 
 type DashboardOperationProps = {
@@ -14,8 +14,6 @@ type DashboardOperationProps = {
     onMatchersUpdate: (matchers: Matcher[]) => void;
     onCandidateSelect: (candidate: Candidate | undefined) => void;
     onExplanation?: (candidate: Candidate, explanation: CandidateExplanation | undefined) => void;
-    onSuggestions?: (suggestions: AgentSuggestions | undefined) => void;
-    onApply?: (actionResponses: ActionResponse[] | undefined) => void;
     onUserOperationsUpdate: (userOperations: UserOperation[]) => void;
     onRelatedOuterSources?: (relatedOuterSources: RelatedSource[]) => void;
 }
@@ -28,7 +26,6 @@ type DashboardOperationState = {
     undo: () => void;
     redo: () => void;
     explain: (candidate?: Candidate) => void;
-    apply: (reaction: UserReaction) => void;
     // filterExactMatches: () => void;
     exportMatchingResults: (format: string) => void;
 }
@@ -46,8 +43,6 @@ export const {
         onMatchersUpdate,
         onCandidateSelect,
         onExplanation,
-        onSuggestions,
-        onApply,
         onUserOperationsUpdate,
         onRelatedOuterSources,
     }: DashboardOperationProps): DashboardOperationState => {
@@ -99,7 +94,7 @@ export const {
 
             setIsLoadingGlobal(false);
             
-        }, [candidates, selectedCandidate, selectedExplanations, onCandidateUpdate, onCandidateSelect, onSuggestions, isLoadingGlobal, setIsLoadingGlobal]);
+        }, [candidates, selectedCandidate, selectedExplanations, onCandidateUpdate, onCandidateSelect, isLoadingGlobal, setIsLoadingGlobal]);
 
         const rejectMatch = useCallback(async () => {
             if (!selectedCandidate) return;
@@ -252,21 +247,6 @@ export const {
             }
         }, [selectedCandidate, onExplanation, isExplaining, setIsExplaining]);
 
-        const apply = useCallback(async (reaction: UserReaction) => {
-            if (isLoadingGlobal) return;
-
-            setIsLoadingGlobal(true);
-
-            if (onApply) {
-                const actionResponses = await agentActionRequest(reaction);
-                if (actionResponses) {
-                    onApply(actionResponses);
-                }
-            }
-
-            setIsLoadingGlobal(false);
-        }, [onApply, isLoadingGlobal, setIsLoadingGlobal]);
-
 
         const exportMatchingResults = (format: string) => {
             console.log("Exporting Matching Results...");
@@ -288,7 +268,6 @@ export const {
             undo,
             redo,
             explain,
-            apply,
             // filterExactMatches,
             exportMatchingResults,
             isExplaining,

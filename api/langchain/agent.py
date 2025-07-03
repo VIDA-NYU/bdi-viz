@@ -20,19 +20,13 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel
 
-from ..tools.candidate_butler import CandidateButler
-from ..tools.rag_researcher import retrieve_from_rag
 from ..tools.source_scraper import scraping_websource
-from ..utils import load_gdc_property, load_property
+from ..utils import load_property
 from .memory import MemoryRetriver
 from .pydantic import (
-    ActionResponse,
-    AgentResponse,
-    AgentSuggestions,
     AttributeProperties,
     CandidateExplanation,
     Ontology,
@@ -70,10 +64,10 @@ class Agent:
     Your role is to assist with schema matching operations and provide responses in a strict JSON schema format.
     Do not include any reasoning, apologies, or explanations in your responses.
 
-    **Criteria for matching attributes:**
+    **CRITERIA FOR MATCHING ATTRIBUTES:**
     1. Attribute names and values do not need to be identical.
     2. Ignore case, special characters, and spaces.
-    3. Attributes should be considered a match if they are semantically similar and their datatype and values are comparable.
+    3. Attributes should be considered a match if they are semantically similar, their datatype and values are comparable, or if the units are convertible.
     4. Approach the task with the mindset of a biomedical expert.
             """,
         ]
@@ -111,20 +105,22 @@ class Agent:
 
         return response
 
-    def explain(self, candidate: Dict[str, Any]) -> CandidateExplanation:
+    def explain(
+        self, candidate: Dict[str, Any], with_memory=True
+    ) -> CandidateExplanation:
         logger.info(f"[Agent] Explaining the candidate...")
         # logger.info(f"{diagnose}")
 
-        # search for related false negative / false positive candidates
-        related_matches = self.store.search_matches(candidate["sourceColumn"], limit=3)
-        related_mismatches = self.store.search_mismatches(
-            f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        )
+        # # search for related false negative / false positive candidates
+        # related_matches = self.store.search_matches(candidate["sourceColumn"], limit=3)
+        # related_mismatches = self.store.search_mismatches(
+        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
+        # )
 
-        # search for related explanations
-        related_explanations = self.store.search_explanations(
-            f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        )
+        # # search for related explanations
+        # related_explanations = self.store.search_explanations(
+        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
+        # )
 
         target_description = load_property(candidate["targetColumn"])
         target_values = candidate["targetValues"]
@@ -149,139 +145,39 @@ class Agent:
     - Source Sample Values: {candidate["sourceValues"]}
     - Target Sample Values: {target_values}
     - Target Description: {target_description}
+    """
 
-    Historical Data:
-    - Related Matches: {related_matches}
-    - Related Mismatches: {related_mismatches}
-    - Related Explanations: {related_explanations}
-
-    Instructions:
-    1. Review the operation details alongside the historical data.
+        instructions_with_memory = """
+    1. Review the operation details and use `recall_memory` to get more context if needed.
     2. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
     3. Conclude if the current candidate is a valid match based on:
         a. Your explanations,
         b. Similarity between the attribute names,
-        c. Consistency of the sample values, and descriptions provide
-        d. The history of false positives and negatives.
+        c. Consistency of the sample values, and descriptions provided,
+        d. The history of false positives and negatives,
+        e. The context from `recall_memory`.
     4. Include any additional context or keywords that might support or contradict the current mapping.
-        """
+    """
+
+        instructions_without_memory = """
+    1. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
+    2. Conclude if the current candidate is a valid match based on:
+        a. Your explanations,
+        b. Similarity between the attribute names,
+        c. Consistency of the sample values, and descriptions provided,
+        d. The history of false positives and negatives.
+    3. Include any additional context or keywords that might support or contradict the current mapping.
+    """
+
+        prompt += (
+            instructions_with_memory if with_memory else instructions_without_memory
+        )
         logger.info(f"[EXPLAIN] Prompt: {prompt}")
         response = self.invoke(
             prompt=prompt,
-            tools=[],
+            tools=[self.store.recall_memory_tool] if with_memory else [],
             output_structure=CandidateExplanation,
         )
-        return response
-
-    def explore_candidates(
-        self, session: str, candidate: Dict[str, Any], query: str
-    ) -> AgentResponse:
-        source_attribute = candidate["sourceColumn"]
-        logger.info(
-            f"[Agent] Exploring candidates for {source_attribute} with query: {query}"
-        )
-        candidate_butler = CandidateButler(session)
-
-        tools = [
-            # Manipulate the existing candidates
-            candidate_butler.read_candidates_tool,
-            candidate_butler.update_candidates_tool,
-            candidate_butler.prune_candidates_tool,
-            candidate_butler.append_candidates_tool,
-            # Search within the target ontology
-            self.store.search_ontology_tool,
-        ]
-
-        prompt = f"""
-        Analyze the user's query and perform the appropriate actions using the available tools.
-        
-        Source Attribute: {source_attribute}
-        User Query: {query}
-        
-        Instructions:
-        1. If the user wants to filter, discard, or remove candidates:
-           - Use read_candidates to retrieve current candidates
-           - Filter based on user criteria
-           - Pass the filtered list to update_candidates to save the filtered list
-        
-        2. If the user wants to explore or find new matches:
-           - Use search_ontology to find relevant target attributes
-           - Consider domain-specific terminology (like AJCC, FIGO, etc.)
-           - Pass the candidates list found by search_ontology to append_candidates
-        
-        3. If the user wants information about specific terminology:
-           - Use search_ontology to find related attributes and their descriptions
-        
-        Respond under AgentResponse schema:
-        - status: success or failure
-        - tool_uses: the tool(s) used
-        - response: the response to the user's query
-        - candidates: the candidates found, empty if you did not manipulate the candidates list
-        - terminologies: the terminologies found, empty if you did not search the ontology
-        """
-
-        logger.info(f"[EXPLORE] Prompt: {prompt}")
-        response = self.invoke(
-            prompt=prompt,
-            tools=tools,
-            output_structure=AgentResponse,
-        )
-        return response
-
-    def make_suggestion(
-        self, explanations: List[Dict[str, Any]], user_operation: Dict[str, Any]
-    ) -> AgentSuggestions:
-        """
-        Generate suggestions based on the user operation and diagnosis.
-
-        Args:
-            explanations (List[Dict[str, Any]]): A list of explanations to consider.
-                [
-                    {
-                        'type': ExplanationType;
-                        'content': string;
-                        'confidence': number;
-                    },
-                    ...
-                ]
-            user_operation (Dict[str, Any]): The user operation to consider.
-        """
-        logger.info(f"[Agent] Making suggestion to the agent...")
-        # logger.info(f"{diagnosis}")
-
-        explanations_str = "\n".join(
-            f"\tDiagnosis: {explanation['content']}, Confidence: {explanation['confidence']}"
-            for explanation in explanations
-        )
-        user_operation_str = f"""
-Operation: {user_operation["operation"]}
-Candidate: {user_operation["candidate"]}
-        """
-
-        prompt = f"""
-User Operation:
-{user_operation_str}
-
-Diagnosis:
-{explanations_str}
-
-**Instructions**:
-    1. Generate 2-3 suggestions based on the user operation and diagnosis:
-        - **undo**: Undo the last action if it seems incorrect.
-        - **prune_candidates**: Suggest pruning candidates based on RAG expertise.
-        - **update_embedder**: Recommend a more accurate model if matchings seem wrong.
-    2. Provide a brief explanation for each suggestion.
-    3. Include a confidence score for each suggestion.
-        """
-
-        logger.info(f"[SUGGESTION] Prompt: {prompt}")
-
-        response = self.invoke(
-            prompt=prompt,
-            tools=[],
-            output_structure=AgentSuggestions,
-        )
-
         return response
 
     def search_for_sources(self, candidate: Dict[str, Any]) -> RelatedSources:
@@ -349,64 +245,6 @@ Diagnosis:
             output_structure=Ontology,
         )
         return response
-
-    def apply(
-        self, session: str, action: Dict[str, Any], previous_operation: Dict[str, Any]
-    ) -> Optional[ActionResponse]:
-        user_operation = previous_operation["operation"]
-        candidate = previous_operation["candidate"]
-        # references = previous_operation["references"]
-
-        candidate_butler = CandidateButler(session)
-
-        source_cluster = candidate_butler.read_source_cluster_details(
-            candidate["sourceColumn"]
-        )
-
-        logger.info(f"[Agent] Applying the action: {action}")
-
-        if action["action"] == "prune_candidates":
-            tools = candidate_butler.get_toolset() + [retrieve_from_rag]
-            prompt = f"""
-You have access to the user's previous operations and the related source column clusters. 
-Your goal is to help prune (remove) certain candidate mappings in the related source columns based on the user's decisions following the instructions below.
-
-**Previous User Operation**:
-Operation: {user_operation}
-Candidate: {candidate}
-
-**Related Source Columns and Their Candidates**:
-{source_cluster}
-
-**Instructions**:
-1. Identify **Related Source Columns and Their Candidates**.
-2. Consult Domain Knowledge (using **retrieve_from_rag**) if any clarifications are needed.
-3. Decide Which Candidates to Prune based on your understanding and the user's previous operations, then compile the candidates after pruning into a **dictionary** like this:
-    [
-        {{"sourceColumn": "source_column_1", "targetColumn": "target_column_1", "score": 0.9, "matcher": "magneto_zs_bp"}},
-        {{"sourceColumn": "source_column_1", "targetColumn": "target_column_15", "score": 0.7, "matcher": "magneto_zs_bp"}},
-        ...
-    ]
-4. Call **update_candidates** with this updated dictionary as the parameter to refine the heatmap.
-                """
-
-            logger.info(f"[ACTION-PRUNE] Prompt: {prompt}")
-            response = self.invoke(
-                prompt=prompt,
-                tools=tools,
-                output_structure=ActionResponse,
-            )
-            return response
-
-        elif action["action"] == "undo":
-            return ActionResponse(
-                status="success",
-                response="Action successfully undone.",
-                action="undo",
-            )
-        else:
-            logger.info(f"[Agent] Applying the action: {action}")
-            return
 
     def remember_fp(self, candidate: Dict[str, Any]) -> None:
         logger.info(f"[Agent] Remembering the false positive...")

@@ -1,10 +1,13 @@
 import logging
+import os
+import shutil
 from typing import Any, Dict, List, Optional
 
 from langchain.tools import StructuredTool
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.store.memory import InMemoryStore
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -27,7 +30,11 @@ FN_CANDIDATES = [
         "sourceColumn": "Histologic_type",
         "targetColumn": "primary_diagnosis",
         "sourceValues": ["Endometrioid", "Serous", "Clear cell", "Carcinosarcoma"],
-        "targetValues": ["Serous adenocarcinofibroma", "clear cell", "Carcinosarcoma"],
+        "targetValues": [
+            "Serous adenocarcinofibroma",
+            "clear cell",
+            "Carcinosarcoma",
+        ],
     },
     {
         "sourceColumn": "Race",
@@ -99,16 +106,54 @@ class MemoryRetriver:
         "mismatches",
         "matches",
         "explanations",
+        "user_memory",
     ]
 
     def __init__(self):
         # Initialize embeddings with a model that matches the expected dimensions
         embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-mpnet-base-v2",  # 768 dimensions
+            model_name="sentence-transformers/all-mpnet-base-v2",  # 768d
             model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": True},
         )
         self.store = InMemoryStore()  # Keep for backward compatibility
+        self.user_memory_count = 0
+
+        # Initialize text splitter for user memory
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=100, chunk_overlap=20, length_function=len
+        )
+
+        # Handle existing chroma_db directory more gracefully
+        if os.path.exists("./chroma_db"):
+            # Instead of removing, try to fix permissions
+            import stat
+
+            try:
+                # Ensure directory has proper permissions
+                dir_perms = (
+                    stat.S_IRWXU
+                    | stat.S_IRGRP
+                    | stat.S_IXGRP
+                    | stat.S_IROTH
+                    | stat.S_IXOTH
+                )
+                os.chmod("./chroma_db", dir_perms)
+                # Fix any sqlite files in the directory
+                for root, dirs, files in os.walk("./chroma_db"):
+                    for file in files:
+                        if file.endswith(".sqlite3"):
+                            file_path = os.path.join(root, file)
+                            file_perms = (
+                                stat.S_IRUSR
+                                | stat.S_IWUSR
+                                | stat.S_IRGRP
+                                | stat.S_IROTH
+                            )
+                            os.chmod(file_path, file_perms)
+            except Exception as e:
+                logger.warning(f"Could not fix permissions, removing directory: {e}")
+                shutil.rmtree("./chroma_db")
 
         # Initialize Chroma with proper configuration
         self.vector_store = Chroma(
@@ -136,9 +181,12 @@ class MemoryRetriver:
         Query the candidates from agent memory retriver.
         Args:
             keywords (List[str]): The keywords to search.
-            source_column (Optional[str], optional): The source column name. Defaults to None.
-            target_column (Optional[str], optional): The target column name. Defaults to None.
-            limit (int, optional): The number of candidates to return. Defaults to 20.
+            source_column (Optional[str], optional): The source column name.
+                Defaults to None.
+            target_column (Optional[str], optional): The target column name.
+                Defaults to None.
+            limit (int, optional): The number of candidates to return.
+                Defaults to 20.
         Returns:
             List[Dict[str, Any]]: The list of candidates.
         """.strip(),
@@ -151,10 +199,33 @@ class MemoryRetriver:
             Search the ontology for the most relevant information.
             Args:
                 query (str): The query to search the ontology.
-                candidate (Dict[str, Any]): The candidate to search the ontology.
+                candidate (Dict[str, Any]): The candidate to search the
+                ontology.
             Returns:
                 AttributeProperties: The ontology for the candidate.
             """.strip(),
+        )
+
+        self.remember_this_tool = StructuredTool.from_function(
+            func=self.put_user_memory,
+            name="remember_this",
+            description="""
+            Stores a piece of information, text, or data provided by the user
+            for later reference.
+            Args:
+                content (str): The information to be remembered. The user will
+                provide this.
+            """,
+        )
+
+        self.recall_memory_tool = StructuredTool.from_function(
+            func=self.search_user_memory,
+            name="recall_memory",
+            description="""
+            Recalls previously stored information based on a user's query.
+            Args:
+                query (str): The query to search for in the stored memories.
+            """,
         )
 
     # [candidates]
@@ -311,14 +382,16 @@ Target Column: {value['targetColumn']}
     ) -> None:
         """
         Args:
-            explanations (List[Dict[str, Any]]): A list of explanations to store in the memory.
+            explanations (List[Dict[str, Any]]): A list of explanations to
+            store in the memory.
             {
                 'type': ExplanationType;
                 'content': string;
                 'confidence': number;
             }
 
-            user_operation (Dict[str, Any]): The user operation to store in the memory.
+            user_operation (Dict[str, Any]): The user operation to store in
+            the memory.
             {
                 'operation': string;
                 'candidate': {
@@ -327,7 +400,11 @@ Target Column: {value['targetColumn']}
                 };
             }
         """
-        key = f"{user_operation['operation']}::{user_operation['candidate']['sourceColumn']}::{user_operation['candidate']['targetColumn']}"
+        key = (
+            f"{user_operation['operation']}::"
+            f"{user_operation['candidate']['sourceColumn']}::"
+            f"{user_operation['candidate']['targetColumn']}"
+        )
 
         # Get existing explanations
         def filter_func(doc: Document) -> bool:
@@ -375,21 +452,65 @@ Explanations: {formatted_explanations}
 
         self._add_vector_store(key, page_content, metadata)
 
+    def put_user_memory(self, content: str) -> str:
+        """
+        Stores a piece of information from the user in the vector store.
+        Uses RecursiveCharacterTextSplitter to split content into chunks.
+        """
+        import uuid
+
+        # Split content into chunks using RecursiveCharacterTextSplitter
+        chunks = self.text_splitter.split_text(content)
+        content_uuid = str(uuid.uuid4())
+        # Store each chunk with a unique key
+        for i, chunk in enumerate(chunks):
+            chunk_key = f"{content_uuid}_chunk_{i}"
+            metadata = {
+                "namespace": "user_memory",
+                "uuid": content_uuid,
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+                "chunk_content": chunk,
+            }
+            self._add_vector_store(chunk_key, chunk, metadata)
+
+        logger.critical(f"🧰Tool result: put_user_memory with {len(chunks)} chunks")
+        self.user_memory_count += len(chunks)
+        return f"I have remembered that in {len(chunks)} chunks."
+
+    def search_user_memory(self, query: str, limit: int = 5) -> List[str]:
+        filter = {"namespace": "user_memory"}
+        if self.user_memory_count == 0:
+            logger.info("🧰Tool result: search_user_memory, memory is empty...")
+            return []
+        elif self.user_memory_count < limit:
+            limit = self.user_memory_count
+
+        logger.critical(
+            f"🧰Tool called: search_user_memory with query='{query}', " f"limit={limit}"
+        )
+        results = self._search_vector_store(query, limit, filter)
+        logger.critical(
+            f"🧰Tool result: search_user_memory found {len(results)} unique contents"
+        )
+        return [doc.page_content for doc in results]
+
     # Search
     def search_target_schema(self, query: str, limit: int = 10):
         logger.info(
-            f"🧰Tool called: search_target_schema with query='{query}', limit={limit}"
+            f"🧰Tool called: search_target_schema with query='{query}', "
+            f"limit={limit}"
         )
         filter = {"namespace": "schema"}
         results = self._search_vector_store(query, limit, filter)
         logger.info(
-            f"🧰Tool result: search_target_schema returned {len(results)} results"
+            f"🧰Tool result: search_target_schema returned {len(results)} " "results"
         )
         return results
 
     def search_candidates(self, query: str, limit: int = 10):
         logger.info(
-            f"🧰Tool called: search_candidates with query='{query}', limit={limit}"
+            f"🧰Tool called: search_candidates with query='{query}', " f"limit={limit}"
         )
         filter = {"namespace": "candidates"}
         results = self._search_vector_store(query, limit, filter)
@@ -398,7 +519,7 @@ Explanations: {formatted_explanations}
 
     def search_mismatches(self, query: str, limit: int = 10):
         logger.info(
-            f"🧰Tool called: search_mismatches with query='{query}', limit={limit}"
+            f"🧰Tool called: search_mismatches with query='{query}', " f"limit={limit}"
         )
         filter = {"namespace": "mismatches"}
         results = self._search_vector_store(query, limit, filter)
@@ -414,12 +535,12 @@ Explanations: {formatted_explanations}
 
     def search_explanations(self, query: str, limit: int = 10):
         logger.info(
-            f"🧰Tool called: search_explanations with query='{query}', limit={limit}"
+            f"🧰Tool called: search_explanations with query='{query}', " f"limit={limit}"
         )
         filter = {"namespace": "explanations"}
         results = self._search_vector_store(query, limit, filter)
         logger.info(
-            f"🧰Tool result: search_explanations returned {len(results)} results"
+            f"🧰Tool result: search_explanations returned {len(results)} " "results"
         )
         return [doc.page_content for doc in results]
 
