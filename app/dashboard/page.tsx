@@ -394,12 +394,10 @@ export default function Dashboard() {
             {loadingOverlay}
 
             {/* Popups */}
-            {selectedCandidate && (
-                <OntologySearchPopup
-                    selectedCandidate={selectedCandidate}
-                    callback={handleOntologySearch}
-                />
-            )}
+            <OntologySearchPopup
+                selectedCandidate={selectedCandidate || undefined}
+                callback={handleOntologySearch}
+            />
 
             <NewMatcherDialog
                 open={openNewMatcherDialog}

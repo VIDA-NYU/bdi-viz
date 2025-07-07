@@ -499,20 +499,6 @@ def ask_agent():
     return response
 
 
-@app.route("/api/agent/search/candidates", methods=["POST"])
-def search_candidates():
-    session = extract_session_name(request)
-    # Unused variable removed to save memory
-    data = request.json
-    query = data["query"]
-
-    agent = get_agent()
-    response = agent.search(query)
-    response = response.model_dump()
-
-    return response
-
-
 @app.route("/api/agent/explain", methods=["POST"])
 def agent_explanation():
     session = extract_session_name(request)
@@ -559,12 +545,19 @@ def agent_explore():
 
     data = request.json
     query = data["query"]
-    candidate = data["candidate"]
+    candidate = data.get("candidate", None)
 
-    source_col = candidate["sourceColumn"]
-    target_col = candidate["targetColumn"]
-    source_values = matching_task.get_source_unique_values(source_col)
-    target_values = matching_task.get_target_unique_values(target_col)
+    if candidate:
+        source_col = candidate["sourceColumn"]
+        target_col = candidate["targetColumn"]
+        source_values = matching_task.get_source_unique_values(source_col)
+        target_values = matching_task.get_target_unique_values(target_col)
+    else:
+        source_col = None
+        target_col = None
+        source_values = None
+        target_values = None
+
     candidate = {
         "sourceColumn": source_col,
         "targetColumn": target_col,

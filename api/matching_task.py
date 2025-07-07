@@ -306,9 +306,11 @@ class MatchingTask:
                 if "matchers" in cached_json and cached_json["matchers"]:
                     self._load_cached_matchers(
                         copy.deepcopy(cached_json["matchers"]),
-                        copy.deepcopy(cached_json["matcher_code"])
-                        if "matcher_code" in cached_json
-                        else {},
+                        (
+                            copy.deepcopy(cached_json["matcher_code"])
+                            if "matcher_code" in cached_json
+                            else {}
+                        ),
                     )
                     logger.info(
                         f"cached_matchers: {self.cached_candidates['matchers']}"
@@ -767,9 +769,11 @@ class MatchingTask:
         # Sort results to match source values order
         matcher_results = sorted(
             matcher_results,
-            key=lambda x: source_values.index(x["sourceValue"])
-            if x["sourceValue"] in source_values
-            else len(source_values),
+            key=lambda x: (
+                source_values.index(x["sourceValue"])
+                if x["sourceValue"] in source_values
+                else len(source_values)
+            ),
         )
 
         # Extract matched values

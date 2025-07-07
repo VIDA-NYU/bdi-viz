@@ -135,6 +135,7 @@ class QueryTools:
         Returns:
             List[str]: All values for the target attribute.
         """
+        results = []  # Initialize results to avoid UnboundLocalError
         target_properties = load_property(target_attribute)
         if target_properties is not None:
             if "enum" in target_properties:
@@ -142,6 +143,9 @@ class QueryTools:
                 if len(target_values) >= 20:
                     target_values = random.sample(target_values, 20)
                 results = target_values
+            else:
+                # If no enum property, fall back to matching_task
+                results = self.matching_task.get_target_unique_values(target_attribute)
         else:
             results = self.matching_task.get_target_unique_values(target_attribute)
         logger.info(
@@ -160,6 +164,7 @@ class QueryTools:
         Returns:
             List[str]: All values for the source attribute.
         """
+        results = []  # Initialize results to avoid UnboundLocalError
         source_properties = load_property(source_attribute)
         if source_properties is not None:
             if "enum" in source_properties:
@@ -167,6 +172,9 @@ class QueryTools:
                 if len(source_values) >= 20:
                     source_values = random.sample(source_values, 20)
                 results = source_values
+            else:
+                # If no enum property, fall back to matching_task
+                results = self.matching_task.get_source_unique_values(source_attribute)
         else:
             results = self.matching_task.get_source_unique_values(source_attribute)
         logger.info(
@@ -185,15 +193,14 @@ class QueryTools:
         Returns:
             str: The description for the target attribute.
         """
+        results = ""  # Initialize results to avoid UnboundLocalError
         target_properties = load_property(target_attribute)
         if target_properties is not None:
             if "description" in target_properties:
                 results = target_properties["description"]
-        else:
-            results = ""
+            # If no description property, results remains empty string
+        # If target_properties is None, results remains empty string
         logger.info(
-            "🧰Tool called: read_target_description for %s found %s values",
-            target_attribute,
-            len(results),
+            f"🧰Tool called: read_target_description for {target_attribute} found: {results[:10]}...",
         )
         return results

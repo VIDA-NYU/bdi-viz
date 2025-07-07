@@ -81,34 +81,6 @@ const agentSuggestValueMappings = async (candidate: Candidate): Promise<Suggeste
 }
 
 
-const agentSearchRequest = async (query: string): Promise<Candidate[] | undefined> => {
-    try {
-        const httpAgent = new http.Agent({ keepAlive: true });
-        const httpsAgent = new https.Agent({ keepAlive: true });
-
-        const resp = await axios.post("/api/agent/search/candidates", { query }, {
-            httpAgent,
-            httpsAgent,
-            timeout: 10000000, // Set timeout to unlimited
-        });
-
-        if (resp.data.status === "success" &&
-            resp.data.candidates && resp.data.candidates.length > 0) {
-            const candidates = resp.data.candidates.map((c: object) => {
-                try {
-                    return c as Candidate;
-                } catch (error) {
-                    console.error("Error parsing candidate to Candidate:", error);
-                    return null;
-                }
-            }).filter((c: Candidate | null) => c !== null);
-            return candidates;
-        }
-    } catch (error) {
-        console.error("Error sending agent search request:", error);
-    }
-}
-
 const agentThumbRequest = async (explanation: Explanation, userOperation: UserOperation) => {
     try {
         const resp = await axios.post("/api/agent/thumb", {
@@ -152,13 +124,13 @@ const agentGetRelatedSources = async (candidate: Candidate) => {
 
 
 
-const agentSearchOntology = async (query: string, candidate: Candidate) => {
+const agentSearchOntology = async (query: string, candidate?: Candidate) => {
     try {
         const httpAgent = new http.Agent({ keepAlive: true });
         const httpsAgent = new https.Agent({ keepAlive: true });
 
         const resp = await axios.post("/api/agent/explore", {
-            candidate,
+            candidate: candidate || undefined,
             query,
         }, {
             httpAgent,
@@ -172,4 +144,4 @@ const agentSearchOntology = async (query: string, candidate: Candidate) => {
     }
 }
 
-export { candidateExplanationRequest, agentSuggestValueMappings, agentSearchRequest, agentThumbRequest, agentGetRelatedSources, agentSearchOntology };
+export { candidateExplanationRequest, agentSuggestValueMappings, agentThumbRequest, agentGetRelatedSources, agentSearchOntology };

@@ -527,7 +527,9 @@ Explanations: {formatted_explanations}
         return [doc.page_content for doc in results]
 
     def search_matches(self, query: str, limit: int = 10):
-        logger.info(f"🧰Tool called: search_matches with query='{query}', limit={limit}")
+        logger.info(
+            f"🧰Tool called: search_matches with query='{query}', limit={limit}"
+        )
         filter = {"namespace": "matches"}
         results = self._search_vector_store(query, limit, filter)
         logger.info(f"🧰Tool result: search_matches returned {len(results)} results")
@@ -535,7 +537,8 @@ Explanations: {formatted_explanations}
 
     def search_explanations(self, query: str, limit: int = 10):
         logger.info(
-            f"🧰Tool called: search_explanations with query='{query}', " f"limit={limit}"
+            f"🧰Tool called: search_explanations with query='{query}', "
+            f"limit={limit}"
         )
         filter = {"namespace": "explanations"}
         results = self._search_vector_store(query, limit, filter)

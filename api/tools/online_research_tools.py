@@ -310,9 +310,11 @@ class OnlineResearchTools:
 
                 result = {
                     "title": study.get("title", ""),
-                    "description": study.get("description", "")[:200] + "..."
-                    if study.get("description", "")
-                    else "",
+                    "description": (
+                        study.get("description", "")[:200] + "..."
+                        if study.get("description", "")
+                        else ""
+                    ),
                     "accession": accession,
                     "authors": ", ".join(study.get("authors", [])),
                     "release_date": study.get("releaseDate", ""),
@@ -354,9 +356,11 @@ class OnlineResearchTools:
             for article in data:
                 result = {
                     "title": article.get("title", ""),
-                    "description": article.get("description", "")[:200] + "..."
-                    if article.get("description", "")
-                    else "",
+                    "description": (
+                        article.get("description", "")[:200] + "..."
+                        if article.get("description", "")
+                        else ""
+                    ),
                     "authors": ", ".join(
                         [
                             author.get("full_name", "")
@@ -424,9 +428,11 @@ class OnlineResearchTools:
 
                 result = {
                     "title": metadata.get("title", ""),
-                    "description": metadata.get("description", "")[:200] + "..."
-                    if metadata.get("description", "")
-                    else "",
+                    "description": (
+                        metadata.get("description", "")[:200] + "..."
+                        if metadata.get("description", "")
+                        else ""
+                    ),
                     "creators": ", ".join(
                         [
                             creator.get("name", "")

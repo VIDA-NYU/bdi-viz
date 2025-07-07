@@ -82,29 +82,6 @@ class Agent:
                 self._llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
         return self._llm
 
-    def search(self, query: str) -> SearchResponse:
-        logger.info(f"[Agent] Searching for candidates...")
-
-        tools = [
-            self.store.query_candidates_tool,
-        ]
-
-        prompt = f"""
-    Use the tools to search for candidates based on the user's input.
-
-    User Query: {query}
-        """
-
-        logger.info(f"[SEARCH] Prompt: {prompt}")
-
-        response = self.invoke(
-            prompt=prompt,
-            tools=tools,
-            output_structure=SearchResponse,
-        )
-
-        return response
-
     def explain(
         self, candidate: Dict[str, Any], with_memory=True
     ) -> CandidateExplanation:

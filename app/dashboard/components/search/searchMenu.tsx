@@ -17,7 +17,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { agentSearchRequest } from '@/app/lib/langchain/agent-helper';
 import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import { runRematchTask, getCachedResults, getTargetOntology, getValueBins, getValueMatches } from "@/app/lib/heatmap/heatmap-helper";
@@ -38,10 +37,9 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
     valueMatchesCallback
 }) => {
     const [query, setQuery] = useState<string>('');
-    const [agentActivated, setAgentActivated] = useState<boolean>(false);
     
     const { setGlobalQuery, selectedNodes } = useContext(HighlightGlobalContext);
-    const { setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext);
+    const { setIsLoadingGlobal, setTaskState, ontologySearchPopupOpen, setOntologySearchPopupOpen } = useContext(SettingsGlobalContext);
 
     const handleKeyPress = async (event: React.KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Enter') {
@@ -50,17 +48,9 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
     };
 
     const handleSearch = useCallback(async () => {
-        if (agentActivated) {
-            const candidates = await agentSearchRequest(query);
-            if (candidates) {
-                console.log("Candidates: ", candidates);
-                agentSearchResultCallback(candidates);
-            }
-        } else {
-            console.log("Global query: ", query);
-            setGlobalQuery(query);
-        }
-    }, [query, agentActivated, agentSearchResultCallback, setGlobalQuery]);
+        console.log("Global query: ", query);
+        setGlobalQuery(query);
+    }, [query, setGlobalQuery]);
 
     const handleClearSearch = () => {
         setQuery('');
@@ -121,9 +111,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
                     value={query}
                     onChange={(e) => {
                         setQuery(e.target.value);
-                        if (!agentActivated) {
-                            setGlobalQuery(e.target.value);
-                        }
+                        setGlobalQuery(e.target.value);
                     }}
                     onKeyDown={handleKeyPress}
                     size="small"
@@ -169,19 +157,19 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
                                         </IconButton>
                                     </Tooltip>
                                 )}
-                                <Tooltip title={agentActivated ? 'Deactivate AI agent' : 'Activate AI agent'}>
+                                <Tooltip title={ontologySearchPopupOpen ? 'Deactivate AI agent' : 'Activate AI agent'}>
                                     <IconButton
-                                        onClick={() => setAgentActivated(!agentActivated)}
+                                        onClick={() => setOntologySearchPopupOpen(!ontologySearchPopupOpen)}
                                         size="small"
                                         sx={{ 
-                                            backgroundColor: agentActivated ? '#4caf50' : '#e0e0e0',
-                                            color: agentActivated ? 'white' : '#666',
+                                            backgroundColor: ontologySearchPopupOpen ? '#4caf50' : '#e0e0e0',
+                                            color: ontologySearchPopupOpen ? 'white' : '#666',
                                             borderRadius: 1,
                                             width: 28,
                                             height: 28,
                                             ml: 0.5,
                                             '&:hover': {
-                                                backgroundColor: agentActivated ? '#45a049' : '#d0d0d0',
+                                                backgroundColor: ontologySearchPopupOpen ? '#45a049' : '#d0d0d0',
                                             }
                                         }}
                                     >
@@ -289,7 +277,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
             </Button>
 
             {/* AI Status Indicator */}
-            {agentActivated && (
+            {ontologySearchPopupOpen && (
                 <Box 
                     sx={{ 
                         backgroundColor: 'rgba(76, 175, 80, 0.9)',
