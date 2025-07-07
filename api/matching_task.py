@@ -221,6 +221,14 @@ class MatchingTask:
         self.cached_candidates["target_hash"] = None
         logger.info(f"Set nodes for filtering: {nodes}, cache invalidated")
 
+    def get_all_nodes(self) -> List[str]:
+        """Get all nodes from the ontology."""
+        ontology_flat = load_ontology_flat()
+        nodes = set()
+        for col in ontology_flat.keys():
+            nodes.add(ontology_flat[col]["node"])
+        return list(nodes)
+
     def _filter_target_by_nodes(self) -> None:
         """Filter target dataframe based on nodes if they are set."""
         if not self.cached_candidates["nodes"]:
