@@ -3,7 +3,6 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
 from langchain.tools.base import StructuredTool
 from pydantic import BaseModel, Field
 
@@ -26,131 +25,90 @@ class TaskTools:
     def get_tools(self) -> List[StructuredTool]:
         """Return all task management tools."""
         return [
-            self.initialize_task_tool,
-            self.create_matcher_tool,
+            self.start_matching_task_tool,
+            self.create_matcher_task_tool,
             self.get_all_nodes_tool,
-            self.rematch_with_nodes_tool,
         ]
 
     # Task Initialization and Status Tools
 
     @property
-    def initialize_task_tool(self) -> StructuredTool:
-        """Tool to initialize a new matching task with source and target data."""
+    def start_matching_task_tool(self) -> StructuredTool:
+        """Tool to start a new matching task with source and target data."""
 
-        class InitializeTaskInput(BaseModel):
-            source_data_path: Optional[str] = Field(
-                default=None,
-                description="Path to source CSV file. If not provided, will use cached source data.",
-            )
-            target_data_path: Optional[str] = Field(
-                default=None,
-                description="Path to target CSV file. If not provided, will use default GDC data.",
-            )
+        class StartMatchingTaskInput(BaseModel):
             nodes: Optional[List[str]] = Field(
-                default=None,
-                description="List of target nodes to filter by (e.g., ['Demographic', 'Clinical']).",
+                description="List of target nodes to filter by (e.g., ['diagnosis', 'clinical'])."
             )
 
-        def _initialize_task(
-            source_data_path: Optional[str] = None,
-            target_data_path: Optional[str] = None,
-            nodes: Optional[List[str]] = None,
-        ) -> str:
+        def _start_matching_task(nodes: Optional[List[str]] = None) -> str:
             try:
-                matching_task = SESSION_MANAGER.get_session(
-                    self.session_id
-                ).matching_task
+                # Import celery task here to avoid circular imports
+                from ..index import run_matching_task
 
-                # Load source data
-                if source_data_path and os.path.exists(source_data_path):
-                    source = pd.read_csv(source_data_path)
-                elif os.path.exists(".source.csv"):
-                    source = pd.read_csv(".source.csv")
-                else:
-                    return "Error: No source data available. Please provide source_data_path."
+                # Start the celery task
+                task = run_matching_task.delay(self.session_id, nodes)
 
-                # Load target data
-                if target_data_path and os.path.exists(target_data_path):
-                    target = pd.read_csv(target_data_path)
-                    target_json = None
-                elif os.path.exists(".target.csv"):
-                    target = pd.read_csv(".target.csv")
-                    target_json = None
-                else:
-                    target = pd.read_csv(GDC_DATA_PATH)
-                    target_json = json.load(open(GDC_JSON_PATH, "r"))
+                logger.info(f"🧰Tool called: start_matching_task with nodes: {nodes}")
 
-                # Update dataframes
-                matching_task.update_dataframe(source_df=source, target_df=target)
-
-                # Set nodes filter if provided
-                if nodes:
-                    matching_task.set_nodes(nodes)
-
-                # Initialize task state
-                matching_task._initialize_task_state()
-
-                # Cache the data
-                source.to_csv(".source.csv", index=False)
-                target.to_csv(".target.csv", index=False)
-                if target_json:
-                    with open(".target.json", "w") as f:
-                        json.dump(target_json, f)
-
-                return (
-                    f"Task initialized successfully with {len(source.columns)} source columns and {len(target.columns)} target columns."
-                    + (f" Filtered to nodes: {nodes}" if nodes else "")
-                )
+                return f"Task started successfully. Task ID: {task.id}"
 
             except Exception as e:
-                logger.error(f"Error initializing task: {str(e)}")
-                return f"Error initializing task: {str(e)}"
+                logger.error(
+                    f"🧰Tool error: start_matching_task with nodes: {nodes} with error: {str(e)}"
+                )
+                return f"Error starting matching task: {str(e)}"
 
         return StructuredTool.from_function(
-            func=_initialize_task,
-            name="initialize_task",
-            description="Initialize a new matching task with source and target datasets. Optionally filter target by specific nodes.",
-            args_schema=InitializeTaskInput,
+            func=_start_matching_task,
+            name="start_matching_task",
+            description="Start a new matching task with current source and target data. Optionally filter target by specific nodes. Returns task ID for status checking.",
+            args_schema=StartMatchingTaskInput,
         )
 
     # Matcher Management Tools
 
     @property
-    def create_matcher_tool(self) -> StructuredTool:
-        """Tool to create a new custom matcher."""
+    def create_matcher_task_tool(self) -> StructuredTool:
+        """Tool to create a new custom matcher via celery task."""
 
-        class CreateMatcherInput(BaseModel):
+        class CreateMatcherTaskInput(BaseModel):
             name: str = Field(description="Name of the new matcher")
             code: str = Field(description="Python code for the matcher implementation")
-            params: Dict[str, Any] = Field(
-                default_factory=dict, description="Parameters for the matcher"
+            params: Optional[Dict[str, Any]] = Field(
+                description="Parameters for the matcher"
             )
 
-        def _create_matcher(name: str, code: str, params: Dict[str, Any] = None) -> str:
+        def _create_matcher_task(
+            name: str, code: str, params: Dict[str, Any] = None
+        ) -> str:
             try:
                 if params is None:
                     params = {}
 
-                matching_task = SESSION_MANAGER.get_session(
-                    self.session_id
-                ).matching_task
-                error, matchers = matching_task.new_matcher(name, code, params)
+                # Import celery task here to avoid circular imports
+                from ..index import run_new_matcher_task
 
-                if error:
-                    return f"Error creating matcher '{name}': {error}"
+                # Start the celery task
+                task = run_new_matcher_task.delay(self.session_id, name, code, params)
 
-                return f"Matcher '{name}' created successfully. Total matchers: {len(matchers)}"
+                logger.info(
+                    f"🧰Tool called: create_matcher_task with name: {name}, code: {code[:100]}..., params: {params}"
+                )
+
+                return f"Matcher creation task started. Task ID: {task.id}"
 
             except Exception as e:
-                logger.error(f"Error creating matcher: {str(e)}")
-                return f"Error creating matcher: {str(e)}"
+                logger.error(
+                    f"🧰Tool error: create_matcher_task with name: {name}, code: {code[:100]}..., params: {params} with error: {str(e)}"
+                )
+                return f"Error starting matcher creation task: {str(e)}"
 
         return StructuredTool.from_function(
-            func=_create_matcher,
-            name="create_matcher",
-            description="Create a new custom matcher with specified code and parameters.",
-            args_schema=CreateMatcherInput,
+            func=_create_matcher_task,
+            name="create_matcher_task",
+            description="Start a celery task to create a new custom matcher with specified code and parameters. Returns task ID for status checking.",
+            args_schema=CreateMatcherTaskInput,
         )
 
     # Rematching Tools
@@ -162,44 +120,11 @@ class TaskTools:
         def _get_all_nodes() -> str:
             matching_task = SESSION_MANAGER.get_session(self.session_id).matching_task
             nodes = matching_task.get_all_nodes()
+            logger.info(f"🧰Tool called: get_all_nodes with nodes: {nodes}")
             return json.dumps(nodes, indent=2)
 
         return StructuredTool.from_function(
             func=_get_all_nodes,
             name="get_all_nodes",
             description="Get all nodes from the ontology.",
-        )
-
-    @property
-    def rematch_with_nodes_tool(self) -> StructuredTool:
-        """Tool to rematch with specific target nodes filter."""
-
-        class RematchInput(BaseModel):
-            nodes: List[str] = Field(
-                description="List of target nodes to filter by (e.g., ['Demographic', 'Clinical'])"
-            )
-
-        def _rematch_with_nodes(nodes: List[str]) -> str:
-            try:
-                matching_task = SESSION_MANAGER.get_session(
-                    self.session_id
-                ).matching_task
-
-                # Set the nodes filter
-                matching_task.set_nodes(nodes)
-
-                # Regenerate candidates with the new filter
-                candidates = matching_task.get_candidates(is_candidates_cached=False)
-
-                return f"Rematching completed with nodes filter: {nodes}. Generated {len(candidates)} candidates."
-
-            except Exception as e:
-                logger.error(f"Error rematching with nodes: {str(e)}")
-                return f"Error rematching with nodes: {str(e)}"
-
-        return StructuredTool.from_function(
-            func=_rematch_with_nodes,
-            name="rematch_with_nodes",
-            description="Rematch source and target data with specific target node filters.",
-            args_schema=RematchInput,
         )

@@ -99,6 +99,9 @@ class Agent:
         #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
         # )
 
+        if self.store.user_memory_count <= 0:
+            with_memory = False
+
         target_description = load_property(candidate["targetColumn"])
         target_values = candidate["targetValues"]
         if "enum" in target_description:
@@ -315,11 +318,15 @@ def get_agent(memory_retriever):
         portkey_headers = createHeaders(
             api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
             virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+            metadata={"_user": "yfw215"},
         )
         llm_model = ChatOpenAI(
             model="gemini-2.5-flash",
+            temperature=0,
             base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
             default_headers=portkey_headers,
+            timeout=int(os.getenv("LLM_TIMEOUT", "1000")),
+            max_retries=3,
         )
         AGENT = Agent(memory_retriever, llm_model=llm_model)
     return AGENT

@@ -17,6 +17,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import { agentSearchOntology } from '@/app/lib/langchain/agent-helper';
 import SettingsGlobalContext from '@/app/lib/settings/settings-context';
+import { pollForMatchingStatus, pollForMatcherStatus } from '@/app/lib/heatmap/heatmap-helper';
 
 interface ChatMessage {
     id: string;
@@ -45,6 +46,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
     const { ontologySearchPopupOpen, setOntologySearchPopupOpen } = useContext(
         SettingsGlobalContext
     );
+    const { setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext);
 
     useEffect(() => {
         if (chatEndRef.current) {
@@ -80,6 +82,43 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 };
                 setChatHistory(prev => [...prev, agentMessage]);
                 if (result.candidates || result.candidates_to_append) callback(result.candidates || result.candidates_to_append);
+                if (result.task_id) {
+                    setIsLoadingGlobal(true);
+                    pollForMatchingStatus({
+                        taskId: result.task_id,
+                        onResult: (result) => {
+                            console.log("Matching task completed with result:", result);
+                            callback([]);
+                            setIsLoadingGlobal(false);
+                        },
+                        onError: (error) => {
+                            console.error("Matching task failed with error:", error);
+                            setIsLoadingGlobal(false);
+                        },
+                        taskStateCallback: (taskState) => {
+                            console.log("Task state:", taskState);
+                            setTaskState(taskState);
+                        }
+                    });
+                } else if (result.matcher_task_id) {
+                    setIsLoadingGlobal(true);
+                    pollForMatcherStatus({
+                        taskId: result.matcher_task_id,
+                        onResult: (result) => {
+                            console.log("Matcher task completed with result:", result);
+                            callback([]);
+                            setIsLoadingGlobal(false);
+                        },
+                        onError: (error) => {
+                            console.error("Matcher task failed with error:", error);
+                            setIsLoadingGlobal(false);
+                        },
+                        taskStateCallback: (taskState) => {
+                            console.log("Task state:", taskState);
+                            setTaskState(taskState);
+                        }
+                    });
+                }
             }
         } catch (error) {
             const errorMessage: ChatMessage = {

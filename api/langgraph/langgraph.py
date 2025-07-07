@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from ..langchain.memory import MemoryRetriver
 from ..tools.candidate_tools import CandidateTools
 from ..tools.query_tools import QueryTools
+from ..tools.task_tools import TaskTools
 
 load_dotenv()
 
@@ -89,12 +90,21 @@ class AgentState(BaseModel):
         default_factory=list, description="New candidates to be added"
     )
 
+    # Task management
+    task_id: Optional[str] = Field(
+        default=None, description="The id of the current matching task"
+    )
+    matcher_task_id: Optional[str] = Field(
+        default=None, description="The id of the current new matcher task"
+    )
+
 
 class AgentType(str, Enum):
     SUPERVISOR = "supervisor"
     ONTOLOGY = "ontology"
     RESEARCH = "research"
     CANDIDATE = "candidate"
+    TASK = "task"
     FINAL = "final"
 
 
@@ -210,6 +220,14 @@ class LangGraphAgent:
                     key_decisions.append(
                         f"Focused on source: {turn.context['source_column']}"
                     )
+                if turn.context.get("task_id"):
+                    key_decisions.append(
+                        f"Started matching task: {turn.context['task_id']}"
+                    )
+                if turn.context.get("matcher_task_id"):
+                    key_decisions.append(
+                        f"Started matcher task: {turn.context['matcher_task_id']}"
+                    )
 
         # Build concise summary
         summary_parts = []
@@ -321,6 +339,16 @@ class LangGraphAgent:
             ),
         )
 
+        task_agent_tools = TaskTools(self.session_id).get_tools()
+        workflow.add_node(
+            "task_agent",
+            self._create_agent_node(
+                self._task_prompt,
+                task_agent_tools,
+                self.master_llm,
+            ),
+        )
+
         workflow.add_node("final", self._final_node)
 
         # Define routing
@@ -334,11 +362,13 @@ class LangGraphAgent:
             {
                 AgentType.ONTOLOGY: "ontology_agent",
                 AgentType.CANDIDATE: "candidate_agent",
+                AgentType.TASK: "task_agent",
             },
         )
 
         workflow.add_edge("ontology_agent", "candidate_agent")
         workflow.add_edge("candidate_agent", "final")
+        workflow.add_edge("task_agent", "final")
         workflow.set_entry_point("supervisor")
 
         return workflow.compile()
@@ -369,6 +399,8 @@ class LangGraphAgent:
                 candidates=state.candidates,
                 candidates_to_append=state.candidates_to_append,
                 current_message=state.message,
+                task_id=state.task_id,
+                matcher_task_id=state.matcher_task_id,
             )
 
             agent_state = self._invoke(
@@ -411,6 +443,7 @@ class LangGraphAgent:
         3. **Smart Routing**: Based on conversation context and current query:
            - New candidate search → route to ["ontology"]
            - Candidate operations → route to ["candidate"]
+           - Task operations → route to ["task"] (e.g. new task, new matcher, update node filter)
            - Information requests → handle directly, set next_agents = []
            - Unclear intent → ask clarification, set next_agents = []
 
@@ -523,6 +556,82 @@ class LangGraphAgent:
 
         Focus on building a helpful, context-aware dialogue that guides 
         the user toward effective data matching decisions.
+        """
+
+    def _task_prompt(self) -> str:
+        return """
+        You are a task management specialist. You handle all task operations with deep conversation awareness and user preference learning.
+
+        CURRENT REQUEST: {query}
+        CONVERSATION HISTORY:
+        {conversation_history}
+
+        INTELLIGENT OPERATIONS:
+        1. **Start Matching Task**: 
+          - Use `start_matching_task` to start a new matching task.
+          - Extract the task ID from the response and store it in `task_id`.
+          - Optionally provide nodes filter if user specifies target categories.
+        2. **Update Node Filter and Rematch**: 
+          - Use `get_all_nodes` to get all nodes from the ontology.
+          - Based on user's query, determine appropriate nodes filter.
+          - Use `start_matching_task` to start a rematch task with the filtered nodes list.
+          - Extract the task ID from the response and store it in `task_id`.
+        3. **New Matcher**:
+          - Based on user's query, writes a complete python code snippet for a new matcher (starts with import statements, then the class definition, then the __init__ method, then the match method).
+            Here is an example of a complete python code snippet for a new matcher, note that top_matches method is required with the output format:
+```
+from typing import Any, Dict, List, Tuple
+import pandas as pd
+from rapidfuzz import fuzz, process, utils
+
+
+class RapidFuzzMatcher():
+    def __init__(self, name: str, weight: int = 1) -> None:
+        self.threshold = 0.0
+        self.name = name
+        self.weight = weight
+
+    def top_matches(
+        self, source: pd.DataFrame, target: pd.DataFrame, top_k: int = 20, **kwargs
+    ) -> List[Dict[str, Any]]:
+        matches = self._get_matches(source, target, top_k)
+        matcher_candidates = self._layer_candidates(matches, self.name)
+        return matcher_candidates
+
+    def _get_matches(
+        self, source: pd.DataFrame, target: pd.DataFrame, top_k: int
+    ) -> Dict[str, Dict[str, float]]:
+        pass
+
+    def _layer_candidates(
+        self,
+        matches: Dict[str, Dict[str, float]],
+        matcher: str,
+    ) -> List[Dict[str, Any]]:
+        layered_candidates = []
+        for source_column, target_columns in matches.items():
+            for target_column, score in target_columns.items():
+                candidate = {{
+                    "sourceColumn": source_column,
+                    "targetColumn": target_column,
+                    "score": score,
+                    "matcher": matcher,
+                    "status": "idle",
+                }}
+            layered_candidates.append(candidate)
+        return layered_candidates
+```
+            - Pass the new matcher to `create_matcher_task` tool, the parameters are:
+               - name: the name of the new matcher object (e.g. "PubMedBERTMatcher")
+               - code: the python code snippet for the new matcher
+               - params: the additional parameters for the new matcher
+        
+        TASK ID HANDLING:
+            - When a tool returns a task ID, extract it from the response message.
+            - Store the task ID in the appropriate field (task_id, matcher_task_id).
+            - Include the task ID in your response to the user so they can track progress.
+        After you finish thinking, write your **public answer** in `message`.  
+        Include task IDs in your response when tasks are started.
         """
 
     def _final_node(self, state: AgentState) -> AgentState:
@@ -655,6 +764,8 @@ class LangGraphAgent:
                 "target_column": updated_state.target_column,
                 "candidates_count": len(updated_state.candidates),
                 "new_candidates_count": len(updated_state.candidates_to_append),
+                "task_id": updated_state.task_id,
+                "matcher_task_id": updated_state.matcher_task_id,
             },
         )
 

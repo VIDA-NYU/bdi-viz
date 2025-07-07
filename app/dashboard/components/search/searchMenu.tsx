@@ -275,29 +275,6 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
             >
                 Re-match
             </Button>
-
-            {/* AI Status Indicator */}
-            {ontologySearchPopupOpen && (
-                <Box 
-                    sx={{ 
-                        backgroundColor: 'rgba(76, 175, 80, 0.9)',
-                        color: 'white',
-                        px: 1,
-                        py: 0.5,
-                        borderRadius: 1,
-                        fontSize: '0.65rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        whiteSpace: 'nowrap',
-                    }}
-                >
-                    <SmartToyIcon sx={{ fontSize: 12 }} />
-                    <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.65rem' }}>
-                        AI Active
-                    </Typography>
-                </Box>
-            )}
         </Box>
     );
 };

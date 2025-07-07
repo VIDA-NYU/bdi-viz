@@ -193,4 +193,6 @@ declare interface AgentState {
     next_agents: string[];
     candidates: Candidate[];
     candidates_to_append: Candidate[];
+    task_id?: string;
+    matcher_task_id?: string;
 }

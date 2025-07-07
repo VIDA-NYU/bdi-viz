@@ -1160,6 +1160,9 @@ class MatchingTask:
         self, name: str, code: str, params: Dict[str, Any]
     ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         try:
+            if "name" not in params:
+                params["name"] = name
+
             matcher = {
                 "name": name,
                 "weight": 1.0,

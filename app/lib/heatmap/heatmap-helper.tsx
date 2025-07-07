@@ -577,6 +577,7 @@ const runRematchTask = async ({ nodes, onResult, onError, taskStateCallback }: R
 
 export { 
     runMatchingTask,
+    pollForMatchingStatus,
     getCachedResults, 
     getMatchers,
     getValueBins, 
@@ -591,5 +592,6 @@ export {
     getCandidatesResult, 
     updateSourceValue,
     newMatcher,
+    pollForMatcherStatus,
     runRematchTask,
 };
