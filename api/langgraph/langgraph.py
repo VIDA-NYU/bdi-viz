@@ -34,17 +34,6 @@ class Candidate(BaseModel):
     score: float = Field(description="The score of the candidate")
 
 
-class ConversationTurn(BaseModel):
-    """A single turn in the conversation history."""
-
-    user_query: str = Field(description="The user's query or input")
-    agent_response: str = Field(description="The agent's complete response")
-    timestamp: str = Field(description="Timestamp of the conversation turn")
-    context: Optional[Dict[str, Any]] = Field(
-        default=None, description="Additional context (candidates, operations, etc.)"
-    )
-
-
 class AgentState(BaseModel):
     """State for the agent workflow with professional conversation tracking."""
 
@@ -55,9 +44,9 @@ class AgentState(BaseModel):
     query: str = Field(description="The current user query")
 
     # Conversation history management
-    conversation_history: List[ConversationTurn] = Field(
-        default_factory=list,
-        description="Complete conversation history with user and agent turns",
+    conversation_summary: str = Field(
+        default="No previous conversation",
+        description="LLM-generated summary of conversation history",
     )
 
     # Working context
@@ -140,124 +129,68 @@ class LangGraphAgent:
         self._state = self._init_state()
         self.graph = self._build_graph()
 
-    def _summarize_conversation_history(
-        self, conversation_history: List[ConversationTurn], max_detailed_turns: int = 5
+    def _summarize_with_llm(
+        self,
+        current_summary: str,
+        user_query: str,
+        agent_response: str,
+        context: Dict[str, Any],
     ) -> str:
         """
-        Summarize conversation history to save token space while preserving
-        context.
+        Use LLM to summarize the conversation history including the new turn.
         """
-        if not conversation_history:
-            return "No previous conversation"
+        if current_summary == "No previous conversation":
+            # First conversation turn
+            summary_prompt = f"""
+            Summarize this conversation turn for future context:
+            
+            User Query: {user_query}
+            Agent Response: {agent_response}
+            Context: {context}
+            
+            Create a concise summary that captures:
+            1. The main topic/question
+            2. Key decisions or actions taken
+            3. Important context (columns, candidates, tasks)
+            
+            Keep it under 100 words and focus on what's most relevant for 
+            future conversations.
+            """
+        else:
+            # Update existing summary
+            summary_prompt = f"""
+            Update the conversation summary with this new turn:
+            
+            Previous Summary: {current_summary}
+            
+            New Turn:
+            User Query: {user_query}
+            Agent Response: {agent_response}
+            Context: {context}
+            
+            Create an updated summary that:
+            1. Preserves important information from the previous summary
+            2. Integrates the new conversation turn
+            3. Maintains focus on key decisions, actions, and context
+            4. Stays under 150 words
+            
+            If the new turn is about a completely different topic, start fresh.
+            """
 
-        if len(conversation_history) <= max_detailed_turns:
-            # Short history - return in full detail
-            return self._format_detailed_history(conversation_history)
-
-        # Split into older (to summarize) and recent (keep detailed)
-        older_turns = conversation_history[:-max_detailed_turns]
-        recent_turns = conversation_history[-max_detailed_turns:]
-
-        summary_parts = []
-
-        # Summarize older conversations
-        if older_turns:
-            summary = self._create_conversation_summary(older_turns)
-            summary_parts.append(f"EARLIER CONVERSATION SUMMARY:\n{summary}")
-
-        # Add recent detailed conversations
-        recent_detailed = self._format_detailed_history(recent_turns)
-        summary_parts.append(f"RECENT CONVERSATION:\n{recent_detailed}")
-
-        return "\n\n".join(summary_parts)
-
-    def _format_detailed_history(
-        self, conversation_turns: List[ConversationTurn]
-    ) -> str:
-        """Format conversation turns in full detail."""
-        formatted_turns = []
-        for i, turn in enumerate(conversation_turns, 1):
-            formatted_turns.append(
-                f"Turn {i}:\n"
-                f"  User: {turn.user_query}\n"
-                f"  Agent: {turn.agent_response}"
-            )
-            if turn.context:
-                formatted_turns.append(f"  Context: {turn.context}")
-
-        return "\n\n".join(formatted_turns)
-
-    def _create_conversation_summary(self, older_turns: List[ConversationTurn]) -> str:
-        """Create a concise summary of older conversation turns."""
-        if not older_turns:
-            return "No earlier conversation"
-
-        # Extract key themes and patterns
-        user_interests = []
-        agent_actions = []
-        key_decisions = []
-
-        for turn in older_turns:
-            # Extract user interests and questions
-            query_lower = turn.user_query.lower()
-            if any(word in query_lower for word in ["what", "how", "why", "explain"]):
-                user_interests.append(f"Asked about: {turn.user_query[:50]}...")
-
-            # Extract agent actions and decisions
-            response_lower = turn.agent_response.lower()
-            if any(
-                word in response_lower for word in ["recommend", "suggest", "found"]
-            ):
-                agent_actions.append(f"Recommended: {turn.agent_response[:50]}...")
-
-            # Extract key decisions from context
-            if turn.context:
-                if turn.context.get("candidates_count", 0) > 0:
-                    key_decisions.append(
-                        f"Worked with {turn.context['candidates_count']} candidates"
-                    )
-                if turn.context.get("source_column"):
-                    key_decisions.append(
-                        f"Focused on source: {turn.context['source_column']}"
-                    )
-                if turn.context.get("task_id"):
-                    key_decisions.append(
-                        f"Started matching task: {turn.context['task_id']}"
-                    )
-                if turn.context.get("matcher_task_id"):
-                    key_decisions.append(
-                        f"Started matcher task: {turn.context['matcher_task_id']}"
-                    )
-
-        # Build concise summary
-        summary_parts = []
-
-        if user_interests:
-            summary_parts.append(
-                f"User showed interest in: {'; '.join(user_interests[:3])}"
-            )
-
-        if agent_actions:
-            summary_parts.append(f"Agent provided: {'; '.join(agent_actions[:3])}")
-
-        if key_decisions:
-            summary_parts.append(f"Key context: {'; '.join(key_decisions[:3])}")
-
-        if not summary_parts:
-            summary_parts.append(
-                f"Discussed data matching topics over {len(older_turns)} turns"
-            )
-
-        return " | ".join(summary_parts)
-
-    def _format_conversation_history(
-        self, conversation_history: List[ConversationTurn], max_turns: int = 10
-    ) -> str:
-        """Format conversation history for agent prompts with summarization."""
-        return self._summarize_conversation_history(
-            conversation_history,
-            max_detailed_turns=max_turns // 2,  # Keep half as detailed, summarize rest
-        )
+        try:
+            # Use the worker LLM for summarization (faster and cheaper)
+            response = self.worker_llm.invoke(summary_prompt)
+            return response.content.strip()
+        except Exception as e:
+            logger.error(f"Error summarizing conversation: {e}")
+            # Fallback to simple concatenation
+            if current_summary == "No previous conversation":
+                return (
+                    f"User asked: {user_query[:50]}... | "
+                    f"Agent responded about data matching"
+                )
+            else:
+                return f"{current_summary} | New: " f"{user_query[:30]}..."
 
     def _pretty_print_state(self, state: Dict[str, Any], prefix: str = "") -> str:
         """Pretty print the agent state for logging."""
@@ -290,7 +223,7 @@ class LangGraphAgent:
         return AgentState(
             message="",
             query="",
-            conversation_history=[],
+            conversation_summary="No previous conversation",
             source_column=None,
             target_column=None,
             source_values=None,
@@ -382,11 +315,6 @@ class LangGraphAgent:
             # Get the prompt template string first
             template = prompt_template()
 
-            # Format conversation history for context
-            conversation_context = self._format_conversation_history(
-                state.conversation_history
-            )
-
             # Format the prompt with current state and conversation context
             prompt = template.format(
                 query=state.query,
@@ -395,7 +323,7 @@ class LangGraphAgent:
                 source_values=state.source_values,
                 target_values=state.target_values,
                 target_description=state.target_description,
-                conversation_history=conversation_context,
+                conversation_summary=state.conversation_summary,
                 candidates=state.candidates,
                 candidates_to_append=state.candidates_to_append,
                 current_message=state.message,
@@ -422,11 +350,13 @@ class LangGraphAgent:
         Your role is to understand user intent, manage context, and route 
         requests intelligently.
 
+        **FUNDAMENTAL RULE: ALWAYS USE TOOLS TO CHECK DATA - NEVER ASSUME!**
+
         CURRENT REQUEST: {query}
         Current Context: Source="{source_column}" | Target="{target_column}"
         
         CONVERSATION HISTORY:
-        {conversation_history}
+        {conversation_summary}
 
         CORE RESPONSIBILITIES:
         1. **Contextual Understanding**: Analyze the conversation history to:
@@ -436,13 +366,14 @@ class LangGraphAgent:
            - Ask intelligent clarifying questions when needed
 
         2. **Information Management**: 
-           - Use tools to read source/target data as needed
+           - Use tools to read source/target data as needed, if the user asks for the data or analysis, you should use the tools to get the data and analyse.
            - Store important insights with `remember_this`
            - Retrieve relevant context with `recall_memory`
 
         3. **Smart Routing**: Based on conversation context and current query:
            - New candidate search → route to ["ontology"]
            - Candidate operations → route to ["candidate"]
+           - Rerank/rescore → route to ["candidate"], pass the candidates list to the candidate agent as well
            - Task operations → route to ["task"] (e.g. new task, new matcher, update node filter)
            - Information requests → handle directly, set next_agents = []
            - Unclear intent → ask clarification, set next_agents = []
@@ -472,7 +403,7 @@ class LangGraphAgent:
         Source Context: "{source_column}" with values: {source_values}
         
         CONVERSATION HISTORY:
-        {conversation_history}
+        {conversation_summary}
 
         INTELLIGENT SEARCH STRATEGY:
         1. **Context Analysis**: Review conversation history to understand:
@@ -520,7 +451,9 @@ class LangGraphAgent:
         - New candidates: {candidates_to_append}
         
         CONVERSATION HISTORY:
-        {conversation_history}
+        {conversation_summary}
+
+        **FUNDAMENTAL RULE: ALWAYS USE TOOLS TO CHECK DATA - NEVER ASSUME!**
 
         INTELLIGENT OPERATIONS:
         1. **Pattern Recognition**: From conversation history, identify:
@@ -547,6 +480,17 @@ class LangGraphAgent:
            - Ask relevant follow-up questions when appropriate
            - Provide actionable insights and suggestions
 
+        RERANK / RESCORE WORKFLOW:
+        If query includes "rerank" or "rescore":
+        1. **Identify Source**: Find source attribute from query or context. Ask if unclear.
+        2. **Fetch Candidates**: Use `read_source_candidates` with the source attribute.
+        3. **Re-rank**:
+            - Review candidates and conversation history.
+            - Adjust scores based on user feedback and matcher weights.
+            - Sort candidates by new scores.
+        4. **Update**: Use `update_candidates` with source attribute and re-ranked list.
+        5. **Explain**: In `message`, describe changes and reasons.
+
         RESPONSE PATTERNS:
                  - "Given your interest in X from earlier, candidate Y might be 
            ideal"
@@ -564,7 +508,7 @@ class LangGraphAgent:
 
         CURRENT REQUEST: {query}
         CONVERSATION HISTORY:
-        {conversation_history}
+        {conversation_summary}
 
         INTELLIGENT OPERATIONS:
         1. **Start Matching Task**: 
@@ -629,9 +573,13 @@ class RapidFuzzMatcher():
         TASK ID HANDLING:
             - When a tool returns a task ID, extract it from the response message.
             - Store the task ID in the appropriate field (task_id, matcher_task_id).
-            - Include the task ID in your response to the user so they can track progress.
-        After you finish thinking, write your **public answer** in `message`.  
-        Include task IDs in your response when tasks are started.
+            - Include the task ID in your `message` field so users can track progress.
+            - Format your message professionally, e.g., "I have started a new matcher task. Task ID: {task_id}"
+        
+        **RESPONSE FORMAT:**
+        - Set `message` to your user-facing response
+        - Set `next_agents = []` when task is complete
+        - Ensure all fields match the required JSON schema
         """
 
     def _final_node(self, state: AgentState) -> AgentState:
@@ -754,12 +702,12 @@ class RapidFuzzMatcher():
         final_state = self.graph.invoke(self._state.model_dump())
         updated_state = AgentState(**final_state)
 
-        # Create conversation turn and add to history
-        conversation_turn = ConversationTurn(
-            user_query=query,
-            agent_response=updated_state.message,
-            timestamp=datetime.now().isoformat(),
-            context={
+        # Update conversation summary using LLM
+        updated_state.conversation_summary = self._summarize_with_llm(
+            updated_state.conversation_summary,
+            query,
+            updated_state.message,
+            {
                 "source_column": updated_state.source_column,
                 "target_column": updated_state.target_column,
                 "candidates_count": len(updated_state.candidates),
@@ -768,15 +716,6 @@ class RapidFuzzMatcher():
                 "matcher_task_id": updated_state.matcher_task_id,
             },
         )
-
-        # Add to conversation history
-        updated_state.conversation_history.append(conversation_turn)
-
-        # Keep conversation history manageable (last 20 turns)
-        if len(updated_state.conversation_history) > 20:
-            updated_state.conversation_history = updated_state.conversation_history[
-                -20:
-            ]
 
         # Persist the updated state for the next turn
         self._state = updated_state

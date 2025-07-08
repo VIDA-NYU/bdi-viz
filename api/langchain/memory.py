@@ -225,6 +225,8 @@ class MemoryRetriver:
             Recalls previously stored information based on a user's query.
             Args:
                 query (str): The query to search for in the stored memories.
+            Returns:
+                Optional[List[str]]: The list of memories if found, None otherwise.
             """,
         )
 
@@ -478,11 +480,11 @@ Explanations: {formatted_explanations}
         self.user_memory_count += len(chunks)
         return f"I have remembered that in {len(chunks)} chunks."
 
-    def search_user_memory(self, query: str, limit: int = 5) -> List[str]:
+    def search_user_memory(self, query: str, limit: int = 5) -> Optional[List[str]]:
         filter = {"namespace": "user_memory"}
         if self.user_memory_count == 0:
             logger.info("🧰Tool result: search_user_memory, memory is empty...")
-            return []
+            return None
         elif self.user_memory_count < limit:
             limit = self.user_memory_count
 

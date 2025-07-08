@@ -31,7 +31,6 @@ from .pydantic import (
     CandidateExplanation,
     Ontology,
     RelatedSources,
-    SearchResponse,
 )
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -130,23 +129,25 @@ class Agent:
         instructions_with_memory = """
     1. Review the operation details and use `recall_memory` to get more context if needed.
     2. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
-    3. Conclude if the current candidate is a valid match based on:
+    3. If the values are convertable, provide possible convertion methods in your explanation.
+    4. Conclude if the current candidate is a valid match based on:
         a. Your explanations,
         b. Similarity between the attribute names,
         c. Consistency of the sample values, and descriptions provided,
         d. The history of false positives and negatives,
         e. The context from `recall_memory`.
-    4. Include any additional context or keywords that might support or contradict the current mapping.
+    5. Include any additional context or keywords that might support or contradict the current mapping.
     """
 
         instructions_without_memory = """
     1. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
-    2. Conclude if the current candidate is a valid match based on:
+    2. If the values are convertable, provide possible convertion methods in your explanation.
+    3. Conclude if the current candidate is a valid match based on:
         a. Your explanations,
         b. Similarity between the attribute names,
         c. Consistency of the sample values, and descriptions provided,
         d. The history of false positives and negatives.
-    3. Include any additional context or keywords that might support or contradict the current mapping.
+    4. Include any additional context or keywords that might support or contradict the current mapping.
     """
 
         prompt += (

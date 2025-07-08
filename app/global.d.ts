@@ -168,23 +168,10 @@ declare interface MatcherAnalysis {
     code?: string;
 }
 
-declare interface ConversationTurn {
-    user_query: string;
-    agent_response: string;
-    timestamp: string;
-    context?: {
-        source_column?: string;
-        target_column?: string;
-        candidates_count?: number;
-        new_candidates_count?: number;
-        [key: string]: any;
-    };
-}
-
 declare interface AgentState {
     message: string;
     query: string;
-    conversation_history: ConversationTurn[];
+    conversation_summary: string;
     source_column?: string | null;
     source_values?: string[] | null;
     target_column?: string | null;

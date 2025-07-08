@@ -96,7 +96,13 @@ class QueryTools:
             if candidate["sourceColumn"] == source_attribute
         ]
 
-        # Group by sourceColumn and targetColumn, averaging scores for multiple matchers
+        # Get matcher weights for weighted scoring
+        matcher_weights = {}
+        matchers = self.matching_task.get_matchers()
+        for matcher in matchers:
+            matcher_weights[matcher["name"]] = matcher["weight"]
+
+        # Group by sourceColumn and targetColumn, collecting scores and matchers
         grouped_candidates = {}
         for candidate in filtered_candidates:
             key = (candidate["sourceColumn"], candidate["targetColumn"])
@@ -105,18 +111,31 @@ class QueryTools:
                     "sourceColumn": candidate["sourceColumn"],
                     "targetColumn": candidate["targetColumn"],
                     "scores": [],
+                    "matchers": [],
                 }
             grouped_candidates[key]["scores"].append(candidate["score"])
+            grouped_candidates[key]["matchers"].append(
+                candidate.get("matcher", "unknown")
+            )
 
-        # Calculate average scores and create final results
+        # Calculate weighted average scores and create final results
         results = []
         for key, group in grouped_candidates.items():
-            avg_score = sum(group["scores"]) / len(group["scores"])
+            if matcher_weights:
+                # Calculate weighted average using matcher weights
+                weighted_avg_score = 0.0
+                for i, matcher in enumerate(group["matchers"]):
+                    weight = matcher_weights.get(matcher, 1.0)
+                    weighted_avg_score += group["scores"][i] * weight
+            else:
+                # Fallback to simple average if no weights available
+                weighted_avg_score = sum(group["scores"]) / len(group["scores"])
+
             results.append(
                 {
                     "sourceColumn": group["sourceColumn"],
                     "targetColumn": group["targetColumn"],
-                    "score": avg_score,
+                    "score": weighted_avg_score,
                 }
             )
         logger.info(
