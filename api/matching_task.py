@@ -111,11 +111,12 @@ class MatchingTask:
         self.task_state = {
             "status": "idle",
             "progress": 0,
-            "current_step": "",
+            "current_step": "Task start...",
             "total_steps": 4,
             "completed_steps": 0,
             "logs": [],
         }
+        self._save_task_state()
 
     def _load_cached_matchers_async(self) -> None:
         """Start an asynchronous process to load cached matchers"""
