@@ -1,7 +1,7 @@
 import logging
 import os
 import random
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -198,7 +198,7 @@ class Agent:
         pd.reset_option("display.max_columns")
 
         prompt = f"""
-    Analyze the target DataFrame preview below to create an ontology for each column.
+    Analyze the DataFrame preview below to create an ontology for each column.
 
     DataFrame Preview:
     {df_preview}
@@ -226,6 +226,64 @@ class Agent:
             output_structure=Ontology,
         )
         return response
+
+    def stream_infer_ontology(self, target_df: pd.DataFrame) -> Generator[Tuple[List[str], Ontology], None, None]:
+        """
+        Streams ontology inference column by column, yielding partial ontology results.
+        Each yield is a tuple (column_slice, ontology_dict).
+        """
+        
+        pd.set_option("display.max_columns", None)
+        columns = target_df.columns.tolist()
+        pd.reset_option("display.max_columns")
+
+        for idx in range(0, len(columns), 5):
+            if idx + 5 > len(columns):
+                column_slice = columns[idx:]
+            else:
+                column_slice = columns[idx : idx + 5]
+            col_data = target_df[column_slice]
+            # Build a prompt for just this column
+            prompt = f"""
+Analyze the following column from a DataFrame and create an ontology description for it.
+
+Column Names: {column_slice}
+Sample Values: {col_data.head().to_string()}
+
+Task:
+Create an AttributeProperties object for this column with the following information:
+- column_name: The exact name of the column
+- category: Group into one of at most 3 high-level categories (grandparent level)
+- node: Group into one of at most 10 mid-level nodes (parent level)
+- type: Classify as "enum" (categorical), "number", "string", "boolean", or "other"
+- description: A clear description of what the column represents
+- enum: For categorical columns, list observed and inferred possible values
+- maximum/minimum: For numerical columns, provide range constraints if applicable
+
+Important:
+- Return ONLY a valid JSON object following the AttributeProperties schema with no additional text
+"""
+            output_parser = PydanticOutputParser(pydantic_object=Ontology)
+            prompt_full = self.generate_prompt(prompt, output_parser)
+            agent_executor = create_react_agent(self.llm, tools=[])
+            responses = []
+            for chunk in agent_executor.stream(
+                {
+                    "messages": [
+                        SystemMessage(content="You are a helpful assistant that generates ontology for a column."),
+                        HumanMessage(content=prompt_full),
+                    ]
+                },
+                {"configurable": {"thread_id": "bdiviz-1"}},
+            ):
+                responses.append(chunk)
+            # Get the final response for this column
+            final_response = responses[-1]["agent"]["messages"][0].content
+            attribute = output_parser.parse(final_response)
+            # Convert to dict if needed
+            if hasattr(attribute, "model_dump"):
+                attribute = attribute.model_dump()
+            yield (column_slice, attribute)
 
     def remember_fp(self, candidate: Dict[str, Any]) -> None:
         logger.info(f"[Agent] Remembering the false positive...")
@@ -322,11 +380,11 @@ def get_agent(memory_retriever):
             metadata={"_user": "yfw215"},
         )
         llm_model = ChatOpenAI(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             temperature=0,
             base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
             default_headers=portkey_headers,
-            timeout=int(os.getenv("LLM_TIMEOUT", "1000")),
+            timeout=1000,
             max_retries=3,
         )
         AGENT = Agent(memory_retriever, llm_model=llm_model)
