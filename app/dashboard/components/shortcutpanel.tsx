@@ -20,7 +20,7 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 interface ShortcutPanelProps {
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => void;
     handleMatchers: (matchers: Matcher[]) => void;
-    handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
+    handleTargetOntology: (targetOntologies: Ontology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
     acceptMatch: () => void;

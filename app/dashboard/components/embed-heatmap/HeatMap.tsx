@@ -15,6 +15,7 @@ import { RectCell } from "./cells/RectCell";
 import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import HierarchicalColumnViz from "./axis/space-filling/HierarchyColumnViz";
+import SourceHierarchyColumnViz from "./axis/space-filling/SourceHierarchyColumnViz";
 
 interface HeatMapProps {
   data: AggregatedCandidate[];
@@ -22,7 +23,8 @@ interface HeatMapProps {
   sourceColumns: SourceColumn[];
   setSourceColumn: (sourceColumn: string) => void;
   sourceCluster?: string[];
-  targetOntologies?: TargetOntology[];
+  targetOntologies?: Ontology[];
+  sourceOntologies?: Ontology[];
   selectedCandidate?: Candidate;
   setSelectedCandidate?: (candidate: Candidate | undefined) => void;
   sourceUniqueValues: SourceUniqueValues[];
@@ -41,6 +43,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
   setSourceColumn,
   sourceColumn,
   targetOntologies,
+  sourceOntologies,
   selectedCandidate,
   setSelectedCandidate,
   sourceUniqueValues,
@@ -101,20 +104,27 @@ const HeatMap: React.FC<HeatMapProps> = ({
 
   // Setup ontology layout
   const {
-    treeData: targetTreeData,
+    targetTreeData,
+    sourceTreeData,
     expandedNodes: targetExpandedNodes,
     toggleNode: toggleTargetNode,
   } = useOntologyLayout({
-    columns: x.domain(),
+    targetColumns: x.domain(),
+    sourceColumns: y.domain(),
     targetOntologies: targetOntologies ?? [],
+    sourceOntologies: sourceOntologies ?? [],
     width: dimensions.width,
     height: dimensions.height,
     margin: MARGIN,
-    scale: x,
+    x: x,
+    y: y,
     getWidth,
+    getHeight,
     currentExpanding: currentExpanding as AggregatedCandidate,
     useHorizontalPadding: false,
   });
+
+  console.log("sourceTreeData", sourceTreeData);
 
   // Handle cell click
   const handleCellClick = useCallback(
@@ -297,19 +307,29 @@ const HeatMap: React.FC<HeatMapProps> = ({
             <Legend color={color} />
             
             {/* Y Axis */}
-            <YAxis
+            {/* <YAxis
               y={y}
               getHeight={getHeight}
               sourceColumn={sourceColumn}
               setSourceColumn={setSourceColumn}
               sourceColumns={sourceColumns}
               hideTooltip={hideTooltip}
-            />
+              sourceTreeData={sourceTreeData}
+            /> */}
           </g>
         </svg>
 
         {/* Tooltip */}
         {tooltipElement}
+      </Box>
+
+      <Box sx={{ flexGrow: 1, paddingLeft: 0, flexBasis: "280px", position: "absolute", top: 160, left: 320, zIndex: 1000 }}>
+        <SourceHierarchyColumnViz
+          sourceTreeData={sourceTreeData}
+          currentExpanding={currentExpanding as AggregatedCandidate}
+          transform={`translate(${0},${0})`}
+          hideTooltip={hideTooltip}
+        />
       </Box>
 
       <Box sx={{ flexGrow: 1, paddingLeft: 0, flexBasis: "280px" }}>

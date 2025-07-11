@@ -125,6 +125,7 @@ export interface TreeNode {
   x: number;
   y: number;
   width: number;
+  height: number;
   originalColumn?: string;
   isExpanded?: boolean;
 }
