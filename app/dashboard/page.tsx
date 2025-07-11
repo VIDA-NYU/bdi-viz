@@ -155,11 +155,6 @@ export default function Dashboard() {
         updateHighlightedTargetColumns
     } = useDashboardHighlight({candidates, searchResults});
 
-    function handleOntologySearch(candidates: Candidate[]) {
-        console.log("Ontology Search Candidates: ", candidates);
-        getCachedResults({ callback: handleFileUpload });
-    }
-
     function handleUserOperationsUpdate(userOperations: UserOperation[]) {
         setUserOperations(userOperations);
         generateExplanations();
@@ -244,7 +239,7 @@ export default function Dashboard() {
     const headerContent = useMemo(() => (
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
             <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
-                <Typography sx={{ fontSize: "1.2rem", fontWeight: "200" }}>BDI Visualization System</Typography>
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: "200" }}>BDIViz</Typography>
                 <Box display="flex" alignItems="center">
                     <SearchMenu
                         agentSearchResultCallback={handleSearchResults}
@@ -396,7 +391,10 @@ export default function Dashboard() {
             {/* Popups */}
             <OntologySearchPopup
                 selectedCandidate={selectedCandidate || undefined}
-                callback={handleOntologySearch}
+                callback={handleFileUpload}
+                ontologyCallback={handleTargetOntology}
+                uniqueValuesCallback={handleUniqueValues}
+                valueMatchesCallback={handleValueMatches}
             />
 
             <NewMatcherDialog

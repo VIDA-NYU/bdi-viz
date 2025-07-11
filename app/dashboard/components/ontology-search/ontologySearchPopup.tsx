@@ -17,7 +17,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import { agentSearchOntology } from '@/app/lib/langchain/agent-helper';
 import SettingsGlobalContext from '@/app/lib/settings/settings-context';
-import { pollForMatchingStatus, pollForMatcherStatus } from '@/app/lib/heatmap/heatmap-helper';
+import { pollForMatchingStatus, pollForMatcherStatus, getValueMatches, getValueBins, getTargetOntology, getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
 
 interface ChatMessage {
     id: string;
@@ -31,11 +31,17 @@ interface ChatMessage {
 interface OntologySearchPopupProps {
     selectedCandidate?: Candidate;
     callback: (candidates: Candidate[]) => void;
+    ontologyCallback: (targetOntology: TargetOntology[]) => void;
+    uniqueValuesCallback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
+    valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
 }
 
 const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
     selectedCandidate,
     callback,
+    ontologyCallback,
+    uniqueValuesCallback,
+    valueMatchesCallback,
 }) => {
     const [query, setQuery] = useState<string>('');
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -81,14 +87,22 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                     agentState: result,
                 };
                 setChatHistory(prev => [...prev, agentMessage]);
-                if (result.candidates || result.candidates_to_append) callback(result.candidates || result.candidates_to_append);
+                if (result.candidates || result.candidates_to_append) {
+                    getCachedResults({ callback });
+                    getTargetOntology({ callback: ontologyCallback });
+                    getValueBins({ callback: uniqueValuesCallback });
+                    getValueMatches({ callback: valueMatchesCallback });
+                }
                 if (result.task_id) {
                     setIsLoadingGlobal(true);
                     pollForMatchingStatus({
                         taskId: result.task_id,
                         onResult: (result) => {
                             console.log("Matching task completed with result:", result);
-                            callback([]);
+                            getCachedResults({ callback });
+                            getTargetOntology({ callback: ontologyCallback });
+                            getValueBins({ callback: uniqueValuesCallback });
+                            getValueMatches({ callback: valueMatchesCallback });
                             setIsLoadingGlobal(false);
                         },
                         onError: (error) => {
@@ -106,7 +120,10 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                         taskId: result.matcher_task_id,
                         onResult: (result) => {
                             console.log("Matcher task completed with result:", result);
-                            callback([]);
+                            getCachedResults({ callback });
+                            getTargetOntology({ callback: ontologyCallback });
+                            getValueBins({ callback: uniqueValuesCallback });
+                            getValueMatches({ callback: valueMatchesCallback });
                             setIsLoadingGlobal(false);
                         },
                         onError: (error) => {
@@ -237,7 +254,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 position: 'fixed',
                 right: 0,
                 top: 0,
-                width: '320px',
+                width: '400px',
                 height: '100vh',
                 backgroundColor: 'background.paper',
                 borderLeft: 1,
@@ -260,7 +277,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 }}
             >
                 <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 500 }}>
-                    Ontology Assistant
+                    Harmonization Assistant
                 </Typography>
                 <IconButton
                     size="small"
@@ -303,10 +320,10 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                     >
                         <SmartToyIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
                         <Typography variant="body2" sx={{ mb: 1 }}>
-                            Welcome to the Ontology Assistant
+                            Welcome to the Harmonization Assistant
                         </Typography>
                         <Typography variant="caption">
-                            Ask me about ontologies, schemas, or upload files for analysis.
+                            Ask me about ontologies, schemas, or upload files for harmonization.
                         </Typography>
                     </Box>
                 ) : (

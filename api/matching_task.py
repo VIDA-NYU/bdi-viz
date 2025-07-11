@@ -477,6 +477,9 @@ class MatchingTask:
             }
             self.append_cached_candidate(new_candidate)
 
+            # Generate value matches for the new candidate
+            self._generate_value_matches(source_col, property_obj["column_name"])
+
             logger.info(f"[MatchingTask] Appended candidate from agent: {target_col}")
 
     def _load_cached_matchers(
