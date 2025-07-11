@@ -499,20 +499,6 @@ def ask_agent():
     return response
 
 
-@app.route("/api/agent/search/candidates", methods=["POST"])
-def search_candidates():
-    session = extract_session_name(request)
-    # Unused variable removed to save memory
-    data = request.json
-    query = data["query"]
-
-    agent = get_agent()
-    response = agent.search(query)
-    response = response.model_dump()
-
-    return response
-
-
 @app.route("/api/agent/explain", methods=["POST"])
 def agent_explanation():
     session = extract_session_name(request)
@@ -559,12 +545,19 @@ def agent_explore():
 
     data = request.json
     query = data["query"]
-    candidate = data["candidate"]
+    candidate = data.get("candidate", None)
 
-    source_col = candidate["sourceColumn"]
-    target_col = candidate["targetColumn"]
-    source_values = matching_task.get_source_unique_values(source_col)
-    target_values = matching_task.get_target_unique_values(target_col)
+    if candidate:
+        source_col = candidate["sourceColumn"]
+        target_col = candidate["targetColumn"]
+        source_values = matching_task.get_source_unique_values(source_col)
+        target_values = matching_task.get_target_unique_values(target_col)
+    else:
+        source_col = None
+        target_col = None
+        source_values = None
+        target_values = None
+
     candidate = {
         "sourceColumn": source_col,
         "targetColumn": target_col,
@@ -664,42 +657,12 @@ def agent_thumb():
     return {"message": "success"}
 
 
-@app.route("/api/agent/apply", methods=["POST"])
-def agent_apply():
-    session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
-
-    reaction = request.json
-    actions = reaction["actions"]
-    previous_operation = reaction["previousOperation"]
-
-    app.logger.info(f"User Reaction: {reaction}")
-
-    responses = []
-    agent = get_agent()
-    for action in actions:
-        response = agent.apply(session, action, previous_operation)
-        if response:
-            response_obj = response.model_dump()
-            if response_obj["action"] == "undo":
-                user_operation = previous_operation["operation"]
-                candidate = previous_operation["candidate"]
-                references = previous_operation["references"]
-                matching_task.undo_operation(user_operation, candidate, references)
-            responses.append(response_obj)
-
-    return responses
-
-
 @app.route("/api/user-operation/apply", methods=["POST"])
 def user_operation():
     session = extract_session_name(request)
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     operation_objs = request.json["userOperations"]
-    app.logger.info(f"Hahahahahahaah")
-
-    # agent = get_agent()
 
     app.logger.info(f"User operations: {operation_objs}")
     for operation_obj in operation_objs:

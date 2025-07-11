@@ -25,7 +25,12 @@ class WeightUpdater:
         self.alpha = alpha
         self.beta = beta
         self.candidates = self._preprocess_candidates(candidates)
-        self._normalize_weights()
+        self._normalize_weights(reset=True)
+
+    def update_matchers(self, matchers: Dict[str, Any]) -> Dict[str, Any]:
+        self.matchers = matchers
+        self._normalize_weights(reset=True)
+        return self.matchers
 
     def update_weights(self, operation: str, source_column: str, target_column: str):
         """
@@ -59,9 +64,9 @@ class WeightUpdater:
                     )
                     break
 
-    def _normalize_weights(self):
+    def _normalize_weights(self, reset: bool = False):
         total_weight = sum(matcher["weight"] for matcher in self.matchers.values())
-        if total_weight == 0:
+        if reset or total_weight == 0:
             logger.warning(
                 "Total matcher weight is zero. Resetting to uniform weights."
             )
