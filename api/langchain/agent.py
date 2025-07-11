@@ -227,12 +227,14 @@ class Agent:
         )
         return response
 
-    def stream_infer_ontology(self, target_df: pd.DataFrame) -> Generator[Tuple[List[str], Ontology], None, None]:
+    def stream_infer_ontology(
+        self, target_df: pd.DataFrame
+    ) -> Generator[Tuple[List[str], Ontology], None, None]:
         """
         Streams ontology inference column by column, yielding partial ontology results.
         Each yield is a tuple (column_slice, ontology_dict).
         """
-        
+
         pd.set_option("display.max_columns", None)
         columns = target_df.columns.tolist()
         pd.reset_option("display.max_columns")
@@ -251,17 +253,11 @@ Column Names: {column_slice}
 Sample Values: {col_data.head().to_string()}
 
 Task:
-Create an AttributeProperties object for this column with the following information:
-- column_name: The exact name of the column
-- category: Group into one of at most 3 high-level categories (grandparent level)
-- node: Group into one of at most 10 mid-level nodes (parent level)
-- type: Classify as "enum" (categorical), "number", "string", "boolean", or "other"
-- description: A clear description of what the column represents
-- enum: For categorical columns, list observed and inferred possible values
-- maximum/minimum: For numerical columns, provide range constraints if applicable
+Create an Ontology object for the columns with the following information:
+- properties: List of AttributeProperties objects for each column
 
 Important:
-- Return ONLY a valid JSON object following the AttributeProperties schema with no additional text
+- Return ONLY a valid JSON object following the Ontology schema with no additional text
 """
             output_parser = PydanticOutputParser(pydantic_object=Ontology)
             prompt_full = self.generate_prompt(prompt, output_parser)
@@ -270,7 +266,9 @@ Important:
             for chunk in agent_executor.stream(
                 {
                     "messages": [
-                        SystemMessage(content="You are a helpful assistant that generates ontology for a column."),
+                        SystemMessage(
+                            content="You are a helpful assistant that generates ontology for a column."
+                        ),
                         HumanMessage(content=prompt_full),
                     ]
                 },
@@ -279,11 +277,9 @@ Important:
                 responses.append(chunk)
             # Get the final response for this column
             final_response = responses[-1]["agent"]["messages"][0].content
-            attribute = output_parser.parse(final_response)
-            # Convert to dict if needed
-            if hasattr(attribute, "model_dump"):
-                attribute = attribute.model_dump()
-            yield (column_slice, attribute)
+            ontology = output_parser.parse(final_response)
+
+            yield (column_slice, ontology)
 
     def remember_fp(self, candidate: Dict[str, Any]) -> None:
         logger.info(f"[Agent] Remembering the false positive...")
@@ -380,7 +376,7 @@ def get_agent(memory_retriever):
             metadata={"_user": "yfw215"},
         )
         llm_model = ChatOpenAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             temperature=0,
             base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
             default_headers=portkey_headers,

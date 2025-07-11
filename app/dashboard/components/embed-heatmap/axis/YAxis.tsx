@@ -4,6 +4,8 @@ import { useTheme } from "@mui/material";
 import { StyledText } from "@/app/dashboard/layout/components";
 import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
 import { useTooltip } from "../hooks/useTooltip";
+import SourceHierarchyColumnViz from './space-filling/SourceHierarchyColumnViz';
+import { TreeNode } from "../tree/types";
 
 interface YAxisProps {
   y: any; // (scale) function with domain() and range() methods
@@ -12,6 +14,7 @@ interface YAxisProps {
   setSourceColumn: (sourceColumn: string) => void;
   sourceColumns: SourceColumn[];
   hideTooltip: () => void;
+  sourceTreeData: TreeNode[];
 }
 
 interface LabelProps {
@@ -134,7 +137,7 @@ const AxisLabel = ({
   );
 };
 
-const YAxis = ({ y, getHeight, sourceColumn, setSourceColumn, sourceColumns, hideTooltip }: YAxisProps) => {
+const YAxis = ({ y, getHeight, sourceColumn, setSourceColumn, sourceColumns, hideTooltip, sourceTreeData }: YAxisProps) => {
   const theme = useTheme();
   const { globalQuery } = useContext(HighlightGlobalContext);
 
@@ -215,6 +218,11 @@ const YAxis = ({ y, getHeight, sourceColumn, setSourceColumn, sourceColumns, hid
           />
         );
       })}
+      <SourceHierarchyColumnViz
+        sourceTreeData={sourceTreeData}
+        transform={`translate(-200,0)`} // adjust as needed for your layout
+        hideTooltip={hideTooltip}
+      />
     </g>
   );
 };

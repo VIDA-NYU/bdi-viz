@@ -26,7 +26,7 @@ declare interface SourceCluster {
     cluster: string[];
 }
 
-declare interface TargetOntology {
+declare interface Ontology {
     name: string;
     parent: string;
     grandparent: string;

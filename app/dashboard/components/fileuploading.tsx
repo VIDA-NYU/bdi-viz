@@ -12,7 +12,7 @@ import { Dropzone } from "./file-upload/fileUploadBox";
 
 interface FileUploadingProps {
     callback: (candidates: Candidate[], sourceCluster: SourceCluster[]) => void;
-    ontologyCallback: (targetOntology: TargetOntology[]) => void;
+    ontologyCallback: (targetOntology: Ontology[]) => void;
     uniqueValuesCallback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
 }

@@ -60,6 +60,7 @@ export default function Dashboard() {
         valueMatches,
         userOperations,
         targetOntologies,
+        sourceOntologies,
         gdcAttribute,
         handleFileUpload,
         handleMatchers,
@@ -331,6 +332,7 @@ export default function Dashboard() {
                         sourceColumns={filteredSourceColumns}
                         sourceCluster={filteredSourceCluster}
                         targetOntologies={targetOntologies}
+                        sourceOntologies={sourceOntologies}
                         selectedCandidate={selectedCandidate}
                         setSelectedCandidate={setSelectedCandidateCallback}
                         sourceUniqueValues={sourceUniqueValues}

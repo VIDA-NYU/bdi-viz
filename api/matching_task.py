@@ -297,11 +297,11 @@ class MatchingTask:
                 raise ValueError("Source and Target dataframes must be provided.")
 
             # Initialize task state and clear logs for new task
-            self._initialize_task_state()
-            self.task_state["logs"] = []  # Clear logs for new task
+            # self._initialize_task_state()
+            # self.task_state["logs"] = []  # Clear logs for new task
             self._update_task_state(
                 status="running",
-                progress=0,
+                progress=20,
                 current_step="Computing hashes",
                 completed_steps=0,
                 log_message=("Starting new matching task. Logs cleared."),
@@ -309,7 +309,7 @@ class MatchingTask:
 
             source_hash, target_hash = self._compute_hashes()
             self._update_task_state(
-                progress=25,
+                progress=30,
                 current_step="Checking cache",
                 completed_steps=1,
                 log_message=("Hashing source and target dataframes."),
@@ -753,12 +753,15 @@ class MatchingTask:
         candidates = self.get_cached_candidates()
         return load_gdc_ontology(candidates)
 
-    def _generate_ontology(self) -> List[Dict]:
+    def _generate_target_ontology(self) -> List[Dict]:
         candidates = self.get_cached_candidates()
         target_columns = set()
         for candidate in candidates:
             target_columns.add(candidate["targetColumn"])
-        return load_ontology(target_columns)
+        return load_ontology(dataset="target", columns=list(target_columns))
+
+    def _generate_source_ontology(self) -> List[Dict]:
+        return load_ontology(dataset="source")
 
     def _initialize_value_matches(self) -> None:
         self.cached_candidates["value_matches"] = {}

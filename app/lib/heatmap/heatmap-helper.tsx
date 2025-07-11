@@ -252,19 +252,19 @@ const getUserOperationHistory = (prop: userOperationHistoryProps) => {
 };
 
 interface targetOntologyProps {
-    callback: (targetOntology: TargetOntology[]) => void;
+    callback: (targetOntology: Ontology[]) => void;
     signal?: AbortSignal;
 }
 
 const getTargetOntology = (prop: targetOntologyProps) => {
     return makeApiRequest<void>(
-        "/api/ontology",
+        "/api/ontology/target",
         {},
         prop.signal,
         (data) => {
             const results = data?.results;
             if (results && Array.isArray(results)) {
-                const targetOntology = parseArray<TargetOntology>(results, "TargetOntology");
+                const targetOntology = parseArray<Ontology>(results, "Ontology");
                 console.log("getTargetOntology finished!");
                 prop.callback(targetOntology);
                 return;
@@ -274,6 +274,31 @@ const getTargetOntology = (prop: targetOntologyProps) => {
         }
     );
 };
+
+interface getSourceOntologyProps {
+    callback: (sourceOntology: Ontology[]) => void;
+    signal?: AbortSignal;
+}
+
+const getSourceOntology = (prop: getSourceOntologyProps) => {
+    return makeApiRequest<void>(
+        "/api/ontology/source",
+        {},
+        prop.signal,
+        (data) => {
+            const results = data?.results;
+            if (results && Array.isArray(results)) {
+                const sourceOntology = parseArray<Ontology>(results, "Ontology");
+                console.log("getSourceOntology finished!");
+                prop.callback(sourceOntology);
+                return;
+            } else {
+                throw new Error("Invalid results format");
+            }
+        }
+    );
+};
+
 
 interface userOperationsProps {
     userOperations?: UserOperation[];
@@ -583,7 +608,8 @@ export {
     getValueBins, 
     getValueMatches, 
     getUserOperationHistory, 
-    getTargetOntology, 
+    getTargetOntology,
+    getSourceOntology,
     applyUserOperation, 
     undoUserOperation, 
     redoUserOperation, 

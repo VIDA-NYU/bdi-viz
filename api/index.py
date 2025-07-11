@@ -54,8 +54,8 @@ def create_app() -> Flask:
             result_backend="redis://localhost:6380/0",
             task_ignore_result=False,
             task_track_started=True,
-            task_time_limit=300,        # hard limit: 300s (5 min)
-            task_soft_time_limit=240,   # soft limit: 240s (4 min)
+            task_time_limit=300,  # hard limit: 300s (5 min)
+            task_soft_time_limit=240,  # soft limit: 240s (4 min)
         ),
     )
     app.config.from_prefixed_env()
@@ -107,7 +107,9 @@ def get_langgraph_agent():
 
 
 @celery.task(bind=True)
-def run_matching_task(self, session, nodes=None, infer_source_ontology=False, infer_target_ontology=False):
+def run_matching_task(
+    self, session, nodes=None, infer_source_ontology=False, infer_target_ontology=False
+):
     try:
         app.logger.info(f"Running matching task for session: {session}")
         matching_task = SESSION_MANAGER.get_session(session).matching_task
@@ -122,20 +124,54 @@ def run_matching_task(self, session, nodes=None, infer_source_ontology=False, in
 
             if infer_source_ontology:
                 agent = get_agent()
-                partial_ontology = {}
-                for i, chunk in enumerate(agent.stream_infer_ontology(source)):
-                    # Parse chunk, update partial_ontology
-                    # (You need to decide how to parse/merge each chunk)
-                    # For example, if chunk contains a column's ontology:
-                    # partial_ontology[chunk['column_name']] = chunk['ontology']
-                    # Update progress
-                    matching_task._update_task_state(progress=5, log_message=f"Source ontology: {i}...")
-                    # Write partial results
-                    with open(".source.json", "w") as f:
-                        json.dump(partial_ontology, f)
-                matching_task._update_task_state(progress=5, log_message="Source ontology inferred.")
+                properties = []
+                for i, (column_slice, ontology) in enumerate(
+                    agent.stream_infer_ontology(source)
+                ):
+                    ontology = ontology.model_dump()
+                    properties += ontology["properties"]
+                    matching_task._update_task_state(
+                        current_step="Infer source ontology",
+                        progress=int(
+                            (25 / (len(source.columns))) * i
+                        ),  # total 5 percent, each i is a batch of 5 columns
+                        log_message=f"Source ontology: {i}...",
+                    )
+                parsed_ontology = parse_llm_generated_ontology(
+                    {"properties": properties}
+                )
+                with open(".source.json", "w") as f:
+                    json.dump(parsed_ontology, f)
+                matching_task._update_task_state(
+                    current_step="Infer source ontology",
+                    progress=5,
+                    log_message="Source ontology inferred.",
+                )
 
             # Repeat for target ontology...
+            if infer_target_ontology:
+                agent = get_agent()
+                properties = []
+                for i, (column_slice, ontology) in enumerate(
+                    agent.stream_infer_ontology(target)
+                ):
+                    ontology = ontology.model_dump()
+                    properties.extend(ontology["properties"])
+                    matching_task._update_task_state(
+                        current_step="Infer target ontology",
+                        progress=int(len(target.columns) // 5 * i) + 5,
+                        log_message=f"Target ontology: {i}...",
+                    )
+                parsed_ontology = parse_llm_generated_ontology(
+                    {"properties": properties}
+                )
+                with open(".target.json", "w") as f:
+                    json.dump(parsed_ontology, f)
+                matching_task._update_task_state(
+                    current_step="Infer target ontology",
+                    progress=10,
+                    log_message="Target ontology inferred.",
+                )
 
             candidates = matching_task.get_candidates()
 
@@ -175,6 +211,8 @@ def start_matching():
         app.logger.info("Using default GDC data")
         target = pd.read_csv(GDC_DATA_PATH)
         target_json = json.load(open(GDC_JSON_PATH, "r"))
+        with open(".target.json", "w") as f:
+            json.dump(target_json, f)
     else:
         app.logger.info("Using uploaded target")
         if target_json is None:
@@ -185,16 +223,13 @@ def start_matching():
     # cache csvs
     source.to_csv(".source.csv", index=False)
     target.to_csv(".target.csv", index=False)
-    # cache json
-    with open(".target.json", "w") as f:
-        json.dump(target_json, f)
 
     # Fix argument order: pass nodes=None explicitly
     task = run_matching_task.delay(
         session,
         nodes=None,
         infer_source_ontology=infer_source_ontology,
-        infer_target_ontology=infer_target_ontology
+        infer_target_ontology=infer_target_ontology,
     )
     return {"task_id": task.id}
 
@@ -352,8 +387,8 @@ def get_gdc_ontology():
     return {"message": "success", "results": results}
 
 
-@app.route("/api/ontology", methods=["POST"])
-def get_ontology():
+@app.route("/api/ontology/target", methods=["POST"])
+def get_target_ontology():
     session = extract_session_name(request)
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
@@ -367,7 +402,27 @@ def get_ontology():
             matching_task.update_dataframe(source_df=source, target_df=target)
         _ = matching_task.get_candidates()
 
-    results = matching_task._generate_ontology()
+    results = matching_task._generate_target_ontology()
+
+    return {"message": "success", "results": results}
+
+
+@app.route("/api/ontology/source", methods=["POST"])
+def get_source_ontology():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    if matching_task.source_df is None or matching_task.target_df is None:
+        if os.path.exists(".source.csv"):
+            source = pd.read_csv(".source.csv")
+            if os.path.exists(".target.csv"):
+                target = pd.read_csv(".target.csv")
+            else:
+                target = pd.read_csv(GDC_DATA_PATH)
+            matching_task.update_dataframe(source_df=source, target_df=target)
+        _ = matching_task.get_candidates()
+
+    results = matching_task._generate_source_ontology()
 
     return {"message": "success", "results": results}
 

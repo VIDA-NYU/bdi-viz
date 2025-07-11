@@ -41,7 +41,7 @@ interface LeftPanelProps {
     // File Uploading Props
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
     handleMatchers: (matchers: Matcher[]) => void;
-    handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
+    handleTargetOntology: (targetOntologies: Ontology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
     setOpenNewMatcherDialog: (open: boolean) => void;

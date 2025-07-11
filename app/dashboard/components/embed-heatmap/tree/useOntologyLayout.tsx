@@ -2,10 +2,14 @@ import { useState, useMemo } from "react";
 import { TreeNode, Scale, ClusteringOptions } from "./types";
 
 interface UseOntologyLayoutProps {
-  columns: string[];
-  targetOntologies: TargetOntology[];
-  scale: Scale;
+  targetColumns: string[];
+  sourceColumns: string[];
+  targetOntologies: Ontology[];
+  sourceOntologies: Ontology[];
+  x: Scale;
+  y: Scale;
   getWidth: (candidate: Candidate) => number;
+  getHeight: (candidate: Candidate) => number;
   width: number;
   height: number;
   margin: { top: number; right: number; bottom: number; left: number };
@@ -19,10 +23,14 @@ interface ColumnWithLocation {
   width: number;
   }
 export const useOntologyLayout = ({
-  columns,
+  targetColumns,
+  sourceColumns,
   targetOntologies,
-  scale,
+  sourceOntologies,
+  x,
+  y,
   getWidth,
+  getHeight,
   width,
   height,
   margin,
@@ -33,14 +41,20 @@ export const useOntologyLayout = ({
     new Set(["root"])
   );
 
-  const filteredOntologies = useMemo(() => {
+  const filteredTargetOntologies = useMemo(() => {
     return targetOntologies.filter((ontology) =>
-      columns.includes(ontology.name)
+      targetColumns.includes(ontology.name)
     );
-  }, [columns, targetOntologies]);
+  }, [targetColumns, targetOntologies]);
 
-  const treeData = useMemo(() => {
-    const grandparents = filteredOntologies.reduce((acc, ontology) => {
+  const filteredSourceOntologies = useMemo(() => {
+    return sourceOntologies.filter((ontology) =>
+      sourceColumns.includes(ontology.name)
+    );
+  }, [sourceColumns, sourceOntologies]);
+
+  const targetTreeData = useMemo(() => {
+    const grandparents = filteredTargetOntologies.reduce((acc, ontology) => {
       if (!acc.includes(ontology.grandparent)) {
         acc.push(ontology.grandparent);
       }
@@ -49,23 +63,9 @@ export const useOntologyLayout = ({
 
     const usableWidth = width - margin.left - margin.right;
 
-    const columnsWithLocation: ColumnWithLocation[] = columns.map((col) => {
-      const x = scale(col) ?? 0;
-      return {
-        name: col,
-        x: x + (useHorizontalPadding? 1 : 0) * (getWidth({ targetColumn: col } as Candidate) ?? 0) / 2,
-        y: 0,
-        width: 0,
-      };
-    }
-    );
-    
-
-
-
     const treeNodes: TreeNode[] = grandparents.map((grandparent, index) => {
       // Calculate category node position evenly across available space
-      const nodes = filteredOntologies.filter(
+      const nodes = filteredTargetOntologies.filter(
         (ontology) => ontology.grandparent === grandparent
       );
       const parents = nodes.reduce((acc, ontology) => {
@@ -133,28 +133,125 @@ export const useOntologyLayout = ({
                 level: 3,
                 originalColumn: col,
                 x:
-                  (scale(col) ?? 0) +
+                  (x(col) ?? 0) +
                   (useHorizontalPadding? 1 :0) * (getWidth({ targetColumn: col } as Candidate) ?? 0) / 2,
                 y: 0,
                 width: getWidth({ targetColumn: col } as Candidate) ?? 0,
+                height: 0,
                 isExpanded: childIsExpanded,
               };
             }),
             x: parentPosition,
             y: layerIsExpanded ? 80 : 40,
             width: 0,
+            height: 0,
             isExpanded: parentIsExpanded,
           };
         }),
         x: grandparentPosition,
         y: isExpanded ? 120 : 40,
         width: 0,
+        height: 0,
         isExpanded: isExpanded,
       };
     });
 
     return treeNodes;
-  }, [filteredOntologies, scale, getWidth, width, margin, expandedNodes]);
+  }, [filteredTargetOntologies, x, getWidth, width, margin, expandedNodes]);
+
+  const sourceTreeData = useMemo(() => {
+    const grandparents = filteredSourceOntologies.reduce((acc, ontology) => {
+      if (!acc.includes(ontology.grandparent)) {
+        acc.push(ontology.grandparent);
+      }
+      return acc;
+    }, [] as string[]);
+
+    const usableHeight = height - margin.top - margin.bottom;
+
+    const treeNodes: TreeNode[] = grandparents.map((grandparent, index) => {
+      const nodes = filteredSourceOntologies.filter(
+        (ontology) => ontology.grandparent === grandparent
+      );
+      const parents = nodes.reduce((acc, ontology) => {
+        if (!acc.includes(ontology.parent)) {
+          acc.push(ontology.parent);
+        }
+        return acc;
+      }, [] as string[]);
+
+      const grandparentPosition = 0;
+      let isExpanded = true;
+      if (currentExpanding) {
+        isExpanded = nodes.some((ontology) => currentExpanding.sourceColumn == ontology.name);
+      }
+
+      return {
+        id: grandparent,
+        label: {
+          text: grandparent,
+          show: true,
+          isClusterLabel: true,
+        },
+        level: 1,
+        children: parents.map((parent) => {
+          const cols = nodes
+            .filter((ontology) => ontology.parent === parent)
+            .map((ontology) => ontology.name);
+          const parentPosition =
+            (usableHeight * (parents.indexOf(parent) + 0.5)) / parents.length;
+          let parentIsExpanded = true;
+          if (currentExpanding) {
+            parentIsExpanded = cols.some((col) => currentExpanding.sourceColumn == col);
+          }
+          const layerIsExpanded = expandedNodes.size > 2;
+          return {
+            id: parent,
+            label: {
+              text: parent,
+              show: true,
+              isClusterLabel: true,
+            },
+            level: 2,
+            children: cols.map((col) => {
+              let childIsExpanded = true;
+              console.log(`${col} position: ${y(col)}, getHeight: ${getHeight({ sourceColumn: col } as Candidate)}`);
+              if (currentExpanding) {
+                childIsExpanded = currentExpanding.sourceColumn == col;
+              }
+              return {
+                id: col,
+                label: {
+                  text: col,
+                  show: true,
+                  isClusterLabel: false,
+                },
+                level: 3,
+                originalColumn: col,
+                x: 0,
+                y: (y(col) ?? 0) + 15,
+                width: 0,
+                height: getHeight({ sourceColumn: col } as Candidate) ?? 0,
+                isExpanded: childIsExpanded,
+              };
+            }),
+            x: layerIsExpanded ? 80 : 40,
+            y: parentPosition,
+            width: 0,
+            height: 0,
+            isExpanded: parentIsExpanded,
+          };
+        }),
+        x: isExpanded ? 120 : 40,
+        y: grandparentPosition,
+        width: 0,
+        height: 0,
+        isExpanded: isExpanded,
+      };
+    });
+
+    return treeNodes;
+  }, [filteredSourceOntologies, y, getHeight, height, margin, expandedNodes]);
 
   const toggleNode = (nodeId: string) => {
     setExpandedNodes((prev) => {
@@ -181,13 +278,14 @@ export const useOntologyLayout = ({
       }
     };
 
-    treeData.forEach(traverse);
+    targetTreeData.forEach(traverse);
 
     return result;
   };
 
   return {
-    treeData,
+    targetTreeData,
+    sourceTreeData,
     expandedNodes,
     toggleNode,
     getVisibleColumns,
