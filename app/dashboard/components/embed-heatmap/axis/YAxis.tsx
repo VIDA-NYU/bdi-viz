@@ -3,8 +3,6 @@ import { useTheme } from "@mui/material";
 
 import { StyledText } from "@/app/dashboard/layout/components";
 import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
-import { useTooltip } from "../hooks/useTooltip";
-import SourceHierarchyColumnViz from './space-filling/SourceHierarchyColumnViz';
 import { TreeNode } from "../tree/types";
 
 interface YAxisProps {
@@ -218,11 +216,6 @@ const YAxis = ({ y, getHeight, sourceColumn, setSourceColumn, sourceColumns, hid
           />
         );
       })}
-      <SourceHierarchyColumnViz
-        sourceTreeData={sourceTreeData}
-        transform={`translate(-200,0)`} // adjust as needed for your layout
-        hideTooltip={hideTooltip}
-      />
     </g>
   );
 };

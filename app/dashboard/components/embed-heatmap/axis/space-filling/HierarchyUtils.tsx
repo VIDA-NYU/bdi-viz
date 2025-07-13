@@ -23,6 +23,7 @@ export interface CategoryData {
   width?: number;
   height?: number;
   centerX?: number;
+  centerY?: number;
 }
 
 // Define the super category data structure
@@ -34,6 +35,7 @@ export interface SuperCategoryData {
   width?: number;
   height?: number;
   centerX?: number;
+  centerY?: number;
 }
 
 // Layout configuration for the visualization

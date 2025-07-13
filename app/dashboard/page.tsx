@@ -70,6 +70,7 @@ export default function Dashboard() {
         handleValueMatches,
         setGdcAttribute,
         handleTargetOntology,
+        handleSourceOntology,
     } = useDashboardCandidates();
 
     const {
@@ -316,8 +317,8 @@ export default function Dashboard() {
                     state={{ sourceColumn, candidateType, similarSources, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleNewMatchingTask}
-                    handleMatchers={handleMatchers}
                     handleTargetOntology={handleTargetOntology}
+                    handleSourceOntology={handleSourceOntology}
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}
                     setOpenNewMatcherDialog={setOpenNewMatcherDialog}

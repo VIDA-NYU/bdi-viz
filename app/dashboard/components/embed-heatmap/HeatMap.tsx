@@ -34,7 +34,7 @@ interface HeatMapProps {
   sx?: Record<string, any>;
 }
 
-const MARGIN = { top: 30, right: 78, bottom: 0, left: 200 };
+const MARGIN = { top: 30, right: 78, bottom: 0, left: 220 };
 
 const HeatMap: React.FC<HeatMapProps> = ({
   data,
@@ -123,8 +123,6 @@ const HeatMap: React.FC<HeatMapProps> = ({
     currentExpanding: currentExpanding as AggregatedCandidate,
     useHorizontalPadding: false,
   });
-
-  console.log("sourceTreeData", sourceTreeData);
 
   // Handle cell click
   const handleCellClick = useCallback(
@@ -323,12 +321,13 @@ const HeatMap: React.FC<HeatMapProps> = ({
         {tooltipElement}
       </Box>
 
-      <Box sx={{ flexGrow: 1, paddingLeft: 0, flexBasis: "280px", position: "absolute", top: 160, left: 320, zIndex: 1000 }}>
+      <Box sx={{ position: "absolute", top: 160, left: MARGIN.left + 120, zIndex: 1000 }}>
         <SourceHierarchyColumnViz
           sourceTreeData={sourceTreeData}
           currentExpanding={currentExpanding as AggregatedCandidate}
           transform={`translate(${0},${0})`}
           hideTooltip={hideTooltip}
+          setSourceColumn={setSourceColumn}
         />
       </Box>
 

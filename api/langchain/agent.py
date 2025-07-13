@@ -231,7 +231,9 @@ class Agent:
         self, target_df: pd.DataFrame
     ) -> Generator[Tuple[List[str], Ontology], None, None]:
         """
-        Streams ontology inference column by column, yielding partial ontology results.
+        Streams ontology inference with a two-phase workflow:
+        1. First generates high-level structure (categories and nodes) for all columns
+        2. Then generates detailed attributes for each batch
         Each yield is a tuple (column_slice, ontology_dict).
         """
 
@@ -239,24 +241,116 @@ class Agent:
         columns = target_df.columns.tolist()
         pd.reset_option("display.max_columns")
 
+        # Phase 1: Generate high-level ontology structure for all columns
+        structure_prompt = f"""
+Directly return the JSON in the exact schema described below. 
+No extra text before or after the JSON.
+
+The output should be formatted as a JSON instance that conforms to the JSON example below.
+Here is the output example:
+{{
+    "column1": {{"category": "category1", "node": "node1"}},
+    "column2": {{"category": "category1", "node": "node2"}}
+}}
+
+Analyze all column names from a DataFrame and create a high-level ontology structure.
+
+All Column Names: {columns}
+
+Task:
+Create a high-level ontology structure that organizes ALL columns into:
+- At most 3 categories (grandparent level)
+- At most 10 nodes (parent level)
+
+For each column, determine:
+- Which category it belongs to
+- Which node within that category it belongs to
+
+Important:
+- Keep category and node names concise (max 10 characters if possible)
+- Group semantically related columns together
+- Return a simple mapping structure showing column -> category -> node relationships
+- Focus only on categorization, not detailed attributes
+"""
+
+        # Get high-level structure first
+        agent_executor = create_react_agent(self.llm, tools=[])
+        structure_responses = []
+        for chunk in agent_executor.stream(
+            {
+                "messages": [
+                    SystemMessage(
+                        content="You are a helpful assistant that creates ontology structures."
+                    ),
+                    HumanMessage(content=structure_prompt),
+                ]
+            },
+            {"configurable": {"thread_id": "bdiviz-1"}},
+        ):
+            structure_responses.append(chunk)
+
+        # Parse the structure response
+        structure_response = structure_responses[-1]["agent"]["messages"][0].content
+        # Extract JSON from the response (assuming it's in the response)
+        import json
+        import re
+
+        try:
+            # Clean the response to extract just the JSON content
+            # Remove any prefix like "Assistant" and extract content between ```json and ```
+            json_match = re.search(
+                r"```json\s*\n(.*?)\n```", structure_response, re.DOTALL
+            )
+            if json_match:
+                json_content = json_match.group(1).strip()
+            else:
+                # If no markdown blocks, try to find JSON-like content
+                # Look for content between { and } (handle nested braces)
+                json_match = re.search(r"(\{.*\})", structure_response, re.DOTALL)
+                if json_match:
+                    json_content = json_match.group(1).strip()
+                else:
+                    json_content = structure_response.strip()
+
+            structure_data = json.loads(json_content)
+            logger.critical(f"[INFER-ONTOLOGY] Structure data: {structure_data}")
+        except (json.JSONDecodeError, AttributeError) as e:
+            # Fallback to basic categorization if parsing fails
+            logger.critical(f"!!![INFER-ONTOLOGY] JSON parsing error: {e}")
+            structure_data = {
+                col: {"category": "data", "node": "general"} for col in columns
+            }
+
+        # Phase 2: Generate detailed attributes for each batch using the structure
         for idx in range(0, len(columns), 5):
             if idx + 5 > len(columns):
                 column_slice = columns[idx:]
             else:
                 column_slice = columns[idx : idx + 5]
             col_data = target_df[column_slice]
-            # Build a prompt for just this column
+
+            # Build detailed prompt using the structure
+            batch_structure = {
+                col: structure_data.get(col, {"category": "data", "node": "general"})
+                for col in column_slice
+            }
+
             prompt = f"""
-Analyze the following column from a DataFrame and create an ontology description for it.
+Analyze the following columns from a DataFrame and create detailed ontology descriptions.
 
 Column Names: {column_slice}
 Sample Values: {col_data.head().to_string()}
+
+High-level Structure (use this as node and category for each column):
+{batch_structure}
 
 Task:
 Create an Ontology object for the columns with the following information:
 - properties: List of AttributeProperties objects for each column
 
 Important:
+- Use the provided category and node assignments from the structure
+- For "enum" types, include all observed values plus likely additional values
 - Return ONLY a valid JSON object following the Ontology schema with no additional text
 """
             output_parser = PydanticOutputParser(pydantic_object=Ontology)
@@ -275,7 +369,7 @@ Important:
                 {"configurable": {"thread_id": "bdiviz-1"}},
             ):
                 responses.append(chunk)
-            # Get the final response for this column
+            # Get the final response for this batch
             final_response = responses[-1]["agent"]["messages"][0].content
             ontology = output_parser.parse(final_response)
 

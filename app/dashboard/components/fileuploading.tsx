@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext, useState } from "react";
-import { runMatchingTask, getCachedResults, getTargetOntology, getValueBins, getValueMatches } from "@/app/lib/heatmap/heatmap-helper";
+import { runMatchingTask, getCachedResults, getTargetOntology, getValueBins, getValueMatches, getSourceOntology } from "@/app/lib/heatmap/heatmap-helper";
 
 import { Box, Paper, IconButton } from "@mui/material";
 import { BasicButton } from "../layout/components";
@@ -13,6 +13,7 @@ import { Dropzone } from "./file-upload/fileUploadBox";
 interface FileUploadingProps {
     callback: (candidates: Candidate[], sourceCluster: SourceCluster[]) => void;
     ontologyCallback: (targetOntology: Ontology[]) => void;
+    sourceOntologyCallback: (sourceOntology: Ontology[]) => void;
     uniqueValuesCallback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
 }
@@ -20,6 +21,7 @@ interface FileUploadingProps {
 const FileUploading: React.FC<FileUploadingProps> = ({
     callback,
     ontologyCallback,
+    sourceOntologyCallback,
     uniqueValuesCallback,
     valueMatchesCallback,
 }) => {
@@ -78,6 +80,7 @@ const FileUploading: React.FC<FileUploadingProps> = ({
                     console.log("Matching task completed with result:", result);
                     getCachedResults({ callback });
                     getTargetOntology({ callback: ontologyCallback });
+                    getSourceOntology({ callback: sourceOntologyCallback });
                     getValueBins({ callback: uniqueValuesCallback });
                     getValueMatches({ callback: valueMatchesCallback });
                     setIsLoadingGlobal(false);

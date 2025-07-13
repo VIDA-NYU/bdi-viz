@@ -11,9 +11,9 @@ const Legend: React.FC<LegendProps> = ({
 }) => {
   const theme = useTheme();
 
-  const legendWidth = 30;
-  const legendHeight = 350;
-  const legendOffset = -170;
+  const legendWidth = 25;
+  const legendHeight = 300;
+  const legendOffset = -200;
 
   const colorRamp = color;
     
@@ -21,9 +21,9 @@ const Legend: React.FC<LegendProps> = ({
   return (
     <g>
       <rect
-        transform={`translate(${legendOffset - 25}, 0)`}
+        transform={`translate(${legendOffset - 16}, 0)`}
         // style={{ filter: "drop-shadow(1px 1px 1px rgba(0,0,0,0.3))" }}
-        width={legendWidth + 40}
+        width={legendWidth + 30}
         // height={y.range()[1]}
         height={legendHeight}
         fill={theme.palette.grey[200]}
@@ -36,7 +36,7 @@ const Legend: React.FC<LegendProps> = ({
           y={0}
           textAnchor="start"
           style={{
-            fontSize: "0.7em",
+            fontSize: "0.6em",
             fontWeight: "600",
           }}
         >
@@ -57,10 +57,10 @@ const Legend: React.FC<LegendProps> = ({
                 ry={3}
               />
               <StyledText
-                x={legendWidth - 50}
-                y={i * legendWidth + 20}
+                x={legendWidth - 40}
+                y={i * legendWidth + 15}
                 textAnchor="start"
-                style={{ fontSize: "0.7em", fontWeight: "400" }}
+                style={{ fontSize: "0.6em", fontWeight: "400" }}
               >
                 {d.toFixed(1)}
               </StyledText>
@@ -70,13 +70,13 @@ const Legend: React.FC<LegendProps> = ({
       </g>
 
       {/* Accepted Legend */}
-      <g transform={`translate(${legendOffset}, 190)`}>
+      <g transform={`translate(${legendOffset}, 160)`}>
         <StyledText
           x={-12}
           y={0}
           textAnchor="start"
           style={{
-            fontSize: "0.7em",
+            fontSize: "0.6em",
             fontWeight: "600",
           }}
         >
@@ -95,13 +95,13 @@ const Legend: React.FC<LegendProps> = ({
       </g>
 
       {/* Rejected Legend */}
-      <g transform={`translate(${legendOffset}, 245)`}>
+      <g transform={`translate(${legendOffset}, 205)`}>
         <StyledText
           x={-10}
           y={0}
           textAnchor="start"
           style={{
-            fontSize: "0.7em",
+            fontSize: "0.6em",
             fontWeight: "600",
           }}
         >
@@ -120,13 +120,13 @@ const Legend: React.FC<LegendProps> = ({
       </g>
 
       {/* Searched Legend */}
-      <g transform={`translate(${legendOffset}, 300)`}>
+      <g transform={`translate(${legendOffset}, 250)`}>
         <StyledText
           x={-17}
           y={0}
           textAnchor="start"
           style={{
-            fontSize: "0.7em",
+            fontSize: "0.6em",
             fontWeight: "800",
             paintOrder: "stroke",
             fill: theme.palette.primary.main,

@@ -33,6 +33,7 @@ type DashboardCandidateState = {
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
     setGdcAttribute: (attribute: GDCAttribute | undefined) => void;
     handleTargetOntology: (targetOntologies: Ontology[]) => void;
+    handleSourceOntology: (sourceOntologies: Ontology[]) => void;
 }
 
 export type { DashboardCandidateState };
@@ -206,5 +207,6 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
         handleValueMatches,
         setGdcAttribute,
         handleTargetOntology,
+        handleSourceOntology,
     };
 };
