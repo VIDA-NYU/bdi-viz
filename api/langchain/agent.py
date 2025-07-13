@@ -313,10 +313,9 @@ Important:
                     json_content = structure_response.strip()
 
             structure_data = json.loads(json_content)
-            logger.critical(f"[INFER-ONTOLOGY] Structure data: {structure_data}")
         except (json.JSONDecodeError, AttributeError) as e:
             # Fallback to basic categorization if parsing fails
-            logger.critical(f"!!![INFER-ONTOLOGY] JSON parsing error: {e}")
+            logger.critical(f"[INFER-ONTOLOGY] JSON parsing error: {e}")
             structure_data = {
                 col: {"category": "data", "node": "general"} for col in columns
             }

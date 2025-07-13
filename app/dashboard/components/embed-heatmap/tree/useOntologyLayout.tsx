@@ -215,7 +215,6 @@ export const useOntologyLayout = ({
             level: 2,
             children: cols.map((col) => {
               let childIsExpanded = true;
-              console.log(`${col} position: ${y(col)}, getHeight: ${getHeight({ sourceColumn: col } as Candidate)}`);
               if (currentExpanding) {
                 childIsExpanded = currentExpanding.sourceColumn == col;
               }

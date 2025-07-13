@@ -1,7 +1,7 @@
 import { Selection } from 'd3';
 import { CategoryData, ColumnData, LayoutConfig } from './HierarchyUtils';
 import * as d3 from 'd3';
-import { calculateCategorySegments } from './SpaceFillingSegments';
+import { calculateCategorySegments, SpaceFillingOrientation } from './SpaceFillingSegments';
 import { getOptimalCategoryColorScale } from './ColorUtils';
 
 // Interface for bundled path data
@@ -12,16 +12,31 @@ interface BundledPath {
   category: CategoryData;
 }
 
+// Enum for orientation types
+export enum EdgeBundlingOrientation {
+  VERTICAL = 'vertical',
+  HORIZONTAL = 'horizontal'
+}
+
+// Interface for position parameters
+interface EdgeBundlingPosition {
+  columnsPosition: number; // X position for horizontal, Y position for vertical
+  categoryPosition: number; // X position for horizontal, Y position for vertical
+  orientation: EdgeBundlingOrientation;
+}
+
 // Create the bundled paths from columns to categories
 function createBundledPaths(
   positionedColumns: ColumnData[],
   positionedCategories: CategoryData[],
-  columnsY: number,
-  categoryY: number,
+  position: EdgeBundlingPosition,
   layoutConfig: LayoutConfig
 ): BundledPath[] {
-  const { columnHeight } = layoutConfig;
-  const controlPointOffsetY = (columnsY - categoryY) * 0.5;
+  const { columnHeight, columnWidth } = layoutConfig;
+  const { columnsPosition, categoryPosition, orientation } = position;
+  
+  // Calculate control point offset based on orientation
+  const controlPointOffset = (columnsPosition - categoryPosition) * 0.5;
   
   // Create a lookup map for faster category access
   const categoryMap = new Map(positionedCategories.map(cat => [cat.id, cat]));
@@ -30,16 +45,33 @@ function createBundledPaths(
   return positionedColumns
     .map(column => {
       const category = categoryMap.get(column.category);
-      if (!category || !category.centerX) return null;
+      if (!category) return null;
       
-      const startX = column.x! + column.width! / 2;
-      const startY = column.y! + columnHeight;
-      const endX = category.centerX;
-      const endY = categoryY;
+      let startX: number, startY: number, endX: number, endY: number, path: string;
       
-      // Create bundled path with S-curve to give bundling effect
-      // Use template literal only once for better performance
-      const path = `M ${startX} ${startY} C ${startX} ${startY - controlPointOffsetY * 0.3}, ${endX} ${endY + controlPointOffsetY * 0.7}, ${endX} ${endY}`;
+      if (orientation === EdgeBundlingOrientation.VERTICAL) {
+        // Vertical orientation: columns above, categories below
+        if (!category.centerX) return null;
+        
+        startX = column.x! + column.width! / 2;
+        startY = column.y! + columnHeight;
+        endX = category.centerX;
+        endY = categoryPosition;
+        
+        // Create bundled path with S-curve for vertical layout
+        path = `M ${startX} ${startY} C ${startX} ${startY - controlPointOffset * 0.3}, ${endX} ${endY + controlPointOffset * 0.7}, ${endX} ${endY}`;
+      } else {
+        // Horizontal orientation: columns on left, categories on right
+        if (!category.centerY) return null;
+
+        startX = column.x!;
+        startY = column.y! + column.height! / 2;
+        endX = categoryPosition + 20; // Add offset for horizontal layout
+        endY = category.centerY;
+        
+        // Create bundled path with S-curve for horizontal layout
+        path = `M ${startX} ${startY} C ${startX + controlPointOffset * 0.3} ${startY}, ${endX - controlPointOffset * 0.7} ${endY}, ${endX} ${endY}`;
+      }
       
       return {
         id: `edge-${column.id}-${category.id}`,
@@ -51,33 +83,55 @@ function createBundledPaths(
     .filter(Boolean) as BundledPath[];
 }
 
-// Main function to render the edge bundling
+// Main function to render the edge bundling with orientation support
 export function renderEdgeBundling(
   g: Selection<SVGGElement, unknown, null, undefined>,
   columnData: ColumnData[],
   categoryData: CategoryData[],
   layoutConfig: LayoutConfig,
-  columnsY: number,
-  categoryY: number,
-  categoryColorScale: (id: string) => string
+  columnsPosition: number,
+  categoryPosition: number,
+  categoryColorScale: (id: string) => string,
+  orientation: EdgeBundlingOrientation = EdgeBundlingOrientation.VERTICAL
 ) {
-  // Position columns and categories - memoize these calculations
-  const positionedColumns = columnData.map((column) => ({
-    ...column,
-    x: column.originalNode.x || 0,
-    y: columnsY,
-    width: column.originalNode.width || 100,
-    height: layoutConfig.columnHeight
-  }));
+  // Position columns and categories based on orientation
+  const positionedColumns = columnData.map((column) => {
+    if (orientation === EdgeBundlingOrientation.VERTICAL) {
+      return {
+        ...column,
+        x: column.originalNode.x || 0,
+        y: columnsPosition,
+        width: column.originalNode.width || 100,
+        height: layoutConfig.columnHeight
+      };
+    } else {
+      return {
+        ...column,
+        x: columnsPosition,
+        y: column.originalNode.y || 0,
+        width: layoutConfig.columnWidth,
+        height: column.originalNode.height || 100,
+      };
+    }
+  });
   
-  const positionedCategories = calculateCategorySegments(categoryData, layoutConfig, false);
+  const positionedCategories = calculateCategorySegments(
+    categoryData,
+    layoutConfig,
+    false,
+    undefined,
+    orientation === EdgeBundlingOrientation.VERTICAL ? SpaceFillingOrientation.HORIZONTAL : SpaceFillingOrientation.VERTICAL
+  );
 
   // Create paths - do this once and cache the result
   const bundledPaths = createBundledPaths(
     positionedColumns,
     positionedCategories,
-    columnsY,
-    categoryY,
+    {
+      columnsPosition,
+      categoryPosition,
+      orientation
+    },
     layoutConfig
   );
 
@@ -168,4 +222,48 @@ export function renderEdgeBundling(
     positionedCategories,
     bundledPaths
   };
+}
+
+// Legacy function for backward compatibility - vertical orientation
+export function renderEdgeBundlingVertical(
+  g: Selection<SVGGElement, unknown, null, undefined>,
+  columnData: ColumnData[],
+  categoryData: CategoryData[],
+  layoutConfig: LayoutConfig,
+  columnsY: number,
+  categoryY: number,
+  categoryColorScale: (id: string) => string
+) {
+  return renderEdgeBundling(
+    g,
+    columnData,
+    categoryData,
+    layoutConfig,
+    columnsY,
+    categoryY,
+    categoryColorScale,
+    EdgeBundlingOrientation.VERTICAL
+  );
+}
+
+// Legacy function for backward compatibility - horizontal orientation
+export function renderEdgeBundlingHorizontal(
+  g: Selection<SVGGElement, unknown, null, undefined>,
+  columnData: ColumnData[],
+  categoryData: CategoryData[],
+  layoutConfig: LayoutConfig,
+  columnsX: number,
+  categoryX: number,
+  categoryColorScale: (id: string) => string
+) {
+  return renderEdgeBundling(
+    g,
+    columnData,
+    categoryData,
+    layoutConfig,
+    columnsX,
+    categoryX,
+    categoryColorScale,
+    EdgeBundlingOrientation.HORIZONTAL
+  );
 }
