@@ -471,7 +471,7 @@ def get_agent(memory_retriever):
         llm_model = ChatOpenAI(
             model="gemini-2.5-flash",
             temperature=0,
-            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            base_url="https://portkey-lb.rt.nyu.edu/v1/",
             default_headers=portkey_headers,
             timeout=1000,
             max_retries=3,

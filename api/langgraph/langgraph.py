@@ -111,7 +111,7 @@ class LangGraphAgent:
         self.master_llm = ChatOpenAI(
             model="gemini-2.5-pro",
             temperature=0,
-            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            base_url="https://portkey-lb.rt.nyu.edu/v1/",
             default_headers=portkey_headers,
             timeout=llm_timeout,
             max_retries=3,
@@ -119,7 +119,7 @@ class LangGraphAgent:
         self.worker_llm = ChatOpenAI(
             model="gemini-2.5-flash",
             temperature=0,
-            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            base_url="https://portkey-lb.rt.nyu.edu/v1/",
             default_headers=portkey_headers,
             timeout=llm_timeout,
             max_retries=3,

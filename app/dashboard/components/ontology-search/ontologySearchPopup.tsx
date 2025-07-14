@@ -254,7 +254,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 position: 'fixed',
                 right: 0,
                 top: 0,
-                width: '400px',
+                width: '350px',
                 height: '100vh',
                 backgroundColor: 'background.paper',
                 borderLeft: 1,

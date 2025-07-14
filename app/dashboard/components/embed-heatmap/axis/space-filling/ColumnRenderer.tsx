@@ -2,7 +2,6 @@ import { Selection } from 'd3';
 import { ColumnData, LayoutConfig, highlightText } from './HierarchyUtils';
 import * as d3 from 'd3';
 import { intelligentTextSplit, shouldDisplayText, getMultiLineTextOffset } from './TextWrappingUtils.ts';
-import { getOptimalCategoryColorScale } from './ColorUtils';
 
 // Enum for orientation types
 export enum ColumnOrientation {
@@ -23,12 +22,11 @@ export function renderColumns(
   setSourceColumn?: (column: string) => void
 ) {
   const { theme, columnHeight, columnWidth } = layoutConfig;
-  
+
   // Typography settings
   const typography = {
     fontSize: 10,
     lineHeight: 14,
-    maxLines: orientation === ColumnOrientation.HORIZONTAL ? 3 : 2,
     minCharsPerLine: 3,
     textPadding: 12,
     tooltipFontSize: 12
@@ -130,13 +128,14 @@ export function renderColumns(
         ? columnWidth - (typography.textPadding + styles.categoryIndicator.width + styles.categoryIndicator.margin)
         : columnWidth;
       
+      const maxLines = (columnHeight - typography.textPadding) / typography.lineHeight;
       // Check if we should display text or not
-      if (shouldDisplayText(availableTextWidth, typography.fontSize, typography.minCharsPerLine, typography.maxLines)) {
+      if (shouldDisplayText(availableTextWidth, typography.fontSize, typography.minCharsPerLine, maxLines)) {
         const { lines, isTruncated } = intelligentTextSplit(
           d.name, 
-          availableTextWidth, 
+          availableTextWidth - typography.textPadding, 
           typography.fontSize,
-          typography.maxLines
+          maxLines
         );
         
         // Create a group for text lines
