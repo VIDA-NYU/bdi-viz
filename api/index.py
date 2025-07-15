@@ -112,6 +112,11 @@ def run_matching_task(
 ):
     try:
         app.logger.info(f"Running matching task for session: {session}")
+
+        # Clear specific namespaces for new task
+        memory_retriever = get_memory_retriever()
+        memory_retriever.clear_namespaces(["user_memory", "schema", "explanations"])
+
         matching_task = SESSION_MANAGER.get_session(session).matching_task
 
         if os.path.exists(".source.csv") and os.path.exists(".target.csv"):
@@ -223,6 +228,10 @@ def start_matching():
     # cache csvs
     source.to_csv(".source.csv", index=False)
     target.to_csv(".target.csv", index=False)
+
+    # Clear specific namespaces for new task
+    memory_retriever = get_memory_retriever()
+    memory_retriever.clear_namespaces(["user_memory", "schema", "explanations"])
 
     # Fix argument order: pass nodes=None explicitly
     task = run_matching_task.delay(

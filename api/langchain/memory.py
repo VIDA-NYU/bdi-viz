@@ -4,11 +4,16 @@ import shutil
 from typing import Any, Dict, List, Optional
 
 from langchain.tools import StructuredTool
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.store.memory import InMemoryStore
+import chromadb
+
+# Configure logging to mute verbose Chroma messages
+logging.getLogger("chromadb").setLevel(logging.CRITICAL)
+logging.getLogger("chromadb.db.clickhouse").setLevel(logging.CRITICAL)
+logging.getLogger("chromadb.db.duckdb").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
@@ -155,24 +160,20 @@ class MemoryRetriver:
                 logger.warning(f"Could not fix permissions, removing directory: {e}")
                 shutil.rmtree("./chroma_db")
 
-        # Initialize Chroma with proper configuration
-        self.vector_store = Chroma(
-            embedding_function=embeddings,
-            persist_directory="./chroma_db",
-            collection_name="agent_memory",
-            collection_metadata={
+        # Initialize Chroma client with proper configuration
+        self.embeddings = embeddings
+        self.client = chromadb.PersistentClient(path="./chroma_db")
+
+        # Create collection with proper metadata
+        self.collection = self.client.get_or_create_collection(
+            name="agent_memory",
+            metadata={
                 "hnsw:space": "cosine",
                 "hnsw:construction_ef": 100,
                 "hnsw:search_ef": 100,
-                "hnsw:M": 16,
+                "hnsw:M": 64,
             },
         )
-
-        # Clear existing collection to handle dimension mismatch
-        try:
-            self.vector_store._collection.delete()
-        except Exception:
-            pass  # Collection might not exist yet
 
         self.query_candidates_tool = StructuredTool.from_function(
             func=self.query_candidates,
@@ -229,6 +230,24 @@ class MemoryRetriver:
                 Optional[List[str]]: The list of memories if found, None otherwise.
             """,
         )
+
+    def clear_namespaces(self, namespaces: List[str]):
+        """Clear specific namespaces from the vector store"""
+        for namespace in namespaces:
+            try:
+                # Get all documents in this namespace
+                results = self.collection.get(where={"namespace": namespace})
+
+                # Delete all documents in this namespace
+                if results["ids"]:
+                    self.collection.delete(ids=results["ids"])
+                    logger.info(f"Cleared {len(results['ids'])} docs from {namespace}")
+            except Exception as e:
+                logger.warning(f"Error clearing namespace {namespace}: {e}")
+
+        # Reset user memory count if user_memory namespace was cleared
+        if "user_memory" in namespaces:
+            self.user_memory_count = 0
 
     # [candidates]
     def query_candidates(
@@ -551,8 +570,13 @@ Explanations: {formatted_explanations}
 
     # Vector store operations
     def _add_vector_store(self, id: str, page_content: str, metadata: Dict[str, Any]):
-        self.vector_store.add_documents(
-            [Document(page_content=page_content, metadata=metadata, id=id)]
+        # Embed the text and add to collection
+        embedding = self.embeddings.embed_documents([page_content])[0]
+        self.collection.add(
+            ids=[id],
+            documents=[page_content],
+            metadatas=[metadata],
+            embeddings=[embedding],
         )
 
     def _search_vector_store(
@@ -561,12 +585,21 @@ Explanations: {formatted_explanations}
         k: int = 10,
         filter: Optional[Dict[str, Any]] = None,
     ):
-        # Use Chroma's similarity search with filter
-        return self.vector_store.similarity_search(
-            query,
-            k=k,
-            filter=filter,
+        # Embed the query and search collection
+        query_embedding = self.embeddings.embed_query(query)
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=k,
+            where=filter,
         )
+
+        # Convert results to Document objects for compatibility
+        documents = []
+        for i, doc in enumerate(results["documents"][0]):
+            metadata = results["metadatas"][0][i] if results["metadatas"][0] else {}
+            documents.append(Document(page_content=doc, metadata=metadata))
+
+        return documents
 
 
 MEMORY_RETRIEVER = None

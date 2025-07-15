@@ -142,7 +142,7 @@ class AttributeProperties(BaseModel):
 - other: other types"""
     )
     description: str = Field(description="The description of the column")
-    enum: Optional[List[str]] = Field(
+    enum: Optional[List[Union[str, int, float, bool]]] = Field(
         default=None, description="The enum values of the column, if applicable"
     )
     maximum: Optional[Union[float, int]] = Field(
