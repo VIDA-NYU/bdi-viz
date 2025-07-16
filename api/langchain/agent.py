@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from ..tools.source_scraper import scraping_websource
 from ..utils import load_property
-from .memory import MemoryRetriver
+from .memory import MemoryRetriever
 from .pydantic import (
     AttributeProperties,
     CandidateExplanation,
@@ -39,7 +39,7 @@ logger = logging.getLogger("bdiviz_flask.sub")
 class Agent:
     def __init__(
         self,
-        memory_retriever: MemoryRetriver,
+        memory_retriever: MemoryRetriever,
         llm_model: Optional[BaseChatModel] = None,
     ) -> None:
         # OR claude-3-5-sonnet-20240620
@@ -471,7 +471,12 @@ def get_agent(memory_retriever):
         llm_model = ChatOpenAI(
             model="gemini-2.5-flash",
             temperature=0,
-            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
+            base_url=(
+                "https://portkey-lb.rt.nyu.edu/v1/"
+                if os.getenv("DOCKER_ENV") == "hsrn"
+                else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
+            ),
             default_headers=portkey_headers,
             timeout=1000,
             max_retries=3,

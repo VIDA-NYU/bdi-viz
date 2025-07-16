@@ -65,7 +65,7 @@ class Session:
     @property
     def matching_task(self):
         if not self._initialized:
-            self._matching_task = MatchingTask()
+            self._matching_task = MatchingTask(session_name=self.name)
             self._initialized = True
         return self._matching_task
 

@@ -9,6 +9,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.store.memory import InMemoryStore
 import chromadb
+from .pydantic import AttributeProperties
 
 # Configure logging to mute verbose Chroma messages
 logging.getLogger("chromadb").setLevel(logging.CRITICAL)
@@ -105,7 +106,7 @@ FP_CANDIDATES = [
 ]
 
 
-class MemoryRetriver:
+class MemoryRetriever:
     supported_namespaces = [
         "candidates",
         "mismatches",
@@ -121,7 +122,6 @@ class MemoryRetriver:
             model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": True},
         )
-        self.store = InMemoryStore()  # Keep for backward compatibility
         self.user_memory_count = 0
 
         # Initialize text splitter for user memory
@@ -200,10 +200,9 @@ class MemoryRetriver:
             Search the ontology for the most relevant information.
             Args:
                 query (str): The query to search the ontology.
-                candidate (Dict[str, Any]): The candidate to search the
-                ontology.
+                limit (int): The number of ontologies to return.
             Returns:
-                AttributeProperties: The ontology for the candidate.
+                Optional[List[str]]: The ontologies for the candidates, None if not found.
             """.strip(),
         )
 
@@ -256,7 +255,7 @@ class MemoryRetriver:
         source_column: Optional[str] = None,
         target_column: Optional[str] = None,
         limit: int = 20,
-    ) -> List[Dict[str, Any]]:
+    ) -> Optional[List[Dict[str, Any]]]:
         query = " ".join(keywords)
 
         # Build filter based on source and target columns
@@ -267,7 +266,7 @@ class MemoryRetriver:
             filter["targetColumn"] = target_column
 
         results = self._search_vector_store(query, limit, filter)
-        return [doc.metadata for doc in results]
+        return [doc.metadata for doc in results] if results else None
 
     # puts
     def put_target_schema(self, property: Dict[str, Any]):
@@ -502,7 +501,7 @@ Explanations: {formatted_explanations}
     def search_user_memory(self, query: str, limit: int = 5) -> Optional[List[str]]:
         filter = {"namespace": "user_memory"}
         if self.user_memory_count == 0:
-            logger.info("🧰Tool result: search_user_memory, memory is empty...")
+            logger.critical("🧰Tool result: search_user_memory, memory is empty...")
             return None
         elif self.user_memory_count < limit:
             limit = self.user_memory_count
@@ -517,7 +516,7 @@ Explanations: {formatted_explanations}
         return [doc.page_content for doc in results]
 
     # Search
-    def search_target_schema(self, query: str, limit: int = 10):
+    def search_target_schema(self, query: str, limit: int = 10) -> Optional[List[str]]:
         logger.info(
             f"🧰Tool called: search_target_schema with query='{query}', "
             f"limit={limit}"
@@ -527,36 +526,36 @@ Explanations: {formatted_explanations}
         logger.info(
             f"🧰Tool result: search_target_schema returned {len(results)} " "results"
         )
-        return results
+        return [doc.page_content for doc in results] if results else None
 
-    def search_candidates(self, query: str, limit: int = 10):
+    def search_candidates(self, query: str, limit: int = 10) -> Optional[List[str]]:
         logger.info(
             f"🧰Tool called: search_candidates with query='{query}', " f"limit={limit}"
         )
         filter = {"namespace": "candidates"}
         results = self._search_vector_store(query, limit, filter)
         logger.info(f"🧰Tool result: search_candidates returned {len(results)} results")
-        return [doc.page_content for doc in results]
+        return [doc.page_content for doc in results] if results else None
 
-    def search_mismatches(self, query: str, limit: int = 10):
+    def search_mismatches(self, query: str, limit: int = 10) -> Optional[List[str]]:
         logger.info(
             f"🧰Tool called: search_mismatches with query='{query}', " f"limit={limit}"
         )
         filter = {"namespace": "mismatches"}
         results = self._search_vector_store(query, limit, filter)
         logger.info(f"🧰Tool result: search_mismatches returned {len(results)} results")
-        return [doc.page_content for doc in results]
+        return [doc.page_content for doc in results] if results else None
 
-    def search_matches(self, query: str, limit: int = 10):
+    def search_matches(self, query: str, limit: int = 10) -> Optional[List[str]]:
         logger.info(
             f"🧰Tool called: search_matches with query='{query}', limit={limit}"
         )
         filter = {"namespace": "matches"}
         results = self._search_vector_store(query, limit, filter)
         logger.info(f"🧰Tool result: search_matches returned {len(results)} results")
-        return [doc.page_content for doc in results]
+        return [doc.page_content for doc in results] if results else None
 
-    def search_explanations(self, query: str, limit: int = 10):
+    def search_explanations(self, query: str, limit: int = 10) -> Optional[List[str]]:
         logger.info(
             f"🧰Tool called: search_explanations with query='{query}', "
             f"limit={limit}"
@@ -566,7 +565,7 @@ Explanations: {formatted_explanations}
         logger.info(
             f"🧰Tool result: search_explanations returned {len(results)} " "results"
         )
-        return [doc.page_content for doc in results]
+        return [doc.page_content for doc in results] if results else None
 
     # Vector store operations
     def _add_vector_store(self, id: str, page_content: str, metadata: Dict[str, Any]):
@@ -608,5 +607,5 @@ MEMORY_RETRIEVER = None
 def get_memory_retriever():
     global MEMORY_RETRIEVER
     if MEMORY_RETRIEVER is None:
-        MEMORY_RETRIEVER = MemoryRetriver()
+        MEMORY_RETRIEVER = MemoryRetriever()
     return MEMORY_RETRIEVER

@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from langchain.tools.base import StructuredTool
 
-from ..langchain.memory import MemoryRetriver
+from ..langchain.memory import MemoryRetriever
 from ..session_manager import SESSION_MANAGER
 from ..utils import load_property
 
@@ -12,7 +12,7 @@ logger = logging.getLogger("bdiviz_flask.sub")
 
 
 class QueryTools:
-    def __init__(self, session: str, memory_retriever: MemoryRetriver):
+    def __init__(self, session: str, memory_retriever: MemoryRetriever):
         self.matching_task = SESSION_MANAGER.get_session(session).matching_task
         self.memory_retriever = memory_retriever
 

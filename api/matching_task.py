@@ -46,11 +46,13 @@ DEFAULT_PARAMS = {
 class MatchingTask:
     def __init__(
         self,
+        session_name: str = "default",
         top_k: int = 20,
         # clustering_model="michiyasunaga/BioLinkBERT-base",
         clustering_model="sentence-transformers/all-mpnet-base-v2",
     ) -> None:
         self.lock = threading.Lock()
+        self.session_name = session_name
         self.top_k = top_k
         # Remove self.nodes - only use self.cached_candidates["nodes"]
 
@@ -70,7 +72,6 @@ class MatchingTask:
         self.target_df = None
         self._initialize_cache()
         self.history = UserOperationHistory()
-
         self.weight_updater = None
 
         # Task state tracking
@@ -933,7 +934,9 @@ class MatchingTask:
 
     def _export_cache_to_json(self, json_obj: Dict) -> None:
         """Export cache to JSON file with file locking to ensure atomic operations"""
-        output_path = os.path.join(os.path.dirname(__file__), "matching_results.json")
+        output_path = os.path.join(
+            os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
+        )
         with open(output_path, "w") as f:
             # Acquire exclusive lock
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
@@ -948,7 +951,9 @@ class MatchingTask:
 
     def _import_cache_from_json(self) -> Optional[Dict]:
         """Import cache from JSON file with file locking to ensure atomic operations"""
-        output_path = os.path.join(os.path.dirname(__file__), "matching_results.json")
+        output_path = os.path.join(
+            os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
+        )
         if os.path.exists(output_path):
             with open(output_path, "r") as f:
                 # Acquire shared lock

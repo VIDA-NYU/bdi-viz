@@ -35,3 +35,6 @@ tmp*/
 
 chroma_db/
 **/chroma_db/
+
+tests/
+**/tests/

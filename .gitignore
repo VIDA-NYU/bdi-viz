@@ -72,3 +72,10 @@ chroma_db/
 
 task_state.json
 **/task_state.json
+
+# pytest cache
+.pytest_cache/
+**/.pytest_cache/
+
+api/matching_results_test_session.json
+matching_results_test_session.json

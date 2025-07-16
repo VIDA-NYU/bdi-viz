@@ -13,12 +13,13 @@ from langchain.tools import BaseTool
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
-from langgraph.graph import Graph, StateGraph
+from langgraph.graph import StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import create_react_agent
 from portkey_ai import createHeaders
 from pydantic import BaseModel, Field
 
-from ..langchain.memory import MemoryRetriver
+from ..langchain.memory import MemoryRetriever
 from ..tools.candidate_tools import CandidateTools
 from ..tools.query_tools import QueryTools
 from ..tools.task_tools import TaskTools
@@ -98,7 +99,7 @@ class AgentType(str, Enum):
 
 
 class LangGraphAgent:
-    def __init__(self, memory_retriever: MemoryRetriver, session_id: str = "default"):
+    def __init__(self, memory_retriever: MemoryRetriever, session_id: str = "default"):
         portkey_headers = createHeaders(
             api_key=os.getenv("PORTKEY_API_KEY"),
             virtual_key=os.getenv("PROVIDER_API_KEY"),
@@ -111,7 +112,12 @@ class LangGraphAgent:
         self.master_llm = ChatOpenAI(
             model="gemini-2.5-pro",
             temperature=0,
-            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
+            base_url=(
+                "https://portkey-lb.rt.nyu.edu/v1/"
+                if os.getenv("DOCKER_ENV") == "hsrn"
+                else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
+            ),
             default_headers=portkey_headers,
             timeout=llm_timeout,
             max_retries=3,
@@ -119,7 +125,11 @@ class LangGraphAgent:
         self.worker_llm = ChatOpenAI(
             model="gemini-2.5-flash",
             temperature=0,
-            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
+            base_url=(
+                "https://portkey-lb.rt.nyu.edu/v1/"
+                if os.getenv("DOCKER_ENV") == "hsrn"
+                else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
+            ),
             default_headers=portkey_headers,
             timeout=llm_timeout,
             max_retries=3,
@@ -234,7 +244,7 @@ class LangGraphAgent:
             next_agents=[],
         )
 
-    def _build_graph(self) -> Graph:
+    def _build_graph(self) -> CompiledStateGraph[AgentState, AgentState, AgentState]:
         workflow = StateGraph(AgentState)
 
         # Define agent nodes with enhanced prompts for conversation awareness
@@ -594,7 +604,7 @@ class RapidFuzzMatcher():
         tools: List[BaseTool],
         output_structure: BaseModel,
         llm: BaseChatModel,
-        store: MemoryRetriver,
+        store: MemoryRetriever,
     ) -> BaseModel:
         output_parser = PydanticOutputParser(pydantic_object=output_structure)
         prompt = f"""
