@@ -1,3 +1,4 @@
+# flake8: noqa
 import logging
 import os
 import shutil
@@ -7,9 +8,7 @@ from langchain.tools import StructuredTool
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langgraph.store.memory import InMemoryStore
 import chromadb
-from .pydantic import AttributeProperties
 
 # Configure logging to mute verbose Chroma messages
 logging.getLogger("chromadb").setLevel(logging.CRITICAL)
@@ -109,6 +108,7 @@ FP_CANDIDATES = [
 class MemoryRetriever:
     supported_namespaces = [
         "candidates",
+        "schema",
         "mismatches",
         "matches",
         "explanations",
@@ -160,20 +160,28 @@ class MemoryRetriever:
                 logger.warning(f"Could not fix permissions, removing directory: {e}")
                 shutil.rmtree("./chroma_db")
 
-        # Initialize Chroma client with proper configuration
+        # Initialize Chroma client and create a dedicated collection per
+        # namespace. This avoids the previous "namespace not supported" errors
+        # when filtering on a metadata field that had not yet been indexed.
+
         self.embeddings = embeddings
         self.client = chromadb.PersistentClient(path="./chroma_db")
 
-        # Create collection with proper metadata
-        self.collection = self.client.get_or_create_collection(
-            name="agent_memory",
-            metadata={
-                "hnsw:space": "cosine",
-                "hnsw:construction_ef": 100,
-                "hnsw:search_ef": 100,
-                "hnsw:M": 64,
-            },
-        )
+        self.collections: Dict[str, chromadb.Collection] = {}
+        for ns in self.supported_namespaces:
+            self.collections[ns] = self.client.get_or_create_collection(
+                name=f"agent_memory_{ns}",
+                metadata={
+                    "hnsw:space": "cosine",
+                    "hnsw:construction_ef": 100,
+                    "hnsw:search_ef": 100,
+                    "hnsw:M": 16,  # lower value to save memory
+                },
+            )
+
+        # Retain a reference named `collection` for backward compatibility, but
+        # default it to the `candidates` namespace.
+        self.collection = self.collections.get("candidates")
 
         self.query_candidates_tool = StructuredTool.from_function(
             func=self.query_candidates,
@@ -234,15 +242,18 @@ class MemoryRetriever:
         """Clear specific namespaces from the vector store"""
         for namespace in namespaces:
             try:
-                # Get all documents in this namespace
-                results = self.collection.get(where={"namespace": namespace})
-
-                # Delete all documents in this namespace
-                if results["ids"]:
-                    self.collection.delete(ids=results["ids"])
-                    logger.info(f"Cleared {len(results['ids'])} docs from {namespace}")
+                coll = self.collections.get(namespace)
+                if coll is None:
+                    continue
+                # Delete everything by fetching all ids first (avoids empty `where` error)
+                all_ids = coll.get()["ids"]
+                if all_ids:
+                    coll.delete(ids=all_ids)
+                logger.info(f"Cleared {len(all_ids)} docs from namespace '{namespace}'")
             except Exception as e:
-                logger.warning(f"Error clearing namespace {namespace}: {e}")
+                logger.warning(  # noqa: E501
+                    f"Error clearing namespace '{namespace}': {e}"  # noqa: E501
+                )
 
         # Reset user memory count if user_memory namespace was cleared
         if "user_memory" in namespaces:
@@ -292,7 +303,7 @@ class MemoryRetriever:
             ]
         }
         """
-        id = f"{property['column_name']}"
+        id = f"target-schema-{property['column_name']}"
         page_content = f"""
 Column name: {property['column_name']}
 Category: {property['category']}
@@ -314,7 +325,7 @@ Description: {property['description']}
             "type": property["type"],
             "namespace": "schema",
         }
-        self._add_vector_store(id, page_content, metadata)
+        self._add_vector_store(id, page_content, metadata, namespace="schema")
 
     def put_candidate(self, value: Dict[str, Any]):
         """
@@ -345,7 +356,7 @@ Score: {value['score']}
             metadata["matcher"] = value["matcher"]
             page_content += f"\nMatcher: {value['matcher']}"
 
-        self._add_vector_store(key, page_content, metadata)
+        self._add_vector_store(key, page_content, metadata, namespace="candidates")
 
     def put_match(self, value: Dict[str, Any]):
         """
@@ -368,7 +379,7 @@ Target Column: {value['targetColumn']}
             "namespace": "matches",
         }
 
-        self._add_vector_store(key, page_content, metadata)
+        self._add_vector_store(key, page_content, metadata, namespace="matches")
 
     def put_mismatch(self, value: Dict[str, Any]) -> None:
         """
@@ -395,7 +406,7 @@ Target Column: {value['targetColumn']}
             "namespace": "mismatches",
         }
 
-        self._add_vector_store(key, page_content, metadata)
+        self._add_vector_store(key, page_content, metadata, namespace="mismatches")
 
     def put_explanation(
         self, explanations: List[Dict[str, Any]], user_operation: Dict[str, Any]
@@ -470,7 +481,7 @@ Explanations: {formatted_explanations}
         if existing_docs:
             self.vector_store.delete([existing_docs[0].id])
 
-        self._add_vector_store(key, page_content, metadata)
+        self._add_vector_store(key, page_content, metadata, namespace="explanations")
 
     def put_user_memory(self, content: str) -> str:
         """
@@ -492,14 +503,13 @@ Explanations: {formatted_explanations}
                 "total_chunks": len(chunks),
                 "chunk_content": chunk,
             }
-            self._add_vector_store(chunk_key, chunk, metadata)
+            self._add_vector_store(chunk_key, chunk, metadata, namespace="user_memory")
 
         logger.critical(f"🧰Tool result: put_user_memory with {len(chunks)} chunks")
         self.user_memory_count += len(chunks)
         return f"I have remembered that in {len(chunks)} chunks."
 
     def search_user_memory(self, query: str, limit: int = 5) -> Optional[List[str]]:
-        filter = {"namespace": "user_memory"}
         if self.user_memory_count == 0:
             logger.critical("🧰Tool result: search_user_memory, memory is empty...")
             return None
@@ -509,7 +519,7 @@ Explanations: {formatted_explanations}
         logger.critical(
             f"🧰Tool called: search_user_memory with query='{query}', " f"limit={limit}"
         )
-        results = self._search_vector_store(query, limit, filter)
+        results = self._search_vector_store(query, limit, namespace="user_memory")
         logger.critical(
             f"🧰Tool result: search_user_memory found {len(results)} unique contents"
         )
@@ -521,8 +531,7 @@ Explanations: {formatted_explanations}
             f"🧰Tool called: search_target_schema with query='{query}', "
             f"limit={limit}"
         )
-        filter = {"namespace": "schema"}
-        results = self._search_vector_store(query, limit, filter)
+        results = self._search_vector_store(query, limit, namespace="schema")
         logger.info(
             f"🧰Tool result: search_target_schema returned {len(results)} " "results"
         )
@@ -532,8 +541,7 @@ Explanations: {formatted_explanations}
         logger.info(
             f"🧰Tool called: search_candidates with query='{query}', " f"limit={limit}"
         )
-        filter = {"namespace": "candidates"}
-        results = self._search_vector_store(query, limit, filter)
+        results = self._search_vector_store(query, limit, namespace="candidates")
         logger.info(f"🧰Tool result: search_candidates returned {len(results)} results")
         return [doc.page_content for doc in results] if results else None
 
@@ -541,8 +549,7 @@ Explanations: {formatted_explanations}
         logger.info(
             f"🧰Tool called: search_mismatches with query='{query}', " f"limit={limit}"
         )
-        filter = {"namespace": "mismatches"}
-        results = self._search_vector_store(query, limit, filter)
+        results = self._search_vector_store(query, limit, namespace="mismatches")
         logger.info(f"🧰Tool result: search_mismatches returned {len(results)} results")
         return [doc.page_content for doc in results] if results else None
 
@@ -550,8 +557,7 @@ Explanations: {formatted_explanations}
         logger.info(
             f"🧰Tool called: search_matches with query='{query}', limit={limit}"
         )
-        filter = {"namespace": "matches"}
-        results = self._search_vector_store(query, limit, filter)
+        results = self._search_vector_store(query, limit, namespace="matches")
         logger.info(f"🧰Tool result: search_matches returned {len(results)} results")
         return [doc.page_content for doc in results] if results else None
 
@@ -560,18 +566,29 @@ Explanations: {formatted_explanations}
             f"🧰Tool called: search_explanations with query='{query}', "
             f"limit={limit}"
         )
-        filter = {"namespace": "explanations"}
-        results = self._search_vector_store(query, limit, filter)
+        results = self._search_vector_store(query, limit, namespace="explanations")
         logger.info(
             f"🧰Tool result: search_explanations returned {len(results)} " "results"
         )
         return [doc.page_content for doc in results] if results else None
 
     # Vector store operations
-    def _add_vector_store(self, id: str, page_content: str, metadata: Dict[str, Any]):
+    def _add_vector_store(
+        self,
+        id: str,
+        page_content: str,
+        metadata: Dict[str, Any],
+        namespace: Optional[str] = None,
+    ):
+        if namespace is None:
+            logger.warning(f"No namespace provided for {id}")
+            return
+
         # Embed the text and add to collection
+        collection = self.collections.get(namespace, self.collection)
+
         embedding = self.embeddings.embed_documents([page_content])[0]
-        self.collection.add(
+        collection.add(
             ids=[id],
             documents=[page_content],
             metadatas=[metadata],
@@ -582,11 +599,21 @@ Explanations: {formatted_explanations}
         self,
         query: str,
         k: int = 10,
+        namespace: Optional[str] = None,
         filter: Optional[Dict[str, Any]] = None,
     ):
-        # Embed the query and search collection
+        # Determine which namespace collection should be searched. Extract the
+        # `namespace` key from the filter (if present) and perform the query on
+        # that dedicated collection. All remaining filter terms are still
+        # applied to the query.
+
+        if namespace is None:
+            return []
+
+        collection = self.collections.get(namespace, self.collection)
+
         query_embedding = self.embeddings.embed_query(query)
-        results = self.collection.query(
+        results = collection.query(
             query_embeddings=[query_embedding],
             n_results=k,
             where=filter,

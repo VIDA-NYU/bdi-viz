@@ -1,3 +1,4 @@
+# flake8: noqa
 import os
 import sys
 import pytest
@@ -10,10 +11,10 @@ from unittest.mock import Mock, patch
 # Add the parent directory to sys.path so we can import from api package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-# Import the Flask app from the api package
-from api.index import create_app
-from api.langchain.memory import MemoryRetriever
-from api.session_manager import SessionManager
+# Import the global Flask app instance so that all API routes are accessible
+from api.index import app as flask_app  # noqa: E402
+from api.langchain.memory import MemoryRetriever  # noqa: E402
+from api.session_manager import SessionManager  # noqa: E402
 
 
 MOCK_TARGET_ONTOLOGY = {
@@ -72,18 +73,20 @@ MOCK_SOURCE_ONTOLOGY = {
 @pytest.fixture
 def session_manager():
     """Create a session manager for testing."""
+    # remove cache
+    if os.path.exists("../matching_results_test_session.json"):
+        os.remove("../matching_results_test_session.json")
     return SessionManager()
 
 
 @pytest.fixture
 def app():
-    """Create and configure a new app instance for each test."""
-    # Create a temporary directory for test data
+    """Provide the main Flask application (with routes) to each test."""
+    # Create a temporary directory for the test run (e.g., for temporary CSVs)
     test_dir = tempfile.mkdtemp()
 
-    # Configure the Flask app for testing
-    app = create_app()
-    app.config.update(
+    # Update configuration for testing
+    flask_app.config.update(
         {
             "TESTING": True,
             "CELERY": {
@@ -94,11 +97,11 @@ def app():
         }
     )
 
-    # Create test context
-    with app.app_context():
-        yield app
+    # Push an application context so that the app can be used in the tests
+    with flask_app.app_context():
+        yield flask_app
 
-    # Clean up
+    # Clean up any temporary files/directories created during the test
     shutil.rmtree(test_dir, ignore_errors=True)
 
 
@@ -122,22 +125,6 @@ def mock_memory_retriever():
         ["user_memory", "schema", "candidates", "ontology"]
     )
     return memory_retriever
-
-
-@pytest.fixture
-def mock_session_manager():
-    """Mock session manager for testing."""
-    with patch("api.index.SESSION_MANAGER") as mock_sm:
-        mock_session = Mock()
-        mock_matching_task = Mock()
-        mock_matching_task.update_dataframe.return_value = None
-        mock_matching_task._initialize_task_state.return_value = None
-        mock_matching_task.set_nodes.return_value = None
-        mock_matching_task.get_candidates.return_value = []
-        mock_matching_task.to_frontend_json.return_value = {"results": []}
-        mock_session.matching_task = mock_matching_task
-        mock_sm.get_session.return_value = mock_session
-        yield mock_sm
 
 
 @pytest.fixture

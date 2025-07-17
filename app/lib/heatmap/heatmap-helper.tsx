@@ -397,29 +397,6 @@ const redoUserOperation = ({
     }
 };
 
-interface getExactMatchesProps {
-    callback: (exactMatches: Candidate[]) => void;
-    signal?: AbortSignal;
-}
-
-const getExactMatches = ({callback, signal}: getExactMatchesProps) => {
-    return makeApiRequest<void>(
-        "/api/exact-matches",
-        {},
-        signal,
-        (data) => {
-            const results = data?.results;
-            if (results && Array.isArray(results)) {
-                const exactMatches = parseArray<Candidate>(results, "Candidate");
-                console.log("getExactMatches finished!");
-                callback(exactMatches);
-                return;
-            } else {
-                throw new Error("Invalid results format");
-            }
-        }
-    );
-};
 
 interface getGDCAttributeProps {
     targetColumn: string;
@@ -613,7 +590,6 @@ export {
     applyUserOperation, 
     undoUserOperation, 
     redoUserOperation, 
-    getExactMatches, 
     getGDCAttribute, 
     getCandidatesResult, 
     updateSourceValue,
