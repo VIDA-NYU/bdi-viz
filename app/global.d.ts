@@ -26,7 +26,7 @@ declare interface SourceCluster {
     cluster: string[];
 }
 
-declare interface TargetOntology {
+declare interface Ontology {
     name: string;
     parent: string;
     grandparent: string;
@@ -105,20 +105,9 @@ declare interface AgentAction {
     confidence: number;
 }
 
-declare interface AgentSuggestions {
-    actions: AgentAction[];
-}
-
 declare interface UserReaction {
     actions: AgentAction[];
     previousOperation: UserOperation;
-}
-
-declare interface ActionResponse {
-    status: string;
-    response: string;
-    action: string;
-    targetCandidates: Candidate[];
 }
 
 declare interface Matcher {
@@ -179,10 +168,10 @@ declare interface MatcherAnalysis {
     code?: string;
 }
 
-  
 declare interface AgentState {
-    message: string[];
+    message: string;
     query: string;
+    conversation_summary: string;
     source_column?: string | null;
     source_values?: string[] | null;
     target_column?: string | null;
@@ -191,4 +180,6 @@ declare interface AgentState {
     next_agents: string[];
     candidates: Candidate[];
     candidates_to_append: Candidate[];
+    task_id?: string;
+    matcher_task_id?: string;
 }

@@ -1,0 +1,34 @@
+name: Python Tests
+
+on: [pull_request]
+
+jobs:
+  pytest:
+    name: Run Pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./api
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -U pip
+          pip install -r ../requirements.txt
+          pip install -r tests/requirements.txt
+          pip install ipython
+
+      - name: Run tests with pytest
+        run: pytest --junitxml=pytest.xml --cov-report=term-missing:skip-covered --cov=api | tee pytest-coverage.txt
+    
+      - name: Pytest coverage comment
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+          pytest-coverage-path: ./api/pytest-coverage.txt
+          junitxml-path: ./api/pytest.xml

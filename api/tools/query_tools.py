@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from langchain.tools.base import StructuredTool
 
+from ..langchain.memory import MemoryRetriever
 from ..session_manager import SESSION_MANAGER
 from ..utils import load_property
 
@@ -11,8 +12,9 @@ logger = logging.getLogger("bdiviz_flask.sub")
 
 
 class QueryTools:
-    def __init__(self, session: str):
+    def __init__(self, session: str, memory_retriever: MemoryRetriever):
         self.matching_task = SESSION_MANAGER.get_session(session).matching_task
+        self.memory_retriever = memory_retriever
 
         self.read_source_candidates_tool = StructuredTool.from_function(
             func=self._read_source_candidates,
@@ -20,7 +22,8 @@ class QueryTools:
             description="""
             Read existing candidates for a specific source attribute.
             Args:
-                source_attribute (str): The source biomedical attribute to read.
+                source_attribute (str): The source biomedical attribute to
+                read.
             Returns:
                 List[Dict[str, Any]]: All candidates for the source attribute.
             """.strip(),
@@ -32,7 +35,8 @@ class QueryTools:
             description="""
             Read the values for a specific target attribute.
             Args:
-                target_attribute (str): The target biomedical attribute to read.
+                target_attribute (str): The target biomedical attribute to
+                read.
             Returns:
                 List[str]: All values for the target attribute.
             """.strip(),
@@ -44,7 +48,8 @@ class QueryTools:
             description="""
             Read the description for a specific target attribute.
             Args:
-                target_attribute (str): The target biomedical attribute to read.
+                target_attribute (str): The target biomedical attribute to
+                read.
             Returns:
                 str: The description for the target attribute.
             """.strip(),
@@ -56,7 +61,8 @@ class QueryTools:
             description="""
             Read the values for a specific source attribute.
             Args:
-                source_attribute (str): The source biomedical attribute to read.
+                source_attribute (str): The source biomedical attribute to
+                read.
             Returns:
                 List[str]: All values for the source attribute.
             """.strip(),
@@ -69,6 +75,8 @@ class QueryTools:
             self.read_source_values_tool,
             self.read_target_values_tool,
             self.read_target_description_tool,
+            self.memory_retriever.remember_this_tool,
+            self.memory_retriever.recall_memory_tool,
         ]
 
     def _read_source_candidates(self, source_attribute: str) -> List[Dict[str, Any]]:
@@ -88,7 +96,13 @@ class QueryTools:
             if candidate["sourceColumn"] == source_attribute
         ]
 
-        # Group by sourceColumn and targetColumn, averaging scores for multiple matchers
+        # Get matcher weights for weighted scoring
+        matcher_weights = {}
+        matchers = self.matching_task.get_matchers()
+        for matcher in matchers:
+            matcher_weights[matcher["name"]] = matcher["weight"]
+
+        # Group by sourceColumn and targetColumn, collecting scores and matchers
         grouped_candidates = {}
         for candidate in filtered_candidates:
             key = (candidate["sourceColumn"], candidate["targetColumn"])
@@ -97,23 +111,37 @@ class QueryTools:
                     "sourceColumn": candidate["sourceColumn"],
                     "targetColumn": candidate["targetColumn"],
                     "scores": [],
+                    "matchers": [],
                 }
             grouped_candidates[key]["scores"].append(candidate["score"])
+            grouped_candidates[key]["matchers"].append(
+                candidate.get("matcher", "unknown")
+            )
 
-        # Calculate average scores and create final results
+        # Calculate weighted average scores and create final results
         results = []
         for key, group in grouped_candidates.items():
-            avg_score = sum(group["scores"]) / len(group["scores"])
+            if matcher_weights:
+                # Calculate weighted average using matcher weights
+                weighted_avg_score = 0.0
+                for i, matcher in enumerate(group["matchers"]):
+                    weight = matcher_weights.get(matcher, 1.0)
+                    weighted_avg_score += group["scores"][i] * weight
+            else:
+                # Fallback to simple average if no weights available
+                weighted_avg_score = sum(group["scores"]) / len(group["scores"])
+
             results.append(
                 {
                     "sourceColumn": group["sourceColumn"],
                     "targetColumn": group["targetColumn"],
-                    "score": avg_score,
+                    "score": weighted_avg_score,
                 }
             )
         logger.info(
-            f"🧰Tool called: read_source_candidates for {source_attribute} "
-            f"found {len(results)} candidates"
+            "🧰Tool called: read_source_candidates for %s found %s candidates",
+            source_attribute,
+            len(results),
         )
         return results
 
@@ -126,6 +154,7 @@ class QueryTools:
         Returns:
             List[str]: All values for the target attribute.
         """
+        results = []  # Initialize results to avoid UnboundLocalError
         target_properties = load_property(target_attribute)
         if target_properties is not None:
             if "enum" in target_properties:
@@ -133,11 +162,15 @@ class QueryTools:
                 if len(target_values) >= 20:
                     target_values = random.sample(target_values, 20)
                 results = target_values
+            else:
+                # If no enum property, fall back to matching_task
+                results = self.matching_task.get_target_unique_values(target_attribute)
         else:
             results = self.matching_task.get_target_unique_values(target_attribute)
         logger.info(
-            f"🧰Tool called: read_target_values for {target_attribute} "
-            f"found {len(results)} values"
+            "🧰Tool called: read_target_values for %s found %s values",
+            target_attribute,
+            len(results),
         )
         return results
 
@@ -150,6 +183,7 @@ class QueryTools:
         Returns:
             List[str]: All values for the source attribute.
         """
+        results = []  # Initialize results to avoid UnboundLocalError
         source_properties = load_property(source_attribute)
         if source_properties is not None:
             if "enum" in source_properties:
@@ -157,11 +191,15 @@ class QueryTools:
                 if len(source_values) >= 20:
                     source_values = random.sample(source_values, 20)
                 results = source_values
+            else:
+                # If no enum property, fall back to matching_task
+                results = self.matching_task.get_source_unique_values(source_attribute)
         else:
             results = self.matching_task.get_source_unique_values(source_attribute)
         logger.info(
-            f"🧰Tool called: read_source_values for {source_attribute} "
-            f"found {len(results)} values"
+            "🧰Tool called: read_source_values for %s found %s values",
+            source_attribute,
+            len(results),
         )
         return results
 
@@ -174,14 +212,14 @@ class QueryTools:
         Returns:
             str: The description for the target attribute.
         """
+        results = ""  # Initialize results to avoid UnboundLocalError
         target_properties = load_property(target_attribute)
         if target_properties is not None:
             if "description" in target_properties:
                 results = target_properties["description"]
-        else:
-            results = ""
+            # If no description property, results remains empty string
+        # If target_properties is None, results remains empty string
         logger.info(
-            f"🧰Tool called: read_target_description for {target_attribute} "
-            f"found {len(results)} values"
+            f"🧰Tool called: read_target_description for {target_attribute} found: {results[:10]}...",
         )
         return results

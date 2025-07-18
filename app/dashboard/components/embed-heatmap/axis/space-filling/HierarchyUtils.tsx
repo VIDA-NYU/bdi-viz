@@ -23,6 +23,7 @@ export interface CategoryData {
   width?: number;
   height?: number;
   centerX?: number;
+  centerY?: number;
 }
 
 // Define the super category data structure
@@ -34,6 +35,7 @@ export interface SuperCategoryData {
   width?: number;
   height?: number;
   centerX?: number;
+  centerY?: number;
 }
 
 // Layout configuration for the visualization
@@ -51,7 +53,14 @@ export interface LayoutConfig {
 }
 
 // Function to transform the tree data into the hierarchical structure we need
-export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfig) {
+export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfig, isSource: boolean=false) {
+  if (!treeData || treeData.length === 0) {
+    return {
+      columnData: [],
+      categoryData: [],
+      superCategoryData: []
+    };
+  }
   // Step 1: Extract column data from tree nodes
   const columnData: ColumnData[] = [];
   const categoryMap: Record<string, string[]> = {};
@@ -80,8 +89,10 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
               superCategory: superCategoryId,
               isExpanded: columnNode.isExpanded,
               originalNode: columnNode,
-              width: 0,
-              height: 0
+              width: columnNode.width ?? 0,
+              height: columnNode.height ?? 0,
+              x: columnNode.x ?? 0,
+              y: columnNode.y ?? 0,
             };
             columnData.push(column);
             categoryMap[categoryId].push(columnId);
@@ -90,16 +101,15 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
       });
     }
   });
-  columnData.sort((a, b) => a.originalNode.x - b.originalNode.x);
+  if (isSource) {
+    columnData.sort((a, b) => a.originalNode.x - b.originalNode.x);
+  } else {
+    columnData.sort((a, b) => a.originalNode.y - b.originalNode.y);
+  }
   const columnDataWithWidth: Array<ColumnData> = [];
   let rightColumnX = layoutConfig.innerWidth;
   columnData.reverse().forEach((column, i) => {
-    columnDataWithWidth.push({
-      ...column,
-      x: column.originalNode.x,
-      y: column.originalNode.y,
-      width: column.originalNode.width,
-    });
+    columnDataWithWidth.push(column);
     rightColumnX = column.originalNode.x;
   });
   

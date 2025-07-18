@@ -3,7 +3,7 @@ redis==6.0.0
 celery==5.5.2
 fuzzywuzzy
 jq
-sentence_transformers
+sentence-transformers==3.3.1
 transformers==4.41.2
 torch==2.5.1
 mmh3
@@ -12,17 +12,17 @@ numpy==1.24.2
 
 # langchain-anthropic==0.3.1
 langchain-community==0.3.11
-langchain-chroma==0.2.2
 langchain-huggingface==0.1.2
 # langchain-ollama
 langchain-openai==0.3.9
 # langchain-together
-langgraph==0.4.2
+langgraph==0.5.3
 # duckduckgo-search
 portkey-ai==1.13.0
+chromadb==0.6.3
 
 hf_xet
 python-dotenv
-pydantic
+pydantic==2.11.4
 rapidfuzz
 bdi-kit==0.5.0

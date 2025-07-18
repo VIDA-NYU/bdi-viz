@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -17,18 +17,6 @@ class DiagnoseObject(BaseModel):
 
     reason: str = Field(description="The reason for the diagnosis")
     confidence: float = Field(description="The confidence of the diagnosis")
-
-
-class AgentAction(BaseModel):
-    action: str = Field(description="""The action for the agent.""")
-    reason: str = Field(description="The reason for the action")
-    confidence: float = Field(description="The confidence of the action")
-
-
-class AgentSuggestions(BaseModel):
-    actions: List[AgentAction] = Field(
-        description="""The agent actions suggected based on the diagnosis user selected."""
-    )
 
 
 class Explanation(BaseModel):
@@ -111,27 +99,6 @@ class SuggestedValueMappings(BaseModel):
     )
 
 
-class ActionResponse(BaseModel):
-    status: str = Field(description="The status of the action: success or failure")
-    response: str = Field(description="The response from the agent")
-    action: str = Field(
-        description="""The action on candidates, must be one of:
-        prune - prune the target candidates list from the existing candidates.
-        replace - replace the target candidates list with the new candidates.
-        undo - undo the last action taken by the user.
-        """
-    )
-    target_candidates: Optional[List[Dict[str, Any]]] = Field(
-        default=None,
-        description="""The updated candidates for source column(s), the layered dictionary looks like:
-        [
-            {"sourceColumn": "source_column_1", "targetColumn": "target_column_1", "score": 0.9, "matcher": "magneto_zs_bp"},
-            {"sourceColumn": "source_column_1", "targetColumn": "target_column_15", "score": 0.7, "matcher": "magneto_zs_bp"},
-            ...
-        ]""",
-    )
-
-
 class TargetClusterInfo(BaseModel):
     """Target cluster information from the agent."""
 
@@ -175,7 +142,7 @@ class AttributeProperties(BaseModel):
 - other: other types"""
     )
     description: str = Field(description="The description of the column")
-    enum: Optional[List[str]] = Field(
+    enum: Optional[List[Union[str, int, float, bool]]] = Field(
         default=None, description="The enum values of the column, if applicable"
     )
     maximum: Optional[Union[float, int]] = Field(

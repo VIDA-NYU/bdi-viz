@@ -3,9 +3,9 @@ import * as d3 from 'd3';
 import { useTheme } from '@mui/material';
 import { useResizedSVGRef } from '../../../hooks/resize-hooks.tsx';
 import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
-import { renderSpaceFillingSegments } from './SpaceFillingSegments';
-import { renderEdgeBundling } from './EdgeBundling';
-import { renderColumns } from './ColumnRenderer.tsx';
+import { renderSpaceFillingSegmentsHorizontal } from './SpaceFillingSegments';
+import { renderEdgeBundlingVertical } from './EdgeBundling';
+import { renderColumnsHorizontal } from './ColumnRenderer.tsx';
 import { getHierarchyData } from './HierarchyUtils';
 import { TreeNode } from '../../tree/types';
 import { getOptimalCategoryColorScale } from './ColorUtils.ts';
@@ -85,7 +85,7 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     g.selectAll('*').remove();
 
     // Render the segments and connections
-    renderSpaceFillingSegments(
+    renderSpaceFillingSegmentsHorizontal(
       g, 
       columnData,
       superCategoryData, 
@@ -101,7 +101,7 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
       setSelectedNodes
     );
 
-    renderEdgeBundling(
+    renderEdgeBundlingVertical(
       g, 
       columnData, 
       categoryData, 
@@ -111,10 +111,10 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
       }, 
       columnsY, 
       categoryY,
-      categoryColorScale
+      categoryColorScale,
     );
 
-    renderColumns(
+    renderColumnsHorizontal(
       g, 
       columnData, 
       layoutConfig, 

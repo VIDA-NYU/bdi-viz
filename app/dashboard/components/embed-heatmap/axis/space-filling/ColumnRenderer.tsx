@@ -2,25 +2,31 @@ import { Selection } from 'd3';
 import { ColumnData, LayoutConfig, highlightText } from './HierarchyUtils';
 import * as d3 from 'd3';
 import { intelligentTextSplit, shouldDisplayText, getMultiLineTextOffset } from './TextWrappingUtils.ts';
-import { getOptimalCategoryColorScale } from './ColorUtils';
 
-// Function to render the columns
+// Enum for orientation types
+export enum ColumnOrientation {
+  HORIZONTAL = 'horizontal',
+  VERTICAL = 'vertical'
+}
+
+// Function to render the columns with orientation support
 export function renderColumns(
   g: Selection<SVGGElement, unknown, null, undefined>,
   columnData: ColumnData[],
   layoutConfig: LayoutConfig,
-  columnsY: number,
+  columnsPosition: number,
   currentExpanding: any,
   categoryColorScale: (id: string) => string,
   globalQuery?: string,
+  orientation: ColumnOrientation = ColumnOrientation.HORIZONTAL,
+  setSourceColumn?: (column: string) => void
 ) {
-  const { theme, columnHeight } = layoutConfig;
-  
+  const { theme, columnHeight, columnWidth } = layoutConfig;
+
   // Typography settings
   const typography = {
     fontSize: 10,
     lineHeight: 14,
-    maxLines: 3,
     minCharsPerLine: 3,
     textPadding: 12,
     tooltipFontSize: 12
@@ -55,19 +61,33 @@ export function renderColumns(
     }
   };
 
-  // Calculate column positions - use the original node's x position and width
-  const positionedColumns = columnData.map((column) => ({
-    ...column,
-    x: column.originalNode.x || 0,
-    y: columnsY,
-    width: column.originalNode.width || 100,
-    height: columnHeight
-  }));
+  // Calculate column positions based on orientation
+  const positionedColumns = columnData.map((column) => {
+    if (orientation === ColumnOrientation.HORIZONTAL) {
+      return {
+        ...column,
+        x: column.originalNode.x || 0,
+        y: columnsPosition,
+        width: column.originalNode.width || 100,
+        height: columnHeight
+      };
+    } else {
+      return {
+        ...column,
+        x: columnsPosition,
+        y: column.originalNode.y || 0,
+        width: columnWidth,
+        height: column.originalNode.height || 100
+      };
+    }
+  });
 
-  // Create column group
+  // Create column group with appropriate transform
   const columnGroup = g.append('g')
     .attr('class', 'columns')
-    .attr('transform', `translate(0, ${columnsY})`);
+    .attr('transform', orientation === ColumnOrientation.HORIZONTAL 
+      ? `translate(0, ${columnsPosition})`
+      : `translate(${columnsPosition}, 0)`);
   
   // Add column rectangles and labels
   columnGroup.selectAll('.column')
@@ -76,10 +96,13 @@ export function renderColumns(
     .append('g')
     .attr('class', 'column')
     .attr('id', d => `column-${d.id}`)
-    .attr('transform', d => `translate(${d.x}, 0)`)
+    .attr('transform', d => orientation === ColumnOrientation.HORIZONTAL 
+      ? `translate(${d.x}, 0)`
+      : `translate(0, ${d.y})`)
     .each(function(d) {
       const group = d3.select(this);
       const columnWidth = d.width || 100;
+      const columnHeight = d.height || 100;
       
       // Main rectangle
       group.append('rect')
@@ -101,15 +124,18 @@ export function renderColumns(
         .attr('opacity', styles.categoryIndicator.opacity);
       
       // Calculate available text width
-      const availableTextWidth = columnWidth - (typography.textPadding + styles.categoryIndicator.width + styles.categoryIndicator.margin);
+      const availableTextWidth = orientation === ColumnOrientation.HORIZONTAL 
+        ? columnWidth - (typography.textPadding + styles.categoryIndicator.width + styles.categoryIndicator.margin)
+        : columnWidth;
       
+      const maxLines = (columnHeight - typography.textPadding) / typography.lineHeight;
       // Check if we should display text or not
-      if (shouldDisplayText(availableTextWidth, typography.fontSize, typography.minCharsPerLine, typography.maxLines)) {
+      if (shouldDisplayText(availableTextWidth, typography.fontSize, typography.minCharsPerLine, maxLines)) {
         const { lines, isTruncated } = intelligentTextSplit(
           d.name, 
-          availableTextWidth, 
+          availableTextWidth - typography.textPadding, 
           typography.fontSize,
-          typography.maxLines
+          maxLines
         );
         
         // Create a group for text lines
@@ -162,6 +188,7 @@ export function renderColumns(
         .attr('pointer-events', 'none');
       
       const columnWidth = d.width || 100;
+      const columnHeight = d.height || 100;
       
       // Background rectangle
       const tooltipBg = tooltip.append('rect')
@@ -187,8 +214,14 @@ export function renderColumns(
         .attr('width', textBox.width + (styles.tooltip.padding.x * 2))
         .attr('height', textBox.height + (styles.tooltip.padding.y * 2));
       
-      // Position the tooltip - above the column
-      tooltip.attr('transform', `translate(${d.x + columnWidth / 2 - (textBox.width + styles.tooltip.padding.x * 2) / 2}, ${columnsY - styles.tooltip.offsetY})`);
+      // Position the tooltip based on orientation
+      if (orientation === ColumnOrientation.HORIZONTAL) {
+        // Position above the column
+        tooltip.attr('transform', `translate(${d.x + columnWidth / 2 - (textBox.width + styles.tooltip.padding.x * 2) / 2}, ${columnsPosition - styles.tooltip.offsetY})`);
+      } else {
+        // Position to the right of the column
+        tooltip.attr('transform', `translate(${d.x + columnWidth / 2 - (textBox.width + styles.tooltip.padding.x * 2) / 2}, ${d.y + columnHeight})`);
+      }
     })
     .on('mouseout', function() {
       // Reset all elements
@@ -209,11 +242,61 @@ export function renderColumns(
       // Dispatch event or handle column click
       if (d.originalNode && typeof d.originalNode.isExpanded !== 'undefined') {
         console.log('Column clicked:', d.name);
-        // Add your click handler implementation here
+        
+        // Call setSourceColumn if provided (for vertical orientation)
+        if (setSourceColumn) {
+          setSourceColumn(d.name);
+        }
       }
     });
 
   return {
     positionedColumns
   };
+}
+
+// Legacy function for backward compatibility - horizontal orientation
+export function renderColumnsHorizontal(
+  g: Selection<SVGGElement, unknown, null, undefined>,
+  columnData: ColumnData[],
+  layoutConfig: LayoutConfig,
+  columnsY: number,
+  currentExpanding: any,
+  categoryColorScale: (id: string) => string,
+  globalQuery?: string
+) {
+  return renderColumns(
+    g,
+    columnData,
+    layoutConfig,
+    columnsY,
+    currentExpanding,
+    categoryColorScale,
+    globalQuery,
+    ColumnOrientation.HORIZONTAL
+  );
+}
+
+// Legacy function for backward compatibility - vertical orientation
+export function renderColumnsVertical(
+  g: Selection<SVGGElement, unknown, null, undefined>,
+  columnData: ColumnData[],
+  layoutConfig: LayoutConfig,
+  columnsX: number,
+  currentExpanding: any,
+  categoryColorScale: (id: string) => string,
+  setSourceColumn: (column: string) => void,
+  globalQuery?: string
+) {
+  return renderColumns(
+    g,
+    columnData,
+    layoutConfig,
+    columnsX,
+    currentExpanding,
+    categoryColorScale,
+    globalQuery,
+    ColumnOrientation.VERTICAL,
+    setSourceColumn
+  );
 }

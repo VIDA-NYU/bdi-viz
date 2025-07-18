@@ -159,7 +159,7 @@ class CandidateTools:
 
             self.matching_task.set_cached_candidates(new_candidates)
             logger.info(
-                f"[CandidateButler] Updated {len(candidates)} candidates for "
+                f"🧰Tool result: updated {len(candidates)} candidates for "
                 f"source attribute: {source_attribute}"
             )
             return True
@@ -197,7 +197,7 @@ class CandidateTools:
 
             self.matching_task.set_cached_candidates(new_candidates)
             logger.info(
-                f"[CandidateButler] Deleted {len(target_attributes)} candidates "
+                f"🧰Tool result: deleted {len(target_attributes)} candidates "
                 f"from source attribute: {source_attribute}"
             )
             return True
@@ -225,7 +225,7 @@ class CandidateTools:
                 source_attribute, candidates
             )
             logger.info(
-                f"[CandidateButler] Appended {len(candidates)} candidates for "
+                f"🧰Tool result: appended {len(candidates)} candidates for "
                 f"source attribute: {source_attribute}"
             )
             return True

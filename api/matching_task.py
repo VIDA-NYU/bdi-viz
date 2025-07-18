@@ -1,5 +1,4 @@
 import concurrent.futures
-import copy
 import fcntl
 import hashlib
 import json
@@ -47,12 +46,13 @@ DEFAULT_PARAMS = {
 class MatchingTask:
     def __init__(
         self,
+        session_name: str = "default",
         top_k: int = 20,
         # clustering_model="michiyasunaga/BioLinkBERT-base",
         clustering_model="sentence-transformers/all-mpnet-base-v2",
-        update_matcher_weights: bool = True,
     ) -> None:
         self.lock = threading.Lock()
+        self.session_name = session_name
         self.top_k = top_k
         # Remove self.nodes - only use self.cached_candidates["nodes"]
 
@@ -72,15 +72,10 @@ class MatchingTask:
         self.target_df = None
         self._initialize_cache()
         self.history = UserOperationHistory()
-
-        self.update_matcher_weights = update_matcher_weights
         self.weight_updater = None
 
         # Task state tracking
         self._initialize_task_state()
-
-        # Load cached matchers asynchronously upon initialization
-        self._load_cached_matchers_async()
 
     def _initialize_cache(self) -> None:
         # Try to load existing cache first
@@ -117,25 +112,70 @@ class MatchingTask:
         self.task_state = {
             "status": "idle",
             "progress": 0,
-            "current_step": "",
+            "current_step": "Task start...",
             "total_steps": 4,
             "completed_steps": 0,
             "logs": [],
         }
+        self._save_task_state()
 
     def _load_cached_matchers_async(self) -> None:
         """Start an asynchronous process to load cached matchers"""
         cached_json = self._import_cache_from_json()
+        # Always start with default matcher objects
+        self.matcher_objs = {
+            "magneto_ft": BDIKitMatcher("magneto_ft"),
+            "magneto_zs": BDIKitMatcher("magneto_zs"),
+        }
         if cached_json and "matchers" in cached_json:
-            threading.Thread(
-                target=self._load_cached_matcher_objs_async,
-                args=(cached_json,),
-                daemon=True,
-            ).start()
+            # Load matcher metadata first (this was done by _load_cached_matchers)
+            cached_matchers = cached_json["matchers"]
+            cached_matcher_code = cached_json.get("matcher_code", {})
 
-    async def _load_cached_matcher_objs_async(
+            # First load the default matchers
+            default_matchers = {
+                "magneto_ft": {
+                    "name": "magneto_ft",
+                    "weight": 1.0,
+                    "params": {},
+                },
+                "magneto_zs": {
+                    "name": "magneto_zs",
+                    "weight": 1.0,
+                    "params": {},
+                },
+            }
+            # Initialize matchers dictionaries with defaults
+            matchers = default_matchers.copy()
+            # Load custom matchers from cache
+            for matcher_name, matcher_info in cached_matchers.items():
+                # Skip default matchers as they're already loaded
+                if matcher_name in default_matchers:
+                    continue
+                matchers[matcher_name] = {
+                    "name": matcher_info.get("name", matcher_name),
+                    "weight": matcher_info.get("weight", 1.0),
+                    "params": matcher_info.get("params", {}),
+                    "code": None,
+                }
+                # Get matcher code if available
+                if matcher_name in cached_matcher_code:
+                    matchers[matcher_name]["code"] = cached_matcher_code[matcher_name]
+            # Update the cached candidates with matcher metadata
+            self.cached_candidates["matchers"] = matchers
+            self.cached_candidates["matcher_code"] = cached_matcher_code.copy()
+            # Start async loading and get the result
+            loaded_matchers = self._load_cached_matcher_objs_async(cached_json)
+            # Only add successfully loaded custom matchers to matcher_objs
+            if loaded_matchers:
+                self.matcher_objs.update(loaded_matchers)
+                logger.info(
+                    f"Updated matcher_objs with {len(loaded_matchers)} loaded matchers"
+                )
+
+    def _load_cached_matcher_objs_async(
         self, cached_json: Dict[str, Any]
-    ) -> None:
+    ) -> Dict[str, Any]:
         """Load matcher objects from cache asynchronously using multithreading"""
         default_matcher_objs = {
             # "ct_learning": BDIKitMatcher("ct_learning"),
@@ -151,7 +191,7 @@ class MatchingTask:
         ]
 
         if not matcher_names:
-            return
+            return {}
 
         logger.info(f"Asynchronously loading {len(matcher_names)} custom matchers")
 
@@ -179,6 +219,7 @@ class MatchingTask:
                 return matcher_name, None, str(e)
 
         # Use ThreadPoolExecutor to load matchers in parallel
+        loaded_matchers = {}
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future_to_matcher = {
                 executor.submit(load_single_matcher, matcher_name): matcher_name
@@ -187,16 +228,13 @@ class MatchingTask:
 
             for future in concurrent.futures.as_completed(future_to_matcher):
                 matcher_name, matcher, error = future.result()
-                with self.lock:  # Protect shared resource
-                    if not error and matcher:
-                        self.matcher_objs[matcher_name] = matcher
-                        logger.info(
-                            f"Loaded custom matcher '{matcher_name}' from cache"
-                        )
-                    else:
-                        logger.warning(
-                            f"Failed to load matcher '{matcher_name}': {error}"
-                        )
+                if not error and matcher:
+                    loaded_matchers[matcher_name] = matcher
+                    logger.info(f"Loaded custom matcher '{matcher_name}' from cache")
+                else:
+                    logger.warning(f"Failed to load matcher '{matcher_name}': {error}")
+
+        return loaded_matchers
 
     def update_dataframe(
         self, source_df: Optional[pd.DataFrame], target_df: Optional[pd.DataFrame]
@@ -220,6 +258,14 @@ class MatchingTask:
         self.cached_candidates["source_hash"] = None
         self.cached_candidates["target_hash"] = None
         logger.info(f"Set nodes for filtering: {nodes}, cache invalidated")
+
+    def get_all_nodes(self) -> List[str]:
+        """Get all nodes from the ontology."""
+        ontology_flat = load_ontology_flat()
+        nodes = set()
+        for col in ontology_flat.keys():
+            nodes.add(ontology_flat[col]["node"])
+        return list(nodes)
 
     def _filter_target_by_nodes(self) -> None:
         """Filter target dataframe based on nodes if they are set."""
@@ -252,11 +298,11 @@ class MatchingTask:
                 raise ValueError("Source and Target dataframes must be provided.")
 
             # Initialize task state and clear logs for new task
-            self._initialize_task_state()
-            self.task_state["logs"] = []  # Clear logs for new task
+            # self._initialize_task_state()
+            # self.task_state["logs"] = []  # Clear logs for new task
             self._update_task_state(
                 status="running",
-                progress=0,
+                progress=20,
                 current_step="Computing hashes",
                 completed_steps=0,
                 log_message=("Starting new matching task. Logs cleared."),
@@ -264,13 +310,17 @@ class MatchingTask:
 
             source_hash, target_hash = self._compute_hashes()
             self._update_task_state(
-                progress=25,
+                progress=30,
                 current_step="Checking cache",
                 completed_steps=1,
                 log_message=("Hashing source and target dataframes."),
             )
 
             cached_json = self._import_cache_from_json()
+            # Load cached matchers if they exist
+            if cached_json and "matchers" in cached_json and cached_json["matchers"]:
+                self._load_cached_matchers_async()
+
             candidates = []
 
             # Filter target by categories before proceeding
@@ -281,7 +331,11 @@ class MatchingTask:
                 progress=50,
                 current_step="Filtering target by nodes",
                 completed_steps=2,
-                log_message=f"Filtering target by nodes, {num_of_columns - num_of_columns_after_filtering} columns removed",
+                log_message=(
+                    f"Filtering target by nodes, "
+                    f"{num_of_columns - num_of_columns_after_filtering} "
+                    f"columns removed"
+                ),
             )
 
             # Check if we can use the cached JSON file
@@ -294,17 +348,6 @@ class MatchingTask:
                     completed_steps=3,
                     log_message="Using cached results from JSON file.",
                 )
-                # Load cached matchers if they exist
-                if "matchers" in cached_json and cached_json["matchers"]:
-                    self._load_cached_matchers(
-                        copy.deepcopy(cached_json["matchers"]),
-                        copy.deepcopy(cached_json["matcher_code"])
-                        if "matcher_code" in cached_json
-                        else {},
-                    )
-                    logger.info(
-                        f"cached_matchers: {self.cached_candidates['matchers']}"
-                    )
             # Check if we can use the in-memory cache
             elif is_candidates_cached and self._is_cache_valid(
                 self.cached_candidates, source_hash, target_hash
@@ -329,29 +372,26 @@ class MatchingTask:
                 )
 
             # Always initialize weight updater with current matchers and candidates
-            if self.update_matcher_weights:
-                self._update_task_state(
-                    current_step="Updating matcher weights",
-                    log_message=("Updating matcher weights."),
-                )
-                self.weight_updater = WeightUpdater(
-                    matchers=self.cached_candidates["matchers"],
-                    candidates=candidates,
-                    alpha=0.1,
-                    beta=0.1,
-                )
-                # Ensure weights are normalized
-                self.weight_updater._normalize_weights()
-                # Update the cached matchers with normalized weights
-                self.cached_candidates["matchers"] = self.weight_updater.matchers
-                self._export_cache_to_json(self.cached_candidates)
-                self._update_task_state(
-                    progress=100,
-                    current_step="Complete",
-                    status="complete",
-                    completed_steps=4,
-                    log_message="Matcher weights updated and normalized.",
-                )
+            self._update_task_state(
+                current_step="Updating matcher weights",
+                log_message=("Updating matcher weights."),
+            )
+            self.weight_updater = WeightUpdater(
+                matchers=self.cached_candidates["matchers"],
+                candidates=candidates,
+                alpha=0.1,
+                beta=0.1,
+            )
+            # Update the cached matchers with normalized weights
+            self.cached_candidates["matchers"] = self.weight_updater.matchers
+            self._export_cache_to_json(self.cached_candidates)
+            self._update_task_state(
+                progress=100,
+                current_step="Complete",
+                status="complete",
+                completed_steps=4,
+                log_message="Matcher weights updated and normalized.",
+            )
 
             return candidates
 
@@ -439,36 +479,16 @@ class MatchingTask:
             }
             self.append_cached_candidate(new_candidate)
 
+            # Generate value matches for the new candidate
+            self._generate_value_matches(source_col, property_obj["column_name"])
+
             logger.info(f"[MatchingTask] Appended candidate from agent: {target_col}")
 
-    def _load_cached_matcher_objs(self, cached_json: Dict[str, Any]) -> None:
-        """Load matcher objects from cache"""
-        default_matcher_objs = {
-            # "ct_learning": BDIKitMatcher("ct_learning"),
-            "magneto_ft": BDIKitMatcher("magneto_ft"),
-            "magneto_zs": BDIKitMatcher("magneto_zs"),
-        }
-
-        # Get matcher code if available
-        for matcher_name, matcher_info in cached_json["matchers"].items():
-            if matcher_name in default_matcher_objs:
-                continue
-
-            matcher_code = cached_json["matcher_code"][matcher_name]
-            matcher_params = matcher_info.get("params", {})
-
-            # Recreate the matcher
-            error, matcher = verify_new_matcher(
-                matcher_name, matcher_code, matcher_params
-            )
-            if not error:
-                self.matcher_objs[matcher_name] = matcher
-                logger.info(f"Loaded custom matcher '{matcher_name}' from cache")
-            else:
-                logger.warning(f"Failed to load matcher '{matcher_name}': {error}")
-
     def _load_cached_matchers(
-        self, cached_matchers: Dict[str, Any], cached_matcher_code: Dict[str, Any]
+        self,
+        cached_matchers: Dict[str, Any],
+        cached_matcher_code: Dict[str, Any],
+        candidates: List[Dict[str, Any]],
     ) -> None:
         """Load matchers from cache, do not mutate input."""
         # First load the default matchers
@@ -500,7 +520,40 @@ class MatchingTask:
             # Get matcher code if available
             if matcher_name in cached_matcher_code:
                 matchers[matcher_name]["code"] = cached_matcher_code[matcher_name]
-        self.cached_candidates["matchers"] = matchers
+
+        self.cached_candidates["matchers"] = self.weight_updater.update_matchers(
+            matchers
+        )
+
+        # Also load matcher objects for custom matchers
+        loaded_matcher_objs = {}
+        for matcher_name, matcher_info in matchers.items():
+            if matcher_name in default_matchers:
+                # Default matchers are already loaded in __init__
+                continue
+
+            matcher_code = matcher_info.get("code")
+            if matcher_code:
+                matcher_params = matcher_info.get("params", {})
+                error, matcher_obj = verify_new_matcher(
+                    matcher_name, matcher_code, matcher_params
+                )
+                if not error and matcher_obj:
+                    loaded_matcher_objs[matcher_name] = matcher_obj
+                    logger.info(f"Loaded matcher object for '{matcher_name}'")
+                else:
+                    logger.warning(
+                        f"Failed to load matcher object for '{matcher_name}': {error}"
+                    )
+
+        # Update the class matcher_objs with loaded objects
+        if loaded_matcher_objs:
+            with self.lock:
+                self.matcher_objs.update(loaded_matcher_objs)
+            logger.info(
+                f"Updated matcher_objs with {len(loaded_matcher_objs)} loaded objects"
+            )
+
         # Preserve matcher code in the cache
         self.cached_candidates["matcher_code"] = cached_matcher_code.copy()
 
@@ -701,12 +754,15 @@ class MatchingTask:
         candidates = self.get_cached_candidates()
         return load_gdc_ontology(candidates)
 
-    def _generate_ontology(self) -> List[Dict]:
+    def _generate_target_ontology(self) -> List[Dict]:
         candidates = self.get_cached_candidates()
         target_columns = set()
         for candidate in candidates:
             target_columns.add(candidate["targetColumn"])
-        return load_ontology(target_columns)
+        return load_ontology(dataset="target", columns=list(target_columns))
+
+    def _generate_source_ontology(self) -> List[Dict]:
+        return load_ontology(dataset="source")
 
     def _initialize_value_matches(self) -> None:
         self.cached_candidates["value_matches"] = {}
@@ -759,9 +815,11 @@ class MatchingTask:
         # Sort results to match source values order
         matcher_results = sorted(
             matcher_results,
-            key=lambda x: source_values.index(x["sourceValue"])
-            if x["sourceValue"] in source_values
-            else len(source_values),
+            key=lambda x: (
+                source_values.index(x["sourceValue"])
+                if x["sourceValue"] in source_values
+                else len(source_values)
+            ),
         )
 
         # Extract matched values
@@ -876,7 +934,9 @@ class MatchingTask:
 
     def _export_cache_to_json(self, json_obj: Dict) -> None:
         """Export cache to JSON file with file locking to ensure atomic operations"""
-        output_path = os.path.join(os.path.dirname(__file__), "matching_results.json")
+        output_path = os.path.join(
+            os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
+        )
         with open(output_path, "w") as f:
             # Acquire exclusive lock
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
@@ -891,7 +951,9 @@ class MatchingTask:
 
     def _import_cache_from_json(self) -> Optional[Dict]:
         """Import cache from JSON file with file locking to ensure atomic operations"""
-        output_path = os.path.join(os.path.dirname(__file__), "matching_results.json")
+        output_path = os.path.join(
+            os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
+        )
         if os.path.exists(output_path):
             with open(output_path, "r") as f:
                 # Acquire shared lock
@@ -990,7 +1052,7 @@ class MatchingTask:
         logger.info(f"Applying operation: {operation}, on candidate: {candidate}...")
 
         # Update matcher weights if enabled
-        if self.update_matcher_weights and self.weight_updater:
+        if self.weight_updater:
             self.weight_updater.update_weights(
                 operation, candidate["sourceColumn"], candidate["targetColumn"]
             )
@@ -1039,7 +1101,7 @@ class MatchingTask:
             )
         return self._bucket_column(self.source_df, source_col)
 
-    def get_source_unique_values(self, source_col: str, n: int = 20) -> List[str]:
+    def get_source_unique_values(self, source_col: str, n: int = 50) -> List[str]:
         if self.source_df is None or source_col not in self.source_df.columns:
             raise ValueError(
                 f"Source column {source_col} not found in the source dataframe."
@@ -1055,7 +1117,7 @@ class MatchingTask:
             )
         return self._bucket_column(self.target_df, target_col)
 
-    def get_target_unique_values(self, target_col: str, n: int = 300) -> List[str]:
+    def get_target_unique_values(self, target_col: str, n: int = 50) -> List[str]:
         if self.target_df is None or target_col not in self.target_df.columns:
             raise ValueError(
                 f"Target column {target_col} not found in the target dataframe."
@@ -1148,6 +1210,9 @@ class MatchingTask:
         self, name: str, code: str, params: Dict[str, Any]
     ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         try:
+            if "name" not in params:
+                params["name"] = name
+
             matcher = {
                 "name": name,
                 "weight": 1.0,
@@ -1245,17 +1310,15 @@ class MatchingTask:
                 )
 
                 # Update weight updater if needed
-                if self.update_matcher_weights:
-                    self.weight_updater = WeightUpdater(
-                        matchers=self.cached_candidates["matchers"],
-                        candidates=updated_candidates,
-                        alpha=0.1,
-                        beta=0.1,
+                self.cached_candidates["matchers"] = (
+                    self.weight_updater.update_matchers(
+                        self.cached_candidates["matchers"]
                     )
-                    self._update_task_state(
-                        progress=95,
-                        log_message=f"Matcher weights updated after running matcher '{name}'.",
-                    )
+                )
+                self._update_task_state(
+                    progress=95,
+                    log_message=f"Matcher weights updated after running matcher '{name}'.",
+                )
 
                 # Update task state to indicate completion
                 self._update_task_state(

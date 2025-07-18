@@ -9,7 +9,6 @@ import UpperTabs from "./components/upperTabs";
 import LowerTabs from "./components/lowerTabs";
 import RightPanel from "./rightpanel";
 import Paginator from "./components/control-inputs/paginator";
-import AgentSuggestionsPopup from "./components/langchain/suggestion";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
@@ -33,9 +32,7 @@ import { useDashboardHighlight } from "./hooks/useDashboardHighlight";
 import { useMatcherAnalysis } from "./hooks/useMatcherAnalysis";
 
 export default function Dashboard() {
-    const [openSuggestionsPopup, setOpenSuggestionsPopup] = useState(false);
     const [openNewMatcherDialog, setOpenNewMatcherDialog] = useState(false);
-    const [suggestions, setSuggestions] = useState<AgentSuggestions>();
     const {
         isLoadingGlobal,
         setIsLoadingGlobal,
@@ -63,6 +60,7 @@ export default function Dashboard() {
         valueMatches,
         userOperations,
         targetOntologies,
+        sourceOntologies,
         gdcAttribute,
         handleFileUpload,
         handleMatchers,
@@ -72,6 +70,7 @@ export default function Dashboard() {
         handleValueMatches,
         setGdcAttribute,
         handleTargetOntology,
+        handleSourceOntology,
     } = useDashboardCandidates();
 
     const {
@@ -112,7 +111,6 @@ export default function Dashboard() {
         undo,
         redo,
         explain,
-        apply,
         exportMatchingResults,
         isExplaining,
     } = useDashboardOperations({
@@ -123,8 +121,6 @@ export default function Dashboard() {
         onMatchersUpdate: handleMatchers,
         onCandidateSelect: setSelectedCandidate,
         onExplanation: generateExplanations,
-        onSuggestions: handleSuggestions,
-        onApply: handleApply,
         onUserOperationsUpdate: handleUserOperationsUpdate,
         onRelatedOuterSources: setRelatedOuterSources,
     });
@@ -160,31 +156,6 @@ export default function Dashboard() {
         updateHighlightedSourceColumns,
         updateHighlightedTargetColumns
     } = useDashboardHighlight({candidates, searchResults});
-
-    function handleSuggestions(suggestions: AgentSuggestions | undefined) {
-        console.log("Suggestions: ", suggestions);
-        setSuggestions(suggestions);
-        getCachedResults({ callback: handleFileUpload });
-        setOpenSuggestionsPopup(true);
-    };
-
-    function handleApply(actionResponses: ActionResponse[] | undefined) {
-        console.log("Action Responses: ", actionResponses);
-        if (actionResponses && actionResponses.length > 0) {
-            actionResponses.forEach((ar) => {
-                if (["prune", "replace", "redo"].includes(ar.action)) {
-                    getCachedResults({ callback: handleFileUpload });
-                } else {
-                    console.log("Action not supported: ", ar.action);
-                }
-            });
-        }
-    };
-
-    function handleOntologySearch(candidates: Candidate[]) {
-        console.log("Ontology Search Candidates: ", candidates);
-        getCachedResults({ callback: handleFileUpload });
-    }
 
     function handleUserOperationsUpdate(userOperations: UserOperation[]) {
         setUserOperations(userOperations);
@@ -223,17 +194,6 @@ export default function Dashboard() {
         }
     }, [selectedCandidate, explain]);
 
-    const onSelectedActions = useCallback((actions: AgentAction[]) => {
-        if (actions && actions.length > 0 && userOperations.length > 0) {
-            const previousOperation = userOperations[userOperations.length - 1];
-            const reaction: UserReaction = {
-                actions,
-                previousOperation,
-            };
-            console.log("Reaction: ", reaction);
-            apply(reaction);
-        }
-    }, [userOperations, apply]);
 
     const handleUpdateSourceColumn = useCallback((column: string) => {
         setSelectedCandidate(undefined);
@@ -281,7 +241,7 @@ export default function Dashboard() {
     const headerContent = useMemo(() => (
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
             <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
-                <Typography sx={{ fontSize: "1.2rem", fontWeight: "200" }}>BDI Visualization System</Typography>
+                <Typography sx={{ fontSize: "1.2rem", fontWeight: "200" }}>BDIViz</Typography>
                 <Box display="flex" alignItems="center">
                     <SearchMenu
                         agentSearchResultCallback={handleSearchResults}
@@ -357,8 +317,8 @@ export default function Dashboard() {
                     state={{ sourceColumn, candidateType, similarSources, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleNewMatchingTask}
-                    handleMatchers={handleMatchers}
                     handleTargetOntology={handleTargetOntology}
+                    handleSourceOntology={handleSourceOntology}
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}
                     setOpenNewMatcherDialog={setOpenNewMatcherDialog}
@@ -373,6 +333,7 @@ export default function Dashboard() {
                         sourceColumns={filteredSourceColumns}
                         sourceCluster={filteredSourceCluster}
                         targetOntologies={targetOntologies}
+                        sourceOntologies={sourceOntologies}
                         selectedCandidate={selectedCandidate}
                         setSelectedCandidate={setSelectedCandidateCallback}
                         sourceUniqueValues={sourceUniqueValues}
@@ -431,17 +392,12 @@ export default function Dashboard() {
             {loadingOverlay}
 
             {/* Popups */}
-            {selectedCandidate && (
-                <OntologySearchPopup
-                    selectedCandidate={selectedCandidate}
-                    callback={handleOntologySearch}
-                />
-            )}
-            <AgentSuggestionsPopup
-                open={openSuggestionsPopup}
-                setOpen={setOpenSuggestionsPopup}
-                data={suggestions}
-                onSelectedActions={onSelectedActions}
+            <OntologySearchPopup
+                selectedCandidate={selectedCandidate || undefined}
+                callback={handleFileUpload}
+                ontologyCallback={handleTargetOntology}
+                uniqueValuesCallback={handleUniqueValues}
+                valueMatchesCallback={handleValueMatches}
             />
 
             <NewMatcherDialog

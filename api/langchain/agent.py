@@ -1,7 +1,8 @@
+# flake8: noqa
 import logging
 import os
 import random
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -20,24 +21,17 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel
 
-from ..tools.candidate_butler import CandidateButler
-from ..tools.rag_researcher import retrieve_from_rag
 from ..tools.source_scraper import scraping_websource
-from ..utils import load_gdc_property, load_property
-from .memory import MemoryRetriver
+from ..utils import load_property
+from .memory import MemoryRetriever
 from .pydantic import (
-    ActionResponse,
-    AgentResponse,
-    AgentSuggestions,
     AttributeProperties,
     CandidateExplanation,
     Ontology,
     RelatedSources,
-    SearchResponse,
 )
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -46,7 +40,7 @@ logger = logging.getLogger("bdiviz_flask.sub")
 class Agent:
     def __init__(
         self,
-        memory_retriever: MemoryRetriver,
+        memory_retriever: MemoryRetriever,
         llm_model: Optional[BaseChatModel] = None,
     ) -> None:
         # OR claude-3-5-sonnet-20240620
@@ -70,10 +64,10 @@ class Agent:
     Your role is to assist with schema matching operations and provide responses in a strict JSON schema format.
     Do not include any reasoning, apologies, or explanations in your responses.
 
-    **Criteria for matching attributes:**
+    **CRITERIA FOR MATCHING ATTRIBUTES:**
     1. Attribute names and values do not need to be identical.
     2. Ignore case, special characters, and spaces.
-    3. Attributes should be considered a match if they are semantically similar and their datatype and values are comparable.
+    3. Attributes should be considered a match if they are semantically similar, their datatype and values are comparable, or if the units are convertible.
     4. Approach the task with the mindset of a biomedical expert.
             """,
         ]
@@ -88,43 +82,25 @@ class Agent:
                 self._llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
         return self._llm
 
-    def search(self, query: str) -> SearchResponse:
-        logger.info(f"[Agent] Searching for candidates...")
-
-        tools = [
-            self.store.query_candidates_tool,
-        ]
-
-        prompt = f"""
-    Use the tools to search for candidates based on the user's input.
-
-    User Query: {query}
-        """
-
-        logger.info(f"[SEARCH] Prompt: {prompt}")
-
-        response = self.invoke(
-            prompt=prompt,
-            tools=tools,
-            output_structure=SearchResponse,
-        )
-
-        return response
-
-    def explain(self, candidate: Dict[str, Any]) -> CandidateExplanation:
+    def explain(
+        self, candidate: Dict[str, Any], with_memory=True
+    ) -> CandidateExplanation:
         logger.info(f"[Agent] Explaining the candidate...")
         # logger.info(f"{diagnose}")
 
-        # search for related false negative / false positive candidates
-        related_matches = self.store.search_matches(candidate["sourceColumn"], limit=3)
-        related_mismatches = self.store.search_mismatches(
-            f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        )
+        # # search for related false negative / false positive candidates
+        # related_matches = self.store.search_matches(candidate["sourceColumn"], limit=3)
+        # related_mismatches = self.store.search_mismatches(
+        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
+        # )
 
-        # search for related explanations
-        related_explanations = self.store.search_explanations(
-            f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        )
+        # # search for related explanations
+        # related_explanations = self.store.search_explanations(
+        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
+        # )
+
+        if self.store.user_memory_count <= 0:
+            with_memory = False
 
         target_description = load_property(candidate["targetColumn"])
         target_values = candidate["targetValues"]
@@ -149,139 +125,41 @@ class Agent:
     - Source Sample Values: {candidate["sourceValues"]}
     - Target Sample Values: {target_values}
     - Target Description: {target_description}
+    """
 
-    Historical Data:
-    - Related Matches: {related_matches}
-    - Related Mismatches: {related_mismatches}
-    - Related Explanations: {related_explanations}
-
-    Instructions:
-    1. Review the operation details alongside the historical data.
+        instructions_with_memory = """
+    1. Review the operation details and use `recall_memory` to get more context if needed.
     2. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
+    3. If the values are convertable, provide possible convertion methods in your explanation.
+    4. Conclude if the current candidate is a valid match based on:
+        a. Your explanations,
+        b. Similarity between the attribute names,
+        c. Consistency of the sample values, and descriptions provided,
+        d. The history of false positives and negatives,
+        e. The context from `recall_memory`.
+    5. Include any additional context or keywords that might support or contradict the current mapping.
+    """
+
+        instructions_without_memory = """
+    1. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
+    2. If the values are convertable, provide possible convertion methods in your explanation.
     3. Conclude if the current candidate is a valid match based on:
         a. Your explanations,
         b. Similarity between the attribute names,
-        c. Consistency of the sample values, and descriptions provide
+        c. Consistency of the sample values, and descriptions provided,
         d. The history of false positives and negatives.
     4. Include any additional context or keywords that might support or contradict the current mapping.
-        """
+    """
+
+        prompt += (
+            instructions_with_memory if with_memory else instructions_without_memory
+        )
         logger.info(f"[EXPLAIN] Prompt: {prompt}")
         response = self.invoke(
             prompt=prompt,
-            tools=[],
+            tools=[self.store.recall_memory_tool] if with_memory else [],
             output_structure=CandidateExplanation,
         )
-        return response
-
-    def explore_candidates(
-        self, session: str, candidate: Dict[str, Any], query: str
-    ) -> AgentResponse:
-        source_attribute = candidate["sourceColumn"]
-        logger.info(
-            f"[Agent] Exploring candidates for {source_attribute} with query: {query}"
-        )
-        candidate_butler = CandidateButler(session)
-
-        tools = [
-            # Manipulate the existing candidates
-            candidate_butler.read_candidates_tool,
-            candidate_butler.update_candidates_tool,
-            candidate_butler.prune_candidates_tool,
-            candidate_butler.append_candidates_tool,
-            # Search within the target ontology
-            self.store.search_ontology_tool,
-        ]
-
-        prompt = f"""
-        Analyze the user's query and perform the appropriate actions using the available tools.
-        
-        Source Attribute: {source_attribute}
-        User Query: {query}
-        
-        Instructions:
-        1. If the user wants to filter, discard, or remove candidates:
-           - Use read_candidates to retrieve current candidates
-           - Filter based on user criteria
-           - Pass the filtered list to update_candidates to save the filtered list
-        
-        2. If the user wants to explore or find new matches:
-           - Use search_ontology to find relevant target attributes
-           - Consider domain-specific terminology (like AJCC, FIGO, etc.)
-           - Pass the candidates list found by search_ontology to append_candidates
-        
-        3. If the user wants information about specific terminology:
-           - Use search_ontology to find related attributes and their descriptions
-        
-        Respond under AgentResponse schema:
-        - status: success or failure
-        - tool_uses: the tool(s) used
-        - response: the response to the user's query
-        - candidates: the candidates found, empty if you did not manipulate the candidates list
-        - terminologies: the terminologies found, empty if you did not search the ontology
-        """
-
-        logger.info(f"[EXPLORE] Prompt: {prompt}")
-        response = self.invoke(
-            prompt=prompt,
-            tools=tools,
-            output_structure=AgentResponse,
-        )
-        return response
-
-    def make_suggestion(
-        self, explanations: List[Dict[str, Any]], user_operation: Dict[str, Any]
-    ) -> AgentSuggestions:
-        """
-        Generate suggestions based on the user operation and diagnosis.
-
-        Args:
-            explanations (List[Dict[str, Any]]): A list of explanations to consider.
-                [
-                    {
-                        'type': ExplanationType;
-                        'content': string;
-                        'confidence': number;
-                    },
-                    ...
-                ]
-            user_operation (Dict[str, Any]): The user operation to consider.
-        """
-        logger.info(f"[Agent] Making suggestion to the agent...")
-        # logger.info(f"{diagnosis}")
-
-        explanations_str = "\n".join(
-            f"\tDiagnosis: {explanation['content']}, Confidence: {explanation['confidence']}"
-            for explanation in explanations
-        )
-        user_operation_str = f"""
-Operation: {user_operation["operation"]}
-Candidate: {user_operation["candidate"]}
-        """
-
-        prompt = f"""
-User Operation:
-{user_operation_str}
-
-Diagnosis:
-{explanations_str}
-
-**Instructions**:
-    1. Generate 2-3 suggestions based on the user operation and diagnosis:
-        - **undo**: Undo the last action if it seems incorrect.
-        - **prune_candidates**: Suggest pruning candidates based on RAG expertise.
-        - **update_embedder**: Recommend a more accurate model if matchings seem wrong.
-    2. Provide a brief explanation for each suggestion.
-    3. Include a confidence score for each suggestion.
-        """
-
-        logger.info(f"[SUGGESTION] Prompt: {prompt}")
-
-        response = self.invoke(
-            prompt=prompt,
-            tools=[],
-            output_structure=AgentSuggestions,
-        )
-
         return response
 
     def search_for_sources(self, candidate: Dict[str, Any]) -> RelatedSources:
@@ -321,7 +199,7 @@ Diagnosis:
         pd.reset_option("display.max_columns")
 
         prompt = f"""
-    Analyze the target DataFrame preview below to create an ontology for each column.
+    Analyze the DataFrame preview below to create an ontology for each column.
 
     DataFrame Preview:
     {df_preview}
@@ -350,63 +228,152 @@ Diagnosis:
         )
         return response
 
-    def apply(
-        self, session: str, action: Dict[str, Any], previous_operation: Dict[str, Any]
-    ) -> Optional[ActionResponse]:
-        user_operation = previous_operation["operation"]
-        candidate = previous_operation["candidate"]
-        # references = previous_operation["references"]
+    def stream_infer_ontology(
+        self, target_df: pd.DataFrame
+    ) -> Generator[Tuple[List[str], Ontology], None, None]:
+        """
+        Streams ontology inference with a two-phase workflow:
+        1. First generates high-level structure (categories and nodes) for all columns
+        2. Then generates detailed attributes for each batch
+        Each yield is a tuple (column_slice, ontology_dict).
+        """
 
-        candidate_butler = CandidateButler(session)
+        pd.set_option("display.max_columns", None)
+        columns = target_df.columns.tolist()
+        pd.reset_option("display.max_columns")
 
-        source_cluster = candidate_butler.read_source_cluster_details(
-            candidate["sourceColumn"]
-        )
+        # Phase 1: Generate high-level ontology structure for all columns
+        structure_prompt = f"""
+Directly return the JSON in the exact schema described below. 
+No extra text before or after the JSON.
 
-        logger.info(f"[Agent] Applying the action: {action}")
+The output should be formatted as a JSON instance that conforms to the JSON example below.
+Here is the output example:
+{{
+    "column1": {{"category": "category1", "node": "node1"}},
+    "column2": {{"category": "category1", "node": "node2"}}
+}}
 
-        if action["action"] == "prune_candidates":
-            tools = candidate_butler.get_toolset() + [retrieve_from_rag]
+Analyze all column names from a DataFrame and create a high-level ontology structure.
+
+All Column Names: {columns}
+
+Task:
+Create a high-level ontology structure that organizes ALL columns into:
+- At most 3 categories (grandparent level)
+- At most 10 nodes (parent level)
+
+For each column, determine:
+- Which category it belongs to
+- Which node within that category it belongs to
+
+Important:
+- Keep category and node names concise (max 10 characters if possible)
+- Group semantically related columns together
+- Return a simple mapping structure showing column -> category -> node relationships
+- Focus only on categorization, not detailed attributes
+"""
+
+        # Get high-level structure first
+        agent_executor = create_react_agent(self.llm, tools=[])
+        structure_responses = []
+        for chunk in agent_executor.stream(
+            {
+                "messages": [
+                    SystemMessage(
+                        content="You are a helpful assistant that creates ontology structures."
+                    ),
+                    HumanMessage(content=structure_prompt),
+                ]
+            },
+            {"configurable": {"thread_id": "bdiviz-1"}},
+        ):
+            structure_responses.append(chunk)
+
+        # Parse the structure response
+        structure_response = structure_responses[-1]["agent"]["messages"][0].content
+        # Extract JSON from the response (assuming it's in the response)
+        import json
+        import re
+
+        try:
+            # Clean the response to extract just the JSON content
+            # Remove any prefix like "Assistant" and extract content between ```json and ```
+            json_match = re.search(
+                r"```json\s*\n(.*?)\n```", structure_response, re.DOTALL
+            )
+            if json_match:
+                json_content = json_match.group(1).strip()
+            else:
+                # If no markdown blocks, try to find JSON-like content
+                # Look for content between { and } (handle nested braces)
+                json_match = re.search(r"(\{.*\})", structure_response, re.DOTALL)
+                if json_match:
+                    json_content = json_match.group(1).strip()
+                else:
+                    json_content = structure_response.strip()
+
+            structure_data = json.loads(json_content)
+        except (json.JSONDecodeError, AttributeError) as e:
+            # Fallback to basic categorization if parsing fails
+            logger.critical(f"[INFER-ONTOLOGY] JSON parsing error: {e}")
+            structure_data = {
+                col: {"category": "data", "node": "general"} for col in columns
+            }
+
+        # Phase 2: Generate detailed attributes for each batch using the structure
+        for idx in range(0, len(columns), 5):
+            if idx + 5 > len(columns):
+                column_slice = columns[idx:]
+            else:
+                column_slice = columns[idx : idx + 5]
+            col_data = target_df[column_slice]
+
+            # Build detailed prompt using the structure
+            batch_structure = {
+                col: structure_data.get(col, {"category": "data", "node": "general"})
+                for col in column_slice
+            }
+
             prompt = f"""
-You have access to the user's previous operations and the related source column clusters. 
-Your goal is to help prune (remove) certain candidate mappings in the related source columns based on the user's decisions following the instructions below.
+Analyze the following columns from a DataFrame and create detailed ontology descriptions.
 
-**Previous User Operation**:
-Operation: {user_operation}
-Candidate: {candidate}
+Column Names: {column_slice}
+Sample Values: {col_data.head().to_string()}
 
-**Related Source Columns and Their Candidates**:
-{source_cluster}
+High-level Structure (use this as node and category for each column):
+{batch_structure}
 
-**Instructions**:
-1. Identify **Related Source Columns and Their Candidates**.
-2. Consult Domain Knowledge (using **retrieve_from_rag**) if any clarifications are needed.
-3. Decide Which Candidates to Prune based on your understanding and the user's previous operations, then compile the candidates after pruning into a **dictionary** like this:
-    [
-        {{"sourceColumn": "source_column_1", "targetColumn": "target_column_1", "score": 0.9, "matcher": "magneto_zs_bp"}},
-        {{"sourceColumn": "source_column_1", "targetColumn": "target_column_15", "score": 0.7, "matcher": "magneto_zs_bp"}},
-        ...
-    ]
-4. Call **update_candidates** with this updated dictionary as the parameter to refine the heatmap.
-                """
+Task:
+Create an Ontology object for the columns with the following information:
+- properties: List of AttributeProperties objects for each column
 
-            logger.info(f"[ACTION-PRUNE] Prompt: {prompt}")
-            response = self.invoke(
-                prompt=prompt,
-                tools=tools,
-                output_structure=ActionResponse,
-            )
-            return response
+Important:
+- Use the provided category and node assignments from the structure
+- For "enum" types, include all observed values plus likely additional values
+- Return ONLY a valid JSON object following the Ontology schema with no additional text
+"""
+            output_parser = PydanticOutputParser(pydantic_object=Ontology)
+            prompt_full = self.generate_prompt(prompt, output_parser)
+            agent_executor = create_react_agent(self.llm, tools=[])
+            responses = []
+            for chunk in agent_executor.stream(
+                {
+                    "messages": [
+                        SystemMessage(
+                            content="You are a helpful assistant that generates ontology for a column."
+                        ),
+                        HumanMessage(content=prompt_full),
+                    ]
+                },
+                {"configurable": {"thread_id": "bdiviz-1"}},
+            ):
+                responses.append(chunk)
+            # Get the final response for this batch
+            final_response = responses[-1]["agent"]["messages"][0].content
+            ontology = output_parser.parse(final_response)
 
-        elif action["action"] == "undo":
-            return ActionResponse(
-                status="success",
-                response="Action successfully undone.",
-                action="undo",
-            )
-        else:
-            logger.info(f"[Agent] Applying the action: {action}")
-            return
+            yield (column_slice, ontology)
 
     def remember_fp(self, candidate: Dict[str, Any]) -> None:
         logger.info(f"[Agent] Remembering the false positive...")
@@ -497,14 +464,30 @@ AGENT = None
 def get_agent(memory_retriever):
     global AGENT
     if AGENT is None:
-        portkey_headers = createHeaders(
-            api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
-            virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
-        )
-        llm_model = ChatOpenAI(
-            model="gemini-2.5-flash",
-            base_url="https://ai-gateway.apps.cloud.rt.nyu.edu/v1/",
-            default_headers=portkey_headers,
-        )
+        llm_provider = os.getenv("LLM_PROVIDER", "portkey")
+        docker_env = os.getenv("DOCKER_ENV", "local")
+        if llm_provider == "portkey":
+            portkey_headers = createHeaders(
+                api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
+                virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+                metadata={"_user": "yfw215"},
+            )
+            llm_model = ChatOpenAI(
+                model="gemini-2.5-flash",
+                temperature=0,
+                # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
+                base_url=(
+                    "https://portkey-lb.rt.nyu.edu/v1/"
+                    if docker_env == "hsrn"
+                    else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
+                ),
+                default_headers=portkey_headers,
+                timeout=1000,
+                max_retries=3,
+            )
+        elif llm_provider == "openai":
+            llm_model = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+        else:
+            raise ValueError(f"Invalid LLM provider: {llm_provider}")
         AGENT = Agent(memory_retriever, llm_model=llm_model)
     return AGENT

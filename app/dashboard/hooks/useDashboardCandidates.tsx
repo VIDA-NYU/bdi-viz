@@ -7,7 +7,8 @@ import {
     getValueMatches,
     getUserOperationHistory,
     getTargetOntology,
-    getGDCAttribute
+    getGDCAttribute,
+    getSourceOntology
 } from '@/app/lib/heatmap/heatmap-helper';
 import { getMockData } from '../components/utils/mock';
 
@@ -20,7 +21,8 @@ type DashboardCandidateState = {
     targetUniqueValues: TargetUniqueValues[];
     valueMatches: ValueMatch[];
     userOperations: UserOperation[];
-    targetOntologies: TargetOntology[];
+    targetOntologies: Ontology[];
+    sourceOntologies: Ontology[];
     gdcAttribute: GDCAttribute | undefined;
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => void;
     handleMatchers: (matchers: Matcher[]) => void;
@@ -30,7 +32,8 @@ type DashboardCandidateState = {
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
     setGdcAttribute: (attribute: GDCAttribute | undefined) => void;
-    handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
+    handleTargetOntology: (targetOntologies: Ontology[]) => void;
+    handleSourceOntology: (sourceOntologies: Ontology[]) => void;
 }
 
 export type { DashboardCandidateState };
@@ -46,7 +49,8 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
     const [targetUniqueValues, setTargetUniqueValues] = useState<TargetUniqueValues[]>([]);
     const [valueMatches, setValueMatches] = useState<ValueMatch[]>([]);
     const [userOperations, setUserOperations] = useState<UserOperation[]>([]);
-    const [targetOntologies, setTargetOntologies] = useState<TargetOntology[]>([]);
+    const [targetOntologies, setTargetOntologies] = useState<Ontology[]>([]);
+    const [sourceOntologies, setSourceOntologies] = useState<Ontology[]>([]);
     const [gdcAttribute, setGdcAttribute] = useState<GDCAttribute | undefined>(undefined);
 
     // Memoize handlers to prevent unnecessary re-renders
@@ -100,8 +104,12 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
         setUserOperations(newUserOperations);
     }, []);
 
-    const handleTargetOntology = useCallback((targetOntologies: TargetOntology[]) => {
+    const handleTargetOntology = useCallback((targetOntologies: Ontology[]) => {
         setTargetOntologies(targetOntologies);
+    }, []);
+
+    const handleSourceOntology = useCallback((sourceOntologies: Ontology[]) => {
+        setSourceOntologies(sourceOntologies);
     }, []);
 
     // Fetch GDC attribute when selected candidate changes
@@ -161,7 +169,14 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
                     signal: controller.signal
                 });
                 resolve();
-            })
+            }),
+            new Promise<void>(resolve => {
+                getSourceOntology({
+                    callback: handleSourceOntology,
+                    signal: controller.signal
+                });
+                resolve();
+            }),
         ]).catch(error => {
             if (error.name !== 'AbortError') {
                 console.error('Error loading dashboard data:', error);
@@ -181,6 +196,7 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
         valueMatches,
         userOperations,
         targetOntologies,
+        sourceOntologies,
         gdcAttribute,
         handleFileUpload,
         handleMatchers,
@@ -191,5 +207,6 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
         handleValueMatches,
         setGdcAttribute,
         handleTargetOntology,
+        handleSourceOntology,
     };
 };

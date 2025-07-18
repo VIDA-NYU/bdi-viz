@@ -40,8 +40,8 @@ interface LeftPanelProps {
 
     // File Uploading Props
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
-    handleMatchers: (matchers: Matcher[]) => void;
-    handleTargetOntology: (targetOntologies: TargetOntology[]) => void;
+    handleTargetOntology: (targetOntologies: Ontology[]) => void;
+    handleSourceOntology: (sourceOntologies: Ontology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
     setOpenNewMatcherDialog: (open: boolean) => void;
@@ -75,8 +75,8 @@ const LeftPanel = ({
     userOperations,
     // File Uploading Props
     handleFileUpload,
-    handleMatchers,
     handleTargetOntology,
+    handleSourceOntology,
     handleUniqueValues,
     handleValueMatches,
     // New Matcher Props
@@ -87,8 +87,8 @@ const LeftPanel = ({
         <LeftColumn>
             <ShortcutPanelMemo
                 handleFileUpload={handleFileUpload}
-                handleMatchers={handleMatchers}
                 handleTargetOntology={handleTargetOntology}
+                handleSourceOntology={handleSourceOntology}
                 handleUniqueValues={handleUniqueValues}
                 handleValueMatches={handleValueMatches}
                 acceptMatch={acceptMatch}

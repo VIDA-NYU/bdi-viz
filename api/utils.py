@@ -239,22 +239,23 @@ def load_ontology_flat() -> Dict[str, Any]:
     return ontology_flat
 
 
-def load_ontology(target_columns: Set[str] = None) -> List[Dict]:
+def load_ontology(dataset: str = "target", columns: List[str] = None) -> List[Dict]:
     """
     Load the ontology from a JSON file.
 
     Returns:
         List[Dict]: The loaded ontology.
     """
-    with open(".target.json", "r") as f:
+    with open(f".{dataset}.json", "r") as f:
         ontology_flat = json.load(f)
 
     hiarchies = {}
 
-    # If target_columns is empty, use all columns from the ontology
-    columns_to_process = (
-        list(target_columns) if target_columns else list(ontology_flat.keys())
-    )
+    if columns is None:
+        columns_to_process = list(ontology_flat.keys())
+    else:
+        # If target_columns is empty, use all columns from the ontology
+        columns_to_process = list(columns) if columns else list(ontology_flat.keys())
 
     for target_column in columns_to_process:
         if target_column not in ontology_flat:
