@@ -1,0 +1,21 @@
+name: Jest
+
+on: [pull_request]
+
+jobs:
+  jest:
+    name: Run Jest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: jest coverage
+        uses: ArtiomTr/jest-coverage-report-action@v2
