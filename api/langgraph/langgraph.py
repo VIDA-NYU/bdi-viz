@@ -1,3 +1,4 @@
+# flake8: noqa
 import concurrent.futures
 import json
 import logging
@@ -100,40 +101,49 @@ class AgentType(str, Enum):
 
 class LangGraphAgent:
     def __init__(self, memory_retriever: MemoryRetriever, session_id: str = "default"):
-        portkey_headers = createHeaders(
-            api_key=os.getenv("PORTKEY_API_KEY"),
-            virtual_key=os.getenv("PROVIDER_API_KEY"),
-            metadata={"_user": "yfw215"},
-        )
-
         # Configurable timeout from environment or default to 1000 seconds
         llm_timeout = int(os.getenv("LLM_TIMEOUT", "1000"))
+        llm_provider = os.getenv("LLM_PROVIDER", "portkey")
+        docker_env = os.getenv("DOCKER_ENV", "local")
 
-        self.master_llm = ChatOpenAI(
-            model="gemini-2.5-pro",
-            temperature=0,
-            # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
-            base_url=(
-                "https://portkey-lb.rt.nyu.edu/v1/"
-                if os.getenv("DOCKER_ENV") == "hsrn"
-                else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
-            ),
-            default_headers=portkey_headers,
-            timeout=llm_timeout,
-            max_retries=3,
-        )
-        self.worker_llm = ChatOpenAI(
-            model="gemini-2.5-flash",
-            temperature=0,
-            base_url=(
-                "https://portkey-lb.rt.nyu.edu/v1/"
-                if os.getenv("DOCKER_ENV") == "hsrn"
-                else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
-            ),
-            default_headers=portkey_headers,
-            timeout=llm_timeout,
-            max_retries=3,
-        )
+        if llm_provider == "portkey":
+            portkey_headers = createHeaders(
+                api_key=os.getenv("PORTKEY_API_KEY"),
+                virtual_key=os.getenv("PROVIDER_API_KEY"),
+                metadata={"_user": "yfw215"},
+            )
+
+            self.master_llm = ChatOpenAI(
+                model="gemini-2.5-pro",
+                temperature=0,
+                # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
+                base_url=(
+                    "https://portkey-lb.rt.nyu.edu/v1/"
+                    if docker_env == "hsrn"
+                    else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
+                ),
+                default_headers=portkey_headers,
+                timeout=llm_timeout,
+                max_retries=3,
+            )
+            self.worker_llm = ChatOpenAI(
+                model="gemini-2.5-flash",
+                temperature=0,
+                base_url=(
+                    "https://portkey-lb.rt.nyu.edu/v1/"
+                    if docker_env == "hsrn"
+                    else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
+                ),
+                default_headers=portkey_headers,
+                timeout=llm_timeout,
+                max_retries=3,
+            )
+        elif llm_provider == "openai":
+            self.master_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+            self.worker_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+        else:
+            raise ValueError(f"Invalid LLM provider: {llm_provider}")
+
         self.memory_retriever = memory_retriever
         self.session_id = session_id
         self._state = self._init_state()

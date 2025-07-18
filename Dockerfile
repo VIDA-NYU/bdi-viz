@@ -34,7 +34,9 @@ ENV NODE_ENV=development \
     PATH="${PATH}:/home/yfw215/.local/bin" \
     PYTHONPATH="${PYTHONPATH}:/home/yfw215/.local/bin" \
     PORT=3000 \
-    HOSTNAME="0.0.0.0"
+    HOSTNAME="0.0.0.0" \
+    LLM_PROVIDER=portkey \
+    DOCKER_ENV=hsrn
 
 RUN pip install --user ipython
 

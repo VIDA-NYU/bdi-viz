@@ -24,11 +24,18 @@ npm i .
 ```
 
 
-Then, run the development server:
+Then, start the server:
 
+To run locally with Gemini-2.5-flash, run:
 ```bash
-npm run dev
+npm run build && npm run start
 ```
+
+To run locally with GPT-4.1-mini, run:
+```bash
+npm run build && LLM_PROVIDER=openai npm run start
+```
+
 
 ## :gear: Introduction
 

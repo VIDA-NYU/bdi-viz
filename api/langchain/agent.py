@@ -1,3 +1,4 @@
+# flake8: noqa
 import logging
 import os
 import random
@@ -463,23 +464,30 @@ AGENT = None
 def get_agent(memory_retriever):
     global AGENT
     if AGENT is None:
-        portkey_headers = createHeaders(
-            api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
-            virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
-            metadata={"_user": "yfw215"},
-        )
-        llm_model = ChatOpenAI(
-            model="gemini-2.5-flash",
-            temperature=0,
-            # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
-            base_url=(
-                "https://portkey-lb.rt.nyu.edu/v1/"
-                if os.getenv("DOCKER_ENV") == "hsrn"
-                else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
-            ),
-            default_headers=portkey_headers,
-            timeout=1000,
-            max_retries=3,
-        )
+        llm_provider = os.getenv("LLM_PROVIDER", "portkey")
+        docker_env = os.getenv("DOCKER_ENV", "local")
+        if llm_provider == "portkey":
+            portkey_headers = createHeaders(
+                api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
+                virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+                metadata={"_user": "yfw215"},
+            )
+            llm_model = ChatOpenAI(
+                model="gemini-2.5-flash",
+                temperature=0,
+                # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
+                base_url=(
+                    "https://portkey-lb.rt.nyu.edu/v1/"
+                    if docker_env == "hsrn"
+                    else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
+                ),
+                default_headers=portkey_headers,
+                timeout=1000,
+                max_retries=3,
+            )
+        elif llm_provider == "openai":
+            llm_model = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+        else:
+            raise ValueError(f"Invalid LLM provider: {llm_provider}")
         AGENT = Agent(memory_retriever, llm_model=llm_model)
     return AGENT
