@@ -81,3 +81,6 @@ task_state.json
 
 api/matching_results_test_session.json
 matching_results_test_session.json
+
+# jest
+report.json
