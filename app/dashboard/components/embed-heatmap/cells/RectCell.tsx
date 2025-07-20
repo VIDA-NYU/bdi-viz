@@ -33,6 +33,7 @@ const RectCell: React.FC<CellProps> = ({
 
     return (
         <rect
+            data-testid={`cell-${data.sourceColumn}-${data.targetColumn}`}
             className='heatmap-cell'
             x={x}
             y={y}
