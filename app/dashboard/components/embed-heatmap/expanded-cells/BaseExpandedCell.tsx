@@ -19,6 +19,7 @@ const BaseExpandedCell: FC<BaseExpandedCellProps & {
     const { setOntologySearchPopupOpen } = useContext(SettingsGlobalContext);
     return (
       <g
+        data-testid={`expanded-cell-${props.data.sourceColumn}-${props.data.targetColumn}`}
         transform={`translate(${props.x},${props.y})`} 
         onClick={props.onClick}
         onContextMenu={(e) => {

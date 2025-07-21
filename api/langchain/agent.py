@@ -376,29 +376,29 @@ Important:
             yield (column_slice, ontology)
 
     def remember_fp(self, candidate: Dict[str, Any]) -> None:
-        logger.info(f"[Agent] Remembering the false positive...")
+        logger.info(f"🧠Memory: Remembering the false positive...")
         self.store.put_mismatch(candidate)
 
     def remember_fn(self, candidate: Dict[str, Any]) -> None:
-        logger.info(f"[Agent] Remembering the false negative...")
+        logger.info(f"🧠Memory: Remembering the false negative...")
         self.store.put_match(candidate)
 
     def remember_explanation(
         self, explanations: List[Dict[str, Any]], user_operation: Dict[str, Any]
     ) -> None:
-        logger.info(f"[Agent] Remembering the explanation...")
+        logger.info(f"🧠Memory: Remembering the explanation...")
         self.store.put_explanation(explanations, user_operation)
 
     def remember_candidates(self, candidates: List[Dict[str, Any]]) -> None:
-        logger.info(f"[Agent] Remembering the candidates...")
+        logger.info(f"🧠Memory: Remembering the candidates...")
         for candidate in candidates:
             self.store.put_candidate(candidate)
 
     def remember_ontology(self, ontology: Dict[str, AttributeProperties]) -> None:
-        logger.info(f"[Agent] Remembering the ontology...")
+        logger.info(f"🧠Memory: Remembering the ontology...")
         for _, property in ontology.items():
             self.store.put_target_schema(property)
-        logger.info(f"[Agent] Ontology remembered!")
+        logger.info(f"🧠Memory: Ontology remembered!")
 
     def invoke(
         self, prompt: str, tools: List, output_structure: BaseModel

@@ -13,7 +13,8 @@
     "dev": "concurrently \"pnpm run next-dev\" \"pnpm run flask-dev\" \"pnpm run redis-server\" \"pnpm run celery-dev\"",
     "start": "concurrently \"pnpm run next-start\" \"pnpm run flask-start\" \"pnpm run redis-server\" \"pnpm run celery-start\"",
     "build": "pip3 install -U pip && pip3 install -r requirements.txt --break-system-packages && next build",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -38,14 +39,27 @@
   },
   "packageManager": "pnpm@9.14.4+sha512.c8180b3fbe4e4bca02c94234717896b5529740a6cbadf19fa78254270403ea2f27d4e1d46a08a0f56c89b63dc8ebfd3ee53326da720273794e6200fcf0d184ab",
   "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/preset-env": "^7.28.0",
+    "@babel/preset-react": "^7.27.1",
+    "@babel/preset-typescript": "^7.27.1",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
     "@types/d3": "^7.4.3",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "babel-jest": "^30.0.4",
     "eslint": "^8",
     "eslint-config-next": "15.0.3",
+    "jest": "^30.0.4",
+    "jest-environment-jsdom": "^30.0.4",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }
