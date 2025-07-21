@@ -407,6 +407,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                                 </Box>
                             </InputAdornment>
                         ),
+                        style: { fontSize: '0.875rem' } // Ensure font size is applied here
                     }}
                 />
                 <input

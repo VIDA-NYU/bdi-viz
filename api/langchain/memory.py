@@ -249,7 +249,9 @@ class MemoryRetriever:
                 all_ids = coll.get()["ids"]
                 if all_ids:
                     coll.delete(ids=all_ids)
-                logger.info(f"Cleared {len(all_ids)} docs from namespace '{namespace}'")
+                logger.info(
+                    f"🧠Memory: clear_namespaces cleared {len(all_ids)} docs from namespace '{namespace}'"
+                )
             except Exception as e:
                 logger.warning(  # noqa: E501
                     f"Error clearing namespace '{namespace}': {e}"  # noqa: E501
@@ -634,5 +636,6 @@ MEMORY_RETRIEVER = None
 def get_memory_retriever():
     global MEMORY_RETRIEVER
     if MEMORY_RETRIEVER is None:
+        logger.info("🧠Memory: Initializing memory retriever...")
         MEMORY_RETRIEVER = MemoryRetriever()
     return MEMORY_RETRIEVER

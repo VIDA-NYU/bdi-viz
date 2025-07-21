@@ -178,13 +178,6 @@ def run_matching_task(
                     log_message="Target ontology inferred.",
                 )
 
-            if os.path.exists(".target.json"):
-                target_json = json.load(open(".target.json", "r"))
-                # Start the ontology remembering process asynchronously
-                agent = get_agent()
-                threading.Thread(
-                    target=agent.remember_ontology, args=(target_json,)
-                ).start()
             candidates = matching_task.get_candidates()
 
             return {"status": "completed", "candidates_count": len(candidates)}
@@ -283,6 +276,13 @@ def matching_status():
         source = pd.read_csv(".source.csv")
         target = pd.read_csv(".target.csv")
         matching_task.update_dataframe(source_df=source, target_df=target)
+
+        if os.path.exists(".target.json"):
+            target_json = json.load(open(".target.json", "r"))
+            agent = get_agent()
+            threading.Thread(
+                target=agent.remember_ontology, args=(target_json,)
+            ).start()
         matching_task.sync_cache()
         # matching_task.get_candidates()
 

@@ -200,7 +200,15 @@ const config: Config = {
 
   // A map from regular expressions to paths to transformers
   transform: {
-    '^.+\\.(ts|tsx|js|jsx)$': 'babel-jest',
+    '^.+\\.(ts|tsx|js|jsx)$': ['ts-jest', {
+      babelConfig: {
+        presets: [
+          '@babel/preset-env',
+          ['@babel/preset-react', { runtime: 'automatic' }],
+          '@babel/preset-typescript',
+        ],
+      }
+    }],
   },
 
   // An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
