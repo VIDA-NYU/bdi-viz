@@ -68,7 +68,13 @@ const Timeline = ({ userOperations }: TimelineProps) => {
         nodeGroup
             .append("circle")
             .attr("r", 20)
-            .attr("fill", d => d.operation === 'accept' ? theme.palette.success.main : d.operation === 'reject' ? theme.palette.error.main : theme.palette.secondary.main);
+            .attr("fill", 
+                d => d.operation === 'accept' ? theme.palette.success.main : 
+                d.operation === 'reject' ? theme.palette.error.main : 
+                d.operation === 'discard' ? theme.palette.warning.main : 
+                d.operation === 'append' ? theme.palette.info.main : 
+                d.operation === 'prune' ? theme.palette.secondary.main : 
+                theme.palette.secondary.main);
 
         nodeGroup
             .append("text")
@@ -83,18 +89,30 @@ const Timeline = ({ userOperations }: TimelineProps) => {
         nodeGroup
             .append("foreignObject")
             .attr("x", 30)
-            .attr("y", -15)
+            .attr("y", d => (d.operation === 'append' || d.operation === 'prune' ? -40 : -25))
             .attr("width", 200)
-            .attr("height", 50)
+            .attr("height", d => (d.operation === 'append' || d.operation === 'prune' ? 80 : 50))
             .append("xhtml:div")
             .style("background", theme.palette.grey[200])
             .style("padding", "5px")
             .style("border-radius", "5px")
             .style("font-size", "0.7rem")
             .style("font-family", `"Roboto","Helvetica","Arial",sans-serif`)
-            .html(d => `
-                <b>${d.candidate?.sourceColumn}</b> -> ${d.candidate?.targetColumn}
-            `);
+            .style("height", "100%")
+            .html(d => {
+                if (d.operation === 'append' || d.operation === 'prune') {
+                    const opText = d.operation === 'append' ? 'Found and appended' : 'Pruned';
+                    const count = d.references.length;
+                    let content = `<b>${opText} ${count} candidate${count === 1 ? '' : 's'} for ${d.candidate?.sourceColumn}</b>`;
+                    if (count > 0) {
+                        const list = d.references.slice(0, 3).map(r => r.targetColumn).join(', ');
+                        const more = count > 3 ? ` ... (+${count - 3})` : '';
+                        content += `<br/><i style="font-size: 0.6rem;">${list}${more}</i>`;
+                    }
+                    return content;
+                }
+                return `<b>${d.candidate?.sourceColumn}</b> -> ${d.candidate?.targetColumn}`;
+            });
 
         svg
             .append("defs")

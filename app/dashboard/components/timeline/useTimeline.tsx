@@ -1,6 +1,7 @@
+"use client";
 
-import { TimelineNode } from "./types";
-import { useMemo } from "react";
+import { useMemo } from 'react';
+import { TimelineNode } from './types';
 
 interface useTimelineProps {
     userOperations: UserOperation[];
@@ -17,8 +18,9 @@ export const useTimeline = ({ userOperations }: useTimelineProps): useTimelineSt
         userOperations.forEach((operation: UserOperation, index: number) => {
             nodes.push({
                 timelineId: index,
-                operation: operation.operation,
+                operation: operation.operation as 'accept' | 'reject' | 'discard' | 'append' | 'prune',
                 candidate: operation.candidate,
+                references: operation.references || [],
             });
         });
         return nodes;
