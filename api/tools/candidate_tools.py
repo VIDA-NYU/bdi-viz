@@ -233,8 +233,23 @@ class CandidateTools:
             f"🧰Tool called: append_candidates for {source_attribute} with {len(candidates)} new candidates"
         )
         try:
-            self.matching_task.append_candidates_from_agent(
-                source_attribute, candidates
+            self.matching_task.apply_operation(
+                "append",
+                {
+                    "sourceColumn": source_attribute,
+                    "targetColumn": None,
+                    "status": "idle",
+                },
+                [
+                    {
+                        "sourceColumn": candidate["sourceColumn"],
+                        "targetColumn": candidate["targetColumn"],
+                        "score": candidate["score"],
+                        "matcher": "agent",
+                        "status": "idle",
+                    }
+                    for candidate in candidates
+                ],
             )
             logger.info(
                 f"🧰Tool result: appended {len(candidates)} candidates for "

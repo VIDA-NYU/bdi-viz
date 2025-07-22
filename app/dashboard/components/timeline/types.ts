@@ -1,6 +1,15 @@
 
 export interface TimelineNode {
     timelineId: number;
-    operation: string;
-    candidate: Candidate | undefined;
+    operation: 'accept' | 'reject' | 'discard' | 'append' | 'prune';
+    candidate: Candidate | null;
+    references: Candidate[];
+}
+
+export interface useTimelineProps {
+    userOperations: UserOperation[];
+}
+
+export interface useTimelineStates {
+    nodes: TimelineNode[];
 }

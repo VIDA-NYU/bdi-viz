@@ -462,27 +462,33 @@ class MatchingTask:
         self, source_col: str, candidates: List[Dict[str, Any]]
     ) -> None:
         for candidate in candidates:
-            if candidate["sourceColumn"] != source_col:
+            try:
+                if candidate["sourceColumn"] != source_col:
+                    continue
+
+                target_col = candidate["targetColumn"]
+                property_obj = load_property(target_col)
+                if property_obj is None:
+                    continue
+
+                new_candidate = {
+                    "sourceColumn": source_col,
+                    "targetColumn": property_obj["column_name"],
+                    "score": candidate["score"],
+                    "matcher": "agent",
+                    "status": "idle",
+                }
+                self.append_cached_candidate(new_candidate)
+
+                # Generate value matches for the new candidate
+                self._generate_value_matches(source_col, property_obj["column_name"])
+
+                logger.info(
+                    f"[MatchingTask] Appended candidate from agent: {target_col}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to append candidate from agent: {e}")
                 continue
-
-            target_col = candidate["targetColumn"]
-            property_obj = load_property(target_col)
-            if property_obj is None:
-                continue
-
-            new_candidate = {
-                "sourceColumn": source_col,
-                "targetColumn": property_obj["column_name"],
-                "score": candidate["score"],
-                "matcher": "agent",
-                "status": "idle",
-            }
-            self.append_cached_candidate(new_candidate)
-
-            # Generate value matches for the new candidate
-            self._generate_value_matches(source_col, property_obj["column_name"])
-
-            logger.info(f"[MatchingTask] Appended candidate from agent: {target_col}")
 
     def _load_cached_matchers(
         self,
@@ -1067,6 +1073,10 @@ class MatchingTask:
             self.reject_cached_candidate(candidate)
         elif operation == "discard":
             self.discard_cached_column(candidate["sourceColumn"])
+        elif operation == "append":
+            self.append_candidates_from_agent(candidate["sourceColumn"], references)
+        elif operation == "prune":
+            pass
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1085,6 +1095,9 @@ class MatchingTask:
             self.update_cached_candidate(candidate)
         elif operation == "discard":
             self.append_cached_column(candidate["sourceColumn"])
+        elif operation == "append":
+            for candidate in references:
+                self.prune_cached_candidate(candidate)
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1102,6 +1115,9 @@ class MatchingTask:
             self.reject_cached_candidate(candidate)
         elif operation == "discard":
             self.discard_cached_column(candidate["sourceColumn"])
+        elif operation == "append":
+            for candidate in references:
+                self.append_cached_candidate(candidate)
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1135,28 +1151,22 @@ class MatchingTask:
         return self._bucket_column(self.target_df, target_col)
 
     def get_target_unique_values(self, target_col: str, n: int = 50) -> List[str]:
-        if self.target_df is None or target_col not in self.target_df.columns:
-            raise ValueError(
-                f"Target column {target_col} not found in the target dataframe."
-            )
-
-        # Try to get values from dataframe
-        target_unique_values = self.target_df[target_col].dropna().unique()
-        if len(target_unique_values) > 0:
-            return list(target_unique_values.astype(str)[:n])
-
-        # If no values in dataframe, try to get from property description
-        target_values = []
+        """
+        Retrieve unique values for a target column. If the column is found in the target ontology
+        and has enums, return those. Otherwise, return unique values from the dataframe.
+        """
         target_description = load_property(target_col)
+        if target_description and "enum" in target_description:
+            target_values = target_description["enum"] or []
+        elif self.target_df is not None and target_col in self.target_df.columns:
+            target_values = self.target_df[target_col].dropna().unique().tolist()
+        else:
+            logger.warning(
+                f"Target column {target_col} not found in target ontology or target dataframe."
+            )
+            return []
 
-        if target_description is not None and "enum" in target_description:
-            target_enum = target_description["enum"]
-            if target_enum is not None:
-                target_values = target_enum
-
-        return [str(target_value) for target_value in target_values] or list(
-            target_unique_values.astype(str)[:n]
-        )
+        return [str(value) for value in target_values[:n]]
 
     def get_cached_candidates(self) -> List[Dict[str, Any]]:
         return self.cached_candidates["candidates"]
@@ -1194,6 +1204,18 @@ class MatchingTask:
 
         # Add the new candidate
         cached_candidates.append(candidate)
+        self.set_cached_candidates(cached_candidates)
+
+    def prune_cached_candidate(self, candidate: Dict[str, Any]) -> None:
+        cached_candidates = self.get_cached_candidates()
+        source_col = candidate["sourceColumn"]
+        target_col = candidate["targetColumn"]
+
+        for index, c in enumerate(cached_candidates):
+            if c["sourceColumn"] == source_col and c["targetColumn"] == target_col:
+                del cached_candidates[index]
+                break
+
         self.set_cached_candidates(cached_candidates)
 
     def get_cached_source_clusters(self) -> Dict[str, List[str]]:
@@ -1327,10 +1349,10 @@ class MatchingTask:
                 )
 
                 # Update weight updater if needed
-                self.cached_candidates["matchers"] = (
-                    self.weight_updater.update_matchers(
-                        self.cached_candidates["matchers"]
-                    )
+                self.cached_candidates[
+                    "matchers"
+                ] = self.weight_updater.update_matchers(
+                    self.cached_candidates["matchers"]
                 )
                 self._update_task_state(
                     progress=95,
@@ -1494,6 +1516,11 @@ class UserOperation:
         candidate: Dict[str, Any],
         references: List[Dict[str, Any]],
     ) -> None:
+        """
+        operation: str - the operation to be applied: accept, reject, discard, append, prune
+        candidate: Dict[str, Any] - the candidate to be operated on
+        references: List[Dict[str, Any]] - the references to the candidates to be operated on (append, prune)
+        """
         self.operation = operation
         self.candidate = candidate
         self.references = references
@@ -1502,4 +1529,7 @@ class UserOperation:
         return {
             "operation": self.operation,
             "candidate": self.candidate,
+            "references": self.references
+            if self.operation in ["append", "prune"]
+            else [],
         }
