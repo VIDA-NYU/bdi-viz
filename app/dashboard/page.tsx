@@ -398,6 +398,7 @@ export default function Dashboard() {
                 ontologyCallback={handleTargetOntology}
                 uniqueValuesCallback={handleUniqueValues}
                 valueMatchesCallback={handleValueMatches}
+                userOperationHistoryCallback={handleUserOperationsUpdate}
             />
 
             <NewMatcherDialog

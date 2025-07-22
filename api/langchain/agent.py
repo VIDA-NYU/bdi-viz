@@ -335,11 +335,19 @@ Important:
                 for col in column_slice
             }
 
+            # Only filters the unique non-null values, and concat into a df
+            df_new = pd.DataFrame()
+            for col in column_slice:
+                unique_values = list(col_data[col].dropna().unique())
+                if len(unique_values) < 5:
+                    unique_values.extend(["NaN"] * (5 - len(unique_values)))
+                df_new[col] = unique_values[:5]
+
             prompt = f"""
 Analyze the following columns from a DataFrame and create detailed ontology descriptions.
 
 Column Names: {column_slice}
-Sample Values: {col_data.head().to_string()}
+Sample Values: {df_new.to_string()}
 
 High-level Structure (use this as node and category for each column):
 {batch_structure}

@@ -95,8 +95,14 @@ class CandidateTools:
             f"🧰Tool called: accept_match for {source_attribute} -> {target_attribute}"
         )
         try:
-            self.matching_task.accept_cached_candidate(
-                {"sourceColumn": source_attribute, "targetColumn": target_attribute}
+            self.matching_task.apply_operation(
+                "accept",
+                {
+                    "sourceColumn": source_attribute,
+                    "targetColumn": target_attribute,
+                    "status": "idle",
+                },
+                [],
             )
             return True
         except Exception as e:
@@ -111,8 +117,14 @@ class CandidateTools:
             f"🧰Tool called: reject_match for {source_attribute} -> {target_attribute}"
         )
         try:
-            self.matching_task.reject_cached_candidate(
-                {"sourceColumn": source_attribute, "targetColumn": target_attribute}
+            self.matching_task.apply_operation(
+                "reject",
+                {
+                    "sourceColumn": source_attribute,
+                    "targetColumn": target_attribute,
+                    "status": "idle",
+                },
+                [],
             )
             return True
         except Exception as e:
