@@ -64,8 +64,10 @@ declare interface DiagnoseObject {
     confidence: number;
 }
 
+declare type UserOperationType = 'accept' | 'reject' | 'discard';
+
 declare interface UserOperation {
-    operation: string; // accept, reject, discard
+    operation: UserOperationType | string;
     candidate: Candidate; // the candidate to operate on
     references: Candidate[]; // the references to the candidate
 }

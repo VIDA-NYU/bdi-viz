@@ -1037,7 +1037,7 @@ class MatchingTask:
         logger.info("Redoing last operation...")
         operation = self.history.redo_last_operation()
         if operation:
-            self.apply_operation(
+            self.redo_operation(
                 operation.operation, operation.candidate, operation.references
             )
             return operation._json_serialize()
@@ -1085,6 +1085,23 @@ class MatchingTask:
             self.update_cached_candidate(candidate)
         elif operation == "discard":
             self.append_cached_column(candidate["sourceColumn"])
+        else:
+            raise ValueError(f"Operation {operation} not supported.")
+
+    def redo_operation(
+        self,
+        operation: str,
+        candidate: Dict[str, Any],
+        references: List[Dict[str, Any]],
+    ) -> None:
+        logger.info(f"Redoing operation: {operation}, on candidate: {candidate}...")
+
+        if operation == "accept":
+            self.accept_cached_candidate(candidate)
+        elif operation == "reject":
+            self.reject_cached_candidate(candidate)
+        elif operation == "discard":
+            self.discard_cached_column(candidate["sourceColumn"])
         else:
             raise ValueError(f"Operation {operation} not supported.")
 

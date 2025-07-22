@@ -17,7 +17,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import { agentSearchOntology } from '@/app/lib/langchain/agent-helper';
 import SettingsGlobalContext from '@/app/lib/settings/settings-context';
-import { pollForMatchingStatus, pollForMatcherStatus, getValueMatches, getValueBins, getTargetOntology, getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
+import { pollForMatchingStatus, pollForMatcherStatus, getValueMatches, getValueBins, getTargetOntology, getCachedResults, getUserOperationHistory } from '@/app/lib/heatmap/heatmap-helper';
 
 interface ChatMessage {
     id: string;
@@ -34,6 +34,7 @@ interface OntologySearchPopupProps {
     ontologyCallback: (targetOntology: Ontology[]) => void;
     uniqueValuesCallback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
+    userOperationHistoryCallback: (userOperations: UserOperation[]) => void;
 }
 
 const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
@@ -42,6 +43,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
     ontologyCallback,
     uniqueValuesCallback,
     valueMatchesCallback,
+    userOperationHistoryCallback,
 }) => {
     const [query, setQuery] = useState<string>('');
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -87,8 +89,9 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                     agentState: result,
                 };
                 setChatHistory(prev => [...prev, agentMessage]);
+                getCachedResults({ callback });
+                getUserOperationHistory({ callback: userOperationHistoryCallback });
                 if (result.candidates || result.candidates_to_append) {
-                    getCachedResults({ callback });
                     getTargetOntology({ callback: ontologyCallback });
                     getValueBins({ callback: uniqueValuesCallback });
                     getValueMatches({ callback: valueMatchesCallback });
@@ -99,7 +102,6 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                         taskId: result.task_id,
                         onResult: (result) => {
                             console.log("Matching task completed with result:", result);
-                            getCachedResults({ callback });
                             getTargetOntology({ callback: ontologyCallback });
                             getValueBins({ callback: uniqueValuesCallback });
                             getValueMatches({ callback: valueMatchesCallback });
@@ -120,7 +122,6 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                         taskId: result.matcher_task_id,
                         onResult: (result) => {
                             console.log("Matcher task completed with result:", result);
-                            getCachedResults({ callback });
                             getTargetOntology({ callback: ontologyCallback });
                             getValueBins({ callback: uniqueValuesCallback });
                             getValueMatches({ callback: valueMatchesCallback });
