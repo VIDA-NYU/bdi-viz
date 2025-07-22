@@ -64,7 +64,7 @@ declare interface DiagnoseObject {
     confidence: number;
 }
 
-declare type UserOperationType = 'accept' | 'reject' | 'discard';
+declare type UserOperationType = 'accept' | 'reject' | 'discard' | 'append' | 'prune';
 
 declare interface UserOperation {
     operation: UserOperationType | string;

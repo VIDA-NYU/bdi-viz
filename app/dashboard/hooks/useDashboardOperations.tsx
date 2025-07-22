@@ -192,7 +192,11 @@ export const {
             undoUserOperation({
                 userOperationCallback: (userOperation: UserOperation) => {
                     toastify("info", <p>Operation undone: <strong>{userOperation.operation}</strong> - <strong>{userOperation.candidate.sourceColumn}</strong> - <strong>{userOperation.candidate.targetColumn}</strong></p>);
-                    onCandidateSelect(userOperation.candidate);
+                    if (userOperation.operation === "accept" || userOperation.operation === "reject") {
+                        onCandidateSelect(userOperation.candidate);
+                    } else {
+                        onCandidateSelect(undefined);
+                    }
                 },
                 cachedResultsCallback: (candidates: Candidate[]) => {
                     onCandidateUpdate(candidates);
@@ -208,7 +212,11 @@ export const {
             redoUserOperation({
                 userOperationCallback: (userOperation: UserOperation) => {
                     toastify("info", <p>Operation redone: <strong>{userOperation.operation}</strong> - <strong>{userOperation.candidate.sourceColumn}</strong> - <strong>{userOperation.candidate.targetColumn}</strong></p>);
-                    onCandidateSelect(userOperation.candidate);
+                    if (userOperation.operation === "accept" || userOperation.operation === "reject") {
+                        onCandidateSelect(userOperation.candidate);
+                    } else {
+                        onCandidateSelect(undefined);
+                    }
                 },
                 cachedResultsCallback: (candidates: Candidate[]) => {
                     onCandidateUpdate(candidates);
