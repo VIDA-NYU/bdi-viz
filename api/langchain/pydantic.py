@@ -142,14 +142,17 @@ class AttributeProperties(BaseModel):
 - other: other types"""
     )
     description: str = Field(description="The description of the column")
-    enum: Optional[List[Union[str, int, float, bool]]] = Field(
-        default=None, description="The enum values of the column, if applicable"
+    enum: Optional[List[Union[str, int, float, bool, None]]] = Field(
+        default=None,
+        description="The enum values of the column, if applicable. DO NOT INCLUDE NULL VALUES.",
     )
-    maximum: Optional[Union[float, int]] = Field(
-        default=None, description="The maximum value of the column, if applicable"
+    maximum: Optional[Union[float, int, None]] = Field(
+        default=None,
+        description="The maximum value of the column, if applicable. DO NOT SET TO NULL VALUES.",
     )
-    minimum: Optional[Union[float, int]] = Field(
-        default=None, description="The minimum value of the column, if applicable"
+    minimum: Optional[Union[float, int, None]] = Field(
+        default=None,
+        description="The minimum value of the column, if applicable. DO NOT SET TO NULL VALUES.",
     )
 
 
