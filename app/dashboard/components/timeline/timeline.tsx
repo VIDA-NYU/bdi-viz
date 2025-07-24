@@ -3,9 +3,10 @@
 import * as d3 from 'd3';
 import { useEffect, useRef } from "react";
 import { useTimeline } from "./useTimeline";
-import { Box, useTheme } from '@mui/material';
+import { Box, useTheme, Button } from '@mui/material';
 import { SectionHeader } from '../../layout/components';
 import { TimelineNode } from './types';
+import ExportHistoryButton from './export-history-button';
 
 interface TimelineProps {
     userOperations: UserOperation[];
@@ -54,7 +55,7 @@ const getNodeContent = (d: TimelineNode, isExpanded: boolean, theme: any): strin
     let details = '';
     if (operation === 'append' || operation === 'prune') {
         const count = references.length;
-        const source = truncate(candidate?.sourceColumn || '', isExpanded ? 30 : 10);
+        const source = truncate(candidate?.sourceColumn || '', isExpanded ? 30 : 15);
         const sourceChip = `<span style="${chipStyle(theme.palette.primary.main, theme.palette.primary.contrastText, theme)}">${source}</span>`;
         title = `<span style='font-weight:600;font-size:0.7rem;'>${operation}: ${sourceChip}</span>`;
         if (count > 0) {
@@ -72,8 +73,8 @@ const getNodeContent = (d: TimelineNode, isExpanded: boolean, theme: any): strin
             `;
         }
     } else if (candidate) {
-        const source = truncate(candidate.sourceColumn, isExpanded ? 30 : 10);
-        const target = truncate(candidate.targetColumn, isExpanded ? 30 : 10);
+        const source = truncate(candidate.sourceColumn, isExpanded ? 30 : 15);
+        const target = truncate(candidate.targetColumn, isExpanded ? 30 : 15);
         const sourceChip = `<span style="${chipStyle(theme.palette.primary.main, theme.palette.primary.contrastText, theme)}">${source}</span>`;
         const targetChip = `<span style="${chipStyle(theme.palette.secondary.main, theme.palette.primary.contrastText, theme)}">${target}</span>`;
         title = `<span style='font-weight:600;font-size:0.7rem;'>${operation}:</span> ${sourceChip} <span style="font-size:1.1em;vertical-align:middle;">→</span> ${targetChip}`;
@@ -83,9 +84,11 @@ const getNodeContent = (d: TimelineNode, isExpanded: boolean, theme: any): strin
                 <div class="timeline-details" style="
                     color:${theme.palette.text.secondary};
                     font-size:0.6rem;
+                    margin-top:5px;
                     line-height:1.2;
                 ">
-                    <span style='font-weight:500;'>Score:</span> ${candidate.score?.toFixed(2)}${isExpanded ? `<br/><span style='font-weight:500;'>Matcher:</span> ${candidate.matcher}` : ''}
+                    <span style='font-weight:500;'>Score:</span> ${candidate.score?.toFixed(2)}
+                    ${isExpanded && candidate.matchers ? `<br/><span style='font-weight:500;'>Matchers:</span> ${candidate.matchers.join(', ')}` : ''}
                 </div>
             `;
         } else {
@@ -123,9 +126,11 @@ const Timeline = ({ userOperations }: TimelineProps) => {
         if (nodes.length === 0) return;
 
         const width = 290;
-        const startNodeY = 50;
+        const textWidth = 240;
+        const paddingLeft = 20;
+        const paddingTop = 20;
         const nodeDistance = 60;
-        const height = (nodes.length + 1) * nodeDistance + startNodeY; // Adjust height for the start node
+        const height = (nodes.length + 1) * nodeDistance + paddingTop; // Adjust height for the start node
 
         svg.attr("width", width).attr("height", height);
 
@@ -135,17 +140,17 @@ const Timeline = ({ userOperations }: TimelineProps) => {
             .enter()
             .append("line")
             .attr("class", "link")
-            .attr("x1", 50)
-            .attr("y1", (d, i) => i * nodeDistance + startNodeY)
-            .attr("x2", 50)
-            .attr("y2", (d, i) => (i + 1) * nodeDistance + startNodeY)
+            .attr("x1", paddingLeft)
+            .attr("y1", (d, i) => i * nodeDistance + paddingTop)
+            .attr("x2", paddingLeft)
+            .attr("y2", (d, i) => (i + 1) * nodeDistance + paddingTop)
             .attr("stroke", theme.palette.divider)
             .attr("stroke-width", 2);
         
         const startNodeGroup = svg
             .append("g")
             .attr("class", "start-node")
-            .attr("transform", `translate(50, ${startNodeY})`);
+            .attr("transform", `translate(${paddingLeft}, ${paddingTop})`);
 
         startNodeGroup
             .append("circle")
@@ -158,7 +163,7 @@ const Timeline = ({ userOperations }: TimelineProps) => {
             .enter()
             .append("g")
             .attr("class", "node")
-            .attr("transform", (d, i) => `translate(50, ${(i + 1) * nodeDistance + startNodeY})`);
+            .attr("transform", (d, i) => `translate(${paddingLeft}, ${(i + 1) * nodeDistance + paddingTop})`);
 
         nodeGroup
             .append("circle")
@@ -182,9 +187,9 @@ const Timeline = ({ userOperations }: TimelineProps) => {
 
         const foreignObject = nodeGroup
             .append("foreignObject")
-            .attr("x", 20)
+            .attr("x", paddingLeft)
             .attr("y", -25)
-            .attr("width", 220)
+            .attr("width", textWidth)
             .attr("height", 50);
         
         const div = foreignObject
@@ -201,8 +206,8 @@ const Timeline = ({ userOperations }: TimelineProps) => {
             .style("overflow", "hidden")
             .style("text-overflow", "ellipsis")
             .style("transition", "all 0.2s cubic-bezier(.4,2,.6,1)")
-            .style("max-width", "220px")
-            .style("width", "220px")
+            .style("max-width", textWidth)
+            .style("width", textWidth)
             .html(d => getNodeContent(d, false, theme));
 
         nodeGroup
@@ -211,7 +216,7 @@ const Timeline = ({ userOperations }: TimelineProps) => {
                 const fo = d3.select(this).select("foreignObject");
                 if (parseInt(fo.attr("height")) === 60) {
                     fo.transition()
-                        .attr("width", 220)
+                        .attr("width", textWidth)
                         .attr("height", 50)
                         .attr("y", -25);
                     fo.select("div")
@@ -222,7 +227,7 @@ const Timeline = ({ userOperations }: TimelineProps) => {
                         .html(getNodeContent(d, false, theme));
                 } else {
                     fo.transition()
-                        .attr("width", 220)
+                        .attr("width", textWidth)
                         .attr("height", 60)
                         .attr("y", -30);
                     fo.select("div")
@@ -236,9 +241,22 @@ const Timeline = ({ userOperations }: TimelineProps) => {
 
     }, [nodes, theme]);
 
+    const handleExportHistory = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(userOperations, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "timeline_history.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    };
+
     return (
         <Box sx={{ maxHeight: '400px' }}>
             <SectionHeader>Timeline</SectionHeader>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <ExportHistoryButton onClick={handleExportHistory} />
+            </Box>
             <Box sx={{ 
                 maxHeight: '380px', 
                 overflowY: 'auto', 
