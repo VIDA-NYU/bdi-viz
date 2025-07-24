@@ -2,7 +2,7 @@
 export interface TimelineNode {
     timelineId: number;
     operation: 'accept' | 'reject' | 'discard' | 'append' | 'prune';
-    candidate: Candidate | null;
+    candidate: AggregatedCandidate | null;
     references: Candidate[];
 }
 
