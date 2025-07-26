@@ -68,7 +68,7 @@ declare type UserOperationType = 'accept' | 'reject' | 'discard' | 'append' | 'p
 
 declare interface UserOperation {
     operation: UserOperationType | string;
-    candidate: Candidate; // the candidate to operate on
+    candidate: AggregatedCandidate | Candidate; // the candidate to operate on
     references: Candidate[]; // the references to the candidate
 }
 

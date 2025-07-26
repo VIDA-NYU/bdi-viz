@@ -19,7 +19,7 @@ export const useTimeline = ({ userOperations }: useTimelineProps): useTimelineSt
             nodes.push({
                 timelineId: index,
                 operation: operation.operation as 'accept' | 'reject' | 'discard' | 'append' | 'prune',
-                candidate: operation.candidate,
+                candidate: operation.candidate as AggregatedCandidate,
                 references: operation.references || [],
             });
         });
