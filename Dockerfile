@@ -1,7 +1,8 @@
 # --- Base image for building ---
 # ARG platform=linux/amd64
 
-FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.9-nodejs20 as builder
+# FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.9-nodejs20 as builder
+FROM nikolaik/python-nodejs:python3.9-nodejs20 as builder
 
 WORKDIR /home/bdi-viz-react/
 
@@ -24,7 +25,8 @@ RUN npm run build && \
     pip3 install -r requirements.txt --break-system-packages
 
 # --- Final image ---
-FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.9-nodejs20
+# FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.9-nodejs20
+FROM nikolaik/python-nodejs:python3.9-nodejs20
 
 WORKDIR /home/bdi-viz-react/
 
@@ -69,14 +71,16 @@ COPY --chown=yfw215:yfw215 .cache/huggingface /home/yfw215/.cache/huggingface
 
 USER yfw215
 
+# LLM_PROVIDER: portkey, openai
+# DOCKER_ENV: local, hsrn
 ENV NODE_ENV=production \
     PATH="${PATH}:/home/yfw215/.local/bin" \
     PYTHONPATH="${PYTHONPATH}:/home/yfw215/.local/bin" \
     HF_HOME="/home/yfw215/.cache/huggingface" \
     PORT=3000 \
     HOSTNAME="0.0.0.0" \
-    LLM_PROVIDER=openai \
-    DOCKER_ENV=hsrn
+    LLM_PROVIDER=portkey \
+    DOCKER_ENV=local
 
 EXPOSE 3000
 

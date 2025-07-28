@@ -58,7 +58,7 @@ Video demo:
 <!-- [BDIViz Demo](https://drive.google.com/file/d/1eAbDicO0oXIbbVg56m3H8xdNDDsBGBLI/view?usp=drive_link) -->
 
 Live Demo:
-https://bdiviz-dev.users.hsrn.nyu.edu/dashboard/
+https://bdiviz.users.hsrn.nyu.edu/dashboard/
 
 
 <!-- ## :gear: Sequence Diagram
