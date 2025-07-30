@@ -119,9 +119,8 @@ class MatchingTask:
         }
         self._save_task_state()
 
-    def _load_cached_matchers_async(self) -> None:
+    def _load_cached_matchers_async(self, cached_json: Dict[str, Any]) -> None:
         """Start an asynchronous process to load cached matchers"""
-        cached_json = self._import_cache_from_json()
         # Always start with default matcher objects
         self.matcher_objs = {
             "magneto_ft": BDIKitMatcher("magneto_ft"),
@@ -297,9 +296,6 @@ class MatchingTask:
             if self.source_df is None or self.target_df is None:
                 raise ValueError("Source and Target dataframes must be provided.")
 
-            # Initialize task state and clear logs for new task
-            # self._initialize_task_state()
-            # self.task_state["logs"] = []  # Clear logs for new task
             self._update_task_state(
                 status="running",
                 progress=20,
@@ -319,7 +315,7 @@ class MatchingTask:
             cached_json = self._import_cache_from_json()
             # Load cached matchers if they exist
             if cached_json and "matchers" in cached_json and cached_json["matchers"]:
-                self._load_cached_matchers_async()
+                self._load_cached_matchers_async(cached_json)
 
             candidates = []
 
@@ -489,6 +485,14 @@ class MatchingTask:
             except Exception as e:
                 logger.error(f"Failed to append candidate from agent: {e}")
                 continue
+
+    def prune_candidates_from_agent(
+        self, source_col: str, candidates: List[Dict[str, Any]]
+    ) -> None:
+        for candidate in candidates:
+            if candidate["sourceColumn"] != source_col:
+                continue
+            self.prune_cached_candidate(candidate)
 
     def _load_cached_matchers(
         self,
@@ -957,18 +961,55 @@ class MatchingTask:
 
     def _import_cache_from_json(self) -> Optional[Dict]:
         """Import cache from JSON file with file locking to ensure atomic operations"""
+        import time
+
         output_path = os.path.join(
             os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
         )
-        if os.path.exists(output_path):
+        max_retries = 100
+        retry_delay = 0.05  # 50ms
+        retries = 0
+
+        while os.path.exists(output_path) and retries < max_retries:
             with open(output_path, "r") as f:
-                # Acquire shared lock
-                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
                 try:
-                    return json.load(f)
-                finally:
-                    # Release lock
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    try:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        logger.debug("Cache file is locked for writing, retrying...")
+                        time.sleep(retry_delay)
+                        retries += 1
+                        continue
+
+                    f.seek(0, os.SEEK_END)
+                    if f.tell() == 0:
+                        logger.debug("Cache file is empty, retrying...")
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                        time.sleep(retry_delay)
+                        retries += 1
+                        continue
+
+                    f.seek(0)
+                    try:
+                        data = json.load(f)
+                    except json.JSONDecodeError:
+                        logger.debug("Cache file is partially written, retrying...")
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                        time.sleep(retry_delay)
+                        retries += 1
+                        continue
+                    finally:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    return data
+                except Exception as e:
+                    logger.error(f"Error reading cache file: {e}")
+                    try:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    except Exception:
+                        pass
+                    return None
+        if retries >= max_retries:
+            logger.error("Max retries reached while reading cache file.")
         return None
 
     def sync_cache(self) -> None:
@@ -1076,7 +1117,7 @@ class MatchingTask:
         elif operation == "append":
             self.append_candidates_from_agent(candidate["sourceColumn"], references)
         elif operation == "prune":
-            pass
+            self.prune_candidates_from_agent(candidate["sourceColumn"], references)
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1098,6 +1139,9 @@ class MatchingTask:
         elif operation == "append":
             for candidate in references:
                 self.prune_cached_candidate(candidate)
+        elif operation == "prune":
+            for candidate in references:
+                self.append_cached_candidate(candidate)
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1118,6 +1162,9 @@ class MatchingTask:
         elif operation == "append":
             for candidate in references:
                 self.append_cached_candidate(candidate)
+        elif operation == "prune":
+            for candidate in references:
+                self.prune_cached_candidate(candidate)
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
