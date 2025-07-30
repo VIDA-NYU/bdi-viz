@@ -305,9 +305,19 @@ class MemoryRetriever:
             ]
         }
         """
-        id = f"target-schema-{property['column_name']}"
+        col = property["column_name"]
+        aliases = set()
+        if "_" in col:
+            aliases.add(col.replace("_", " "))
+            aliases.add(col.replace("_", "").lower())
+            aliases.add(col.replace("_", " ").title())
+        aliases.add(col.lower())
+        aliases.add(col.title())
+
+        id = f"target-schema-{col}"
         page_content = f"""
-Column name: {property['column_name']}
+Column name: {col}
+Aliases: {', '.join(aliases)}
 Category: {property['category']}
 Node: {property['node']}
 Type: {property['type']}
@@ -321,7 +331,7 @@ Description: {property['description']}
             page_content += f"\nMinimum: {property['minimum']}"
 
         metadata = {
-            "column_name": property["column_name"],
+            "column_name": col,
             "category": property["category"],
             "node": property["node"],
             "type": property["type"],
