@@ -17,6 +17,8 @@ class CandidateTools:
             name="update_candidates",
             description="""
             Update the candidate matches for a specific biomedical attribute.
+            If the user ask for keeping some candidates and remove the others,
+            this tool will help to update the candidates.
             Args:
                 source_attribute (str): The biomedical attribute to analyze.
                 candidates (List[Dict[str, Any]]): New candidates to set.
@@ -26,13 +28,15 @@ class CandidateTools:
         )
 
         self.prune_candidates_tool = StructuredTool.from_function(
-            func=self.source_candidates_delete,
+            func=self.source_candidates_prune,
             name="prune_candidates",
             description="""
             Prune specific candidates from a source attribute.
+            If the user ask for candidates to remove,
+            this tool will help to prune the candidates.
             Args:
                 source_attribute (str): The source biomedical attribute.
-                target_attributes (List[str]): Target attributes to remove.
+                candidates (List[Dict[str, Any]]): Candidates to remove.
             Returns:
                 bool: Success status of the operation.
             """.strip(),
@@ -43,6 +47,8 @@ class CandidateTools:
             name="append_candidates",
             description="""
             Add suggested mappings from other tools and agents for a biomedical attribute.
+            If the user ask for candidates to add,
+            this tool will help to append the candidates.
             Args:
                 source_attribute (str): The biomedical attribute to analyze.
                 candidates (List[Dict[str, Any]]): New candidates to set.
@@ -179,37 +185,42 @@ class CandidateTools:
             logger.error(f"Failed to update candidates: {str(e)}")
             return False
 
-    def source_candidates_delete(
-        self, source_attribute: str, target_attributes: List[str]
+    def source_candidates_prune(
+        self, source_attribute: str, candidates: List[Dict[str, Any]]
     ) -> bool:
         """
         Delete specific candidates from a source attribute.
 
         Args:
             source_attribute (str): The source biomedical attribute.
-            target_attributes (List[str]): Target attributes to remove.
+            candidates (List[Dict[str, Any]]): Candidates to remove.
         Returns:
             bool: Success status of the operation.
         """
         logger.info(
-            f"🧰Tool called: prune_candidates for {source_attribute} removing {len(target_attributes)} targets"
+            f"🧰Tool called: prune_candidates for {source_attribute} removing {len(candidates)} targets"
         )
         try:
-            new_candidates = []
-            cached_candidates = self.matching_task.get_cached_candidates()
-
-            for candidate in cached_candidates:
-                # Skip if this is a candidate we want to delete
-                if (
-                    candidate["sourceColumn"] == source_attribute
-                    and candidate["targetColumn"] in target_attributes
-                ):
-                    continue
-                new_candidates.append(candidate)
-
-            self.matching_task.set_cached_candidates(new_candidates)
+            self.matching_task.apply_operation(
+                "prune",
+                {
+                    "sourceColumn": source_attribute,
+                    "targetColumn": None,
+                    "status": "idle",
+                },
+                [
+                    {
+                        "sourceColumn": candidate["sourceColumn"],
+                        "targetColumn": candidate["targetColumn"],
+                        "score": candidate["score"],
+                        "matcher": "agent",
+                        "status": "idle",
+                    }
+                    for candidate in candidates
+                ],
+            )
             logger.info(
-                f"🧰Tool result: deleted {len(target_attributes)} candidates "
+                f"🧰Tool result: deleted {len(candidates)} candidates "
                 f"from source attribute: {source_attribute}"
             )
             return True
