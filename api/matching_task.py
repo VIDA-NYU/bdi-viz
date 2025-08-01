@@ -962,7 +962,6 @@ class MatchingTask:
     def _import_cache_from_json(self) -> Optional[Dict]:
         """Import cache from JSON file with file locking to ensure atomic operations"""
         import time
-
         output_path = os.path.join(
             os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
         )
