@@ -30,11 +30,15 @@
     "material-react-table": "^3.1.0",
     "next": "^14.2.21",
     "pnpm": "^9.15.0",
+    "postcss": "^8",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-dropzone": "^14.3.5",
     "react-toastify": "^10.0.6",
     "recharts": "^2.15.1",
+    "tailwindcss": "^3.4.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5",
     "uuid": "^11.1.0"
   },
   "packageManager": "pnpm@9.14.4+sha512.c8180b3fbe4e4bca02c94234717896b5529740a6cbadf19fa78254270403ea2f27d4e1d46a08a0f56c89b63dc8ebfd3ee53326da720273794e6200fcf0d184ab",
@@ -48,18 +52,14 @@
     "@testing-library/react": "^16.3.0",
     "@types/d3": "^7.4.3",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20",
-    "@types/react": "^18",
+    "@types/node": "^20.19.9",
+    "@types/react": "^18.3.23",
     "@types/react-dom": "^18",
     "babel-jest": "^30.0.4",
     "eslint": "^8",
     "eslint-config-next": "15.0.3",
     "jest": "^30.0.4",
     "jest-environment-jsdom": "^30.0.4",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "ts-jest": "^29.4.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5"
+    "ts-jest": "^29.4.0"
   }
 }

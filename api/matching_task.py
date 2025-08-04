@@ -1,3 +1,4 @@
+import time
 import concurrent.futures
 import fcntl
 import hashlib
@@ -961,14 +962,15 @@ class MatchingTask:
 
     def _import_cache_from_json(self) -> Optional[Dict]:
         """Import cache from JSON file with file locking to ensure atomic operations"""
-        import time
 
         output_path = os.path.join(
             os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
         )
-        max_retries = 100
-        retry_delay = 0.05  # 50ms
+        max_retries = 7  # Exponential backoff: total wait ~6.35s if all retries used
+        initial_delay = 0.05  # 50ms
+        max_delay = 1.0  # 1 second
         retries = 0
+        delay = initial_delay
 
         while os.path.exists(output_path) and retries < max_retries:
             with open(output_path, "r") as f:
@@ -977,7 +979,7 @@ class MatchingTask:
                         fcntl.flock(f.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
                     except BlockingIOError:
                         logger.debug("Cache file is locked for writing, retrying...")
-                        time.sleep(retry_delay)
+                        time.sleep(delay)
                         retries += 1
                         continue
 
@@ -985,7 +987,7 @@ class MatchingTask:
                     if f.tell() == 0:
                         logger.debug("Cache file is empty, retrying...")
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                        time.sleep(retry_delay)
+                        time.sleep(delay)
                         retries += 1
                         continue
 
@@ -995,7 +997,7 @@ class MatchingTask:
                     except json.JSONDecodeError:
                         logger.debug("Cache file is partially written, retrying...")
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                        time.sleep(retry_delay)
+                        time.sleep(delay)
                         retries += 1
                         continue
                     finally:
@@ -1008,6 +1010,10 @@ class MatchingTask:
                     except Exception:
                         pass
                     return None
+                finally:
+                    delay = min(delay * 2, max_delay)  # Exponential backoff
+                    retries += 1
+
         if retries >= max_retries:
             logger.error("Max retries reached while reading cache file.")
         return None
