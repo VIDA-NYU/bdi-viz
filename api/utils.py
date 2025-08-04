@@ -286,14 +286,18 @@ def load_ontology(dataset: str = "target", columns: List[str] = None) -> List[Di
 
 
 def load_property(target_column: str) -> Optional[Dict[str, Any]]:
-    with open(".target.json", "r") as f:
-        ontology_flat = json.load(f)
+    try:
+        with open(".target.json", "r") as f:
+            ontology_flat = json.load(f)
 
-    property = None
-    if target_column in ontology_flat:
-        property = ontology_flat[target_column]
+        property = None
+        if target_column in ontology_flat:
+            property = ontology_flat[target_column]
 
-    return property
+        return property
+    except Exception as e:
+        logger.error(f"Error loading property: {e}")
+        return None
 
 
 # Verify and return the new matcher from its code, the code should be a class

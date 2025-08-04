@@ -566,14 +566,17 @@ Explanations: {formatted_explanations}
         return [doc.page_content for doc in results] if results else None
 
     def search_matches(self, query: str, limit: int = 10) -> Optional[List[str]]:
-        logger.info(f"🧰Tool called: search_matches with query='{query}', limit={limit}")
+        logger.info(
+            f"🧰Tool called: search_matches with query='{query}', limit={limit}"
+        )
         results = self._search_vector_store(query, limit, namespace="matches")
         logger.info(f"🧰Tool result: search_matches returned {len(results)} results")
         return [doc.page_content for doc in results] if results else None
 
     def search_explanations(self, query: str, limit: int = 10) -> Optional[List[str]]:
         logger.info(
-            f"🧰Tool called: search_explanations with query='{query}', " f"limit={limit}"
+            f"🧰Tool called: search_explanations with query='{query}', "
+            f"limit={limit}"
         )
         results = self._search_vector_store(query, limit, namespace="explanations")
         logger.info(
