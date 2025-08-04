@@ -42,6 +42,7 @@ class Agent:
         self,
         memory_retriever: MemoryRetriever,
         llm_model: Optional[BaseChatModel] = None,
+        retries: int = 3,
     ) -> None:
         # OR claude-3-5-sonnet-20240620
         # self.llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
@@ -71,6 +72,8 @@ class Agent:
     4. Approach the task with the mindset of a biomedical expert.
             """,
         ]
+
+        self.retries = retries
 
     @property
     def llm(self):
@@ -361,27 +364,13 @@ Important:
 - For "enum" types, include all observed values plus likely additional values
 - Return ONLY a valid JSON object following the Ontology schema with no additional text
 """
-            output_parser = PydanticOutputParser(pydantic_object=Ontology)
-            prompt_full = self.generate_prompt(prompt, output_parser)
-            agent_executor = create_react_agent(self.llm, tools=[])
-            responses = []
-            for chunk in agent_executor.stream(
-                {
-                    "messages": [
-                        SystemMessage(
-                            content="You are a helpful assistant that generates ontology for a column."
-                        ),
-                        HumanMessage(content=prompt_full),
-                    ]
-                },
-                {"configurable": {"thread_id": "bdiviz-1"}},
-            ):
-                responses.append(chunk)
-            # Get the final response for this batch
-            final_response = responses[-1]["agent"]["messages"][0].content
-            ontology = output_parser.parse(final_response)
+            response = self.invoke(
+                prompt=prompt,
+                tools=[],
+                output_structure=Ontology,
+            )
 
-            yield (column_slice, ontology)
+            yield (column_slice, response)
 
     def remember_fp(self, candidate: Dict[str, Any]) -> None:
         logger.info(f"🧠Memory: Remembering the false positive...")
@@ -412,30 +401,39 @@ Important:
         self, prompt: str, tools: List, output_structure: BaseModel
     ) -> BaseModel:
         output_parser = PydanticOutputParser(pydantic_object=output_structure)
-
         prompt = self.generate_prompt(prompt, output_parser)
-        agent_executor = create_react_agent(
-            self.llm, tools, store=self.store
-        )  # checkpointer=self.memory
+        agent_executor = create_react_agent(self.llm, tools, store=self.store)
 
-        responses = []
-        for chunk in agent_executor.stream(
-            {
-                "messages": [
-                    SystemMessage(content=self.system_messages[0]),
-                    HumanMessage(content=prompt),
-                ]
-            },
-            self.agent_config,
-        ):
-            logger.info(chunk)
-            logger.info("----")
-            responses.append(chunk)
+        last_exception = None
+        for attempt in range(self.retries):
+            responses = []
+            for chunk in agent_executor.stream(
+                {
+                    "messages": [
+                        SystemMessage(content=self.system_messages[0]),
+                        HumanMessage(content=prompt),
+                    ]
+                },
+                self.agent_config,
+            ):
+                logger.info(chunk)
+                logger.info("----")
+                responses.append(chunk)
 
-        final_response = responses[-1]["agent"]["messages"][0].content
-        response = output_parser.parse(final_response)
-
-        return response
+            final_response = responses[-1]["agent"]["messages"][0].content
+            try:
+                response = output_parser.parse(final_response)
+                return response
+            except Exception as e:
+                logger.critical(
+                    f"[AGENT] Error parsing response (attempt {attempt+1}/{self.retries}): {e}, retrying..."
+                )
+                last_exception = e
+                continue
+        # If all retries fail, raise the last error
+        raise RuntimeError(
+            f"Failed to parse agent response after {self.retries} attempts. Last error: {last_exception}"
+        )
 
     def invoke_system(self, prompt: str) -> Generator[AIMessage, None, None]:
         agent_executor = create_react_agent(self.llm, store=self.store)
