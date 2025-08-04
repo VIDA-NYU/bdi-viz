@@ -1402,10 +1402,10 @@ class MatchingTask:
                 )
 
                 # Update weight updater if needed
-                self.cached_candidates[
-                    "matchers"
-                ] = self.weight_updater.update_matchers(
-                    self.cached_candidates["matchers"]
+                self.cached_candidates["matchers"] = (
+                    self.weight_updater.update_matchers(
+                        self.cached_candidates["matchers"]
+                    )
                 )
                 self._update_task_state(
                     progress=95,
@@ -1582,7 +1582,7 @@ class UserOperation:
         return {
             "operation": self.operation,
             "candidate": self.candidate,
-            "references": self.references
-            if self.operation in ["append", "prune"]
-            else [],
+            "references": (
+                self.references if self.operation in ["append", "prune"] else []
+            ),
         }

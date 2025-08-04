@@ -1,5 +1,7 @@
 <h1 align="center">BDIViz: An Interactive Visualization System for Biomedical Schema Matching with LLM-Supported Validation</h2>
 
+[![HitCount](https://hits.dwyl.com/VIDA-NYU/bdi-viz.svg?style=flat-square)](http://hits.dwyl.com/VIDA-NYU/bdi-viz)
+
 <div align="center">
   <a href="https://vida-nyu.github.io/bdi-viz-manual/">
     <img src="https://img.shields.io/badge/User%20Manual-Read%20the%20Docs-blue?style=for-the-badge&logo=read-the-docs" alt="User Manual" />
@@ -58,7 +60,7 @@ Video demo:
 <!-- [BDIViz Demo](https://drive.google.com/file/d/1eAbDicO0oXIbbVg56m3H8xdNDDsBGBLI/view?usp=drive_link) -->
 
 Live Demo:
-https://bdiviz-dev.users.hsrn.nyu.edu/dashboard/
+https://bdiviz.users.hsrn.nyu.edu/dashboard/
 
 
 <!-- ## :gear: Sequence Diagram
