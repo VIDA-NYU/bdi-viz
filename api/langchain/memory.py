@@ -111,6 +111,8 @@ class MemoryRetriever:
         "schema",
         "mismatches",
         "matches",
+        "false_positives",  # If the agent think it is a match, but user think it is not
+        "false_negatives",  # If the agent think it is not a match, but user think it is
         "explanations",
         "user_memory",
     ]
@@ -122,7 +124,17 @@ class MemoryRetriever:
             model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": True},
         )
-        self.user_memory_count = 0
+
+        self.namespace_counts = {
+            "candidates": 0,
+            "schema": 0,
+            "mismatches": 0,
+            "matches": 0,
+            "false_positives": 0,
+            "false_negatives": 0,
+            "explanations": 0,
+            "user_memory": 0,
+        }
 
         # Initialize text splitter for user memory
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -179,28 +191,6 @@ class MemoryRetriever:
                 },
             )
 
-        # Retain a reference named `collection` for backward compatibility, but
-        # default it to the `candidates` namespace.
-        self.collection = self.collections.get("candidates")
-
-        self.query_candidates_tool = StructuredTool.from_function(
-            func=self.query_candidates,
-            name="query_candidates",
-            description="""
-        Query the candidates from agent memory retriver.
-        Args:
-            keywords (List[str]): The keywords to search.
-            source_column (Optional[str], optional): The source column name.
-                Defaults to None.
-            target_column (Optional[str], optional): The target column name.
-                Defaults to None.
-            limit (int, optional): The number of candidates to return.
-                Defaults to 20.
-        Returns:
-            List[Dict[str, Any]]: The list of candidates.
-        """.strip(),
-        )
-
         self.search_ontology_tool = StructuredTool.from_function(
             func=self.search_target_schema,
             name="search_ontology",
@@ -223,7 +213,9 @@ class MemoryRetriever:
             Args:
                 content (str): The information to be remembered. The user will
                 provide this.
-            """,
+            Returns:
+                str: The number of chunks that have been added to the memory.
+            """.strip(),
         )
 
         self.recall_memory_tool = StructuredTool.from_function(
@@ -235,8 +227,73 @@ class MemoryRetriever:
                 query (str): The query to search for in the stored memories.
             Returns:
                 Optional[List[str]]: The list of memories if found, None otherwise.
-            """,
+            """.strip(),
         )
+
+        self.search_false_negatives_tool = StructuredTool.from_function(
+            func=self.search_false_negatives,
+            name="search_false_negatives",
+            description="""
+            Search for false negatives matches in the memory.
+            This means the agent thinks it is not a match, but the user thinks it is a match.
+            Args:
+                query (str): The query to search for in the stored memories.
+                limit (int): The number of memories to return.
+            Returns:
+                Optional[List[str]]: The list of source-target pairs if found, None otherwise.
+            """.strip(),
+        )
+
+        self.search_false_positives_tool = StructuredTool.from_function(
+            func=self.search_false_positives,
+            name="search_false_positives",
+            description="""
+            Search for false positives matches in the memory.
+            This means the agent thinks it is a match, but the user thinks it is not a match.
+            Args:
+                query (str): The query to search for in the stored memories.
+                limit (int): The number of memories to return.
+            Returns:
+                Optional[List[str]]: The list of source-target pairs if found, None otherwise.
+            """.strip(),
+        )
+
+        self.search_mismatches_tool = StructuredTool.from_function(
+            func=self.search_mismatches,
+            name="search_mismatches",
+            description="""
+            Search for mismatches in the memory.
+            Args:
+                query (str): The query to search for in the stored memories.
+                limit (int): The number of memories to return.
+            Returns:
+                Optional[List[str]]: The list of source-target pairs if found, None otherwise.
+            """.strip(),
+        )
+
+        self.search_matches_tool = StructuredTool.from_function(
+            func=self.search_matches,
+            name="search_matches",
+            description="""
+            Search for matches in the memory.
+            Args:
+                query (str): The query to search for in the stored memories.
+                limit (int): The number of memories to return.
+            Returns:
+                Optional[List[str]]: The list of source-target pairs if found, None otherwise.
+            """.strip(),
+        )
+
+    def get_validation_tools(self, with_memory: bool):
+        tools = [
+            self.search_false_negatives_tool,
+            self.search_false_positives_tool,
+            self.search_mismatches_tool,
+            self.search_matches_tool,
+        ]
+        if with_memory:
+            tools.append(self.recall_memory_tool)
+        return tools
 
     def clear_namespaces(self, namespaces: List[str]):
         """Clear specific namespaces from the vector store"""
@@ -257,29 +314,9 @@ class MemoryRetriever:
                     f"Error clearing namespace '{namespace}': {e}"  # noqa: E501
                 )
 
-        # Reset user memory count if user_memory namespace was cleared
-        if "user_memory" in namespaces:
-            self.user_memory_count = 0
-
-    # [candidates]
-    def query_candidates(
-        self,
-        keywords: List[str],
-        source_column: Optional[str] = None,
-        target_column: Optional[str] = None,
-        limit: int = 20,
-    ) -> Optional[List[Dict[str, Any]]]:
-        query = " ".join(keywords)
-
-        # Build filter based on source and target columns
-        filter = {"namespace": "candidates"}
-        if source_column:
-            filter["sourceColumn"] = source_column
-        if target_column:
-            filter["targetColumn"] = target_column
-
-        results = self._search_vector_store(query, limit, filter)
-        return [doc.metadata for doc in results] if results else None
+        # Reset namespace counts if namespaces were cleared
+        for namespace in namespaces:
+            self._reset_namespace_count(namespace)
 
     # puts
     def put_target_schema(self, property: Dict[str, Any]):
@@ -322,7 +359,7 @@ Category: {property['category']}
 Node: {property['node']}
 Type: {property['type']}
 Description: {property['description']}
-        """
+"""
         if "enum" in property and property["enum"] is not None:
             page_content += f"\nEnum: {property['enum']}"
         if "maximum" in property and property["maximum"] is not None:
@@ -355,7 +392,7 @@ Description: {property['description']}
 Source Column: {value['sourceColumn']}
 Target Column: {value['targetColumn']}
 Score: {value['score']}
-        """
+"""
 
         metadata = {
             "sourceColumn": value["sourceColumn"],
@@ -383,7 +420,7 @@ Score: {value['score']}
         page_content = f"""
 Source Column: {value['sourceColumn']}
 Target Column: {value['targetColumn']}
-        """
+"""
 
         metadata = {
             "sourceColumn": value["sourceColumn"],
@@ -410,7 +447,7 @@ Target Column: {value['targetColumn']}
         page_content = f"""
 Source Column: {value['sourceColumn']}
 Target Column: {value['targetColumn']}
-        """
+"""
 
         metadata = {
             "sourceColumn": value["sourceColumn"],
@@ -419,6 +456,46 @@ Target Column: {value['targetColumn']}
         }
 
         self._add_vector_store(key, page_content, metadata, namespace="mismatches")
+
+    def put_false_positive(self, value: Dict[str, Any]) -> None:
+        """
+        Args:
+            value (Dict[str, Any]): The value to store in the memory.
+        """
+        key = f"{value['sourceColumn']}::{value['targetColumn']}"
+
+        page_content = f"""
+Source Column: {value['sourceColumn']}
+Target Column: {value['targetColumn']}
+"""
+
+        metadata = {
+            "sourceColumn": value["sourceColumn"],
+            "targetColumn": value["targetColumn"],
+            "namespace": "false_positives",
+        }
+
+        self._add_vector_store(key, page_content, metadata, namespace="false_positives")
+
+    def put_false_negative(self, value: Dict[str, Any]) -> None:
+        """
+        Args:
+            value (Dict[str, Any]): The value to store in the memory.
+        """
+        key = f"{value['sourceColumn']}::{value['targetColumn']}"
+
+        page_content = f"""
+Source Column: {value['sourceColumn']}
+Target Column: {value['targetColumn']}
+"""
+
+        metadata = {
+            "sourceColumn": value["sourceColumn"],
+            "targetColumn": value["targetColumn"],
+            "namespace": "false_negatives",
+        }
+
+        self._add_vector_store(key, page_content, metadata, namespace="false_negatives")
 
     def put_explanation(
         self, explanations: List[Dict[str, Any]], user_operation: Dict[str, Any]
@@ -481,7 +558,7 @@ Operation: {user_operation['operation']}
 Source Column: {user_operation['candidate']['sourceColumn']}
 Target Column: {user_operation['candidate']['targetColumn']}
 Explanations: {formatted_explanations}
-        """
+"""
 
         metadata = {
             "sourceColumn": user_operation["candidate"]["sourceColumn"],
@@ -491,7 +568,7 @@ Explanations: {formatted_explanations}
 
         # Remove existing document if it exists
         if existing_docs:
-            self.vector_store.delete([existing_docs[0].id])
+            self._delete_vector_store(existing_docs[0].id, namespace="explanations")
 
         self._add_vector_store(key, page_content, metadata, namespace="explanations")
 
@@ -518,15 +595,16 @@ Explanations: {formatted_explanations}
             self._add_vector_store(chunk_key, chunk, metadata, namespace="user_memory")
 
         logger.critical(f"🧰Tool result: put_user_memory with {len(chunks)} chunks")
-        self.user_memory_count += len(chunks)
         return f"I have remembered that in {len(chunks)} chunks."
 
+    # Search
     def search_user_memory(self, query: str, limit: int = 5) -> Optional[List[str]]:
-        if self.user_memory_count == 0:
+        user_memory_count = self.get_namespace_count("user_memory")
+        if user_memory_count == 0:
             logger.critical("🧰Tool result: search_user_memory, memory is empty...")
             return None
-        elif self.user_memory_count < limit:
-            limit = self.user_memory_count
+        elif user_memory_count < limit:
+            limit = user_memory_count
 
         logger.critical(
             f"🧰Tool called: search_user_memory with query='{query}', " f"limit={limit}"
@@ -537,8 +615,13 @@ Explanations: {formatted_explanations}
         )
         return [doc.page_content for doc in results]
 
-    # Search
     def search_target_schema(self, query: str, limit: int = 10) -> Optional[List[str]]:
+        schema_count = self.get_namespace_count("schema")
+        if schema_count == 0:
+            logger.critical("🧰Tool result: search_target_schema, memory is empty...")
+            return None
+        elif schema_count < limit:
+            limit = schema_count
         logger.info(
             f"🧰Tool called: search_target_schema with query='{query}', "
             f"limit={limit}"
@@ -550,6 +633,12 @@ Explanations: {formatted_explanations}
         return [doc.page_content for doc in results] if results else None
 
     def search_candidates(self, query: str, limit: int = 10) -> Optional[List[str]]:
+        candidates_count = self.get_namespace_count("candidates")
+        if candidates_count == 0:
+            logger.critical("🧰Tool result: search_candidates, memory is empty...")
+            return None
+        elif candidates_count < limit:
+            limit = candidates_count
         logger.info(
             f"🧰Tool called: search_candidates with query='{query}', " f"limit={limit}"
         )
@@ -557,7 +646,27 @@ Explanations: {formatted_explanations}
         logger.info(f"🧰Tool result: search_candidates returned {len(results)} results")
         return [doc.page_content for doc in results] if results else None
 
-    def search_mismatches(self, query: str, limit: int = 10) -> Optional[List[str]]:
+    def search_matches(self, query: str, limit: int = 5) -> Optional[List[str]]:
+        matches_count = self.get_namespace_count("matches")
+        if matches_count == 0:
+            logger.critical("🧰Tool result: search_matches, memory is empty...")
+            return None
+        elif matches_count < limit:
+            limit = matches_count
+        logger.info(
+            f"🧰Tool called: search_matches with query='{query}', " f"limit={limit}"
+        )
+        results = self._search_vector_store(query, limit, namespace="matches")
+        logger.info(f"🧰Tool result: search_matches returned {len(results)} results")
+        return [doc.page_content for doc in results] if results else None
+
+    def search_mismatches(self, query: str, limit: int = 5) -> Optional[List[str]]:
+        mismatches_count = self.get_namespace_count("mismatches")
+        if mismatches_count == 0:
+            logger.critical("🧰Tool result: search_mismatches, memory is empty...")
+            return None
+        elif mismatches_count < limit:
+            limit = mismatches_count
         logger.info(
             f"🧰Tool called: search_mismatches with query='{query}', " f"limit={limit}"
         )
@@ -565,15 +674,47 @@ Explanations: {formatted_explanations}
         logger.info(f"🧰Tool result: search_mismatches returned {len(results)} results")
         return [doc.page_content for doc in results] if results else None
 
-    def search_matches(self, query: str, limit: int = 10) -> Optional[List[str]]:
+    def search_false_positives(self, query: str, limit: int = 5) -> Optional[List[str]]:
+        false_positives_count = self.get_namespace_count("false_positives")
+        if false_positives_count == 0:
+            logger.critical("🧰Tool result: search_false_positives, memory is empty...")
+            return None
+        elif false_positives_count < limit:
+            limit = false_positives_count
         logger.info(
-            f"🧰Tool called: search_matches with query='{query}', limit={limit}"
+            f"🧰Tool called: search_false_positives with query='{query}', "
+            f"limit={limit}"
         )
-        results = self._search_vector_store(query, limit, namespace="matches")
-        logger.info(f"🧰Tool result: search_matches returned {len(results)} results")
+        results = self._search_vector_store(query, limit, namespace="false_positives")
+        logger.info(
+            f"🧰Tool result: search_false_positives returned {len(results)} results"
+        )
+        return [doc.page_content for doc in results] if results else None
+
+    def search_false_negatives(self, query: str, limit: int = 5) -> Optional[List[str]]:
+        false_negatives_count = self.get_namespace_count("false_negatives")
+        if false_negatives_count == 0:
+            logger.critical("🧰Tool result: search_false_negatives, memory is empty...")
+            return None
+        elif false_negatives_count < limit:
+            limit = false_negatives_count
+        logger.info(
+            f"🧰Tool called: search_false_negatives with query='{query}', "
+            f"limit={limit}"
+        )
+        results = self._search_vector_store(query, limit, namespace="false_negatives")
+        logger.info(
+            f"🧰Tool result: search_false_negatives returned {len(results)} results"
+        )
         return [doc.page_content for doc in results] if results else None
 
     def search_explanations(self, query: str, limit: int = 10) -> Optional[List[str]]:
+        explanations_count = self.get_namespace_count("explanations")
+        if explanations_count == 0:
+            logger.critical("🧰Tool result: search_explanations, memory is empty...")
+            return None
+        elif explanations_count < limit:
+            limit = explanations_count
         logger.info(
             f"🧰Tool called: search_explanations with query='{query}', "
             f"limit={limit}"
@@ -583,6 +724,23 @@ Explanations: {formatted_explanations}
             f"🧰Tool result: search_explanations returned {len(results)} " "results"
         )
         return [doc.page_content for doc in results] if results else None
+
+    # Delete
+    def delete_match(self, candidate: Dict[str, Any]) -> None:
+        key = f"{candidate['sourceColumn']}::{candidate['targetColumn']}"
+        self._delete_vector_store(key, namespace="matches")
+
+    def delete_mismatch(self, candidate: Dict[str, Any]) -> None:
+        key = f"{candidate['sourceColumn']}::{candidate['targetColumn']}"
+        self._delete_vector_store(key, namespace="mismatches")
+
+    def delete_false_positive(self, candidate: Dict[str, Any]) -> None:
+        key = f"{candidate['sourceColumn']}::{candidate['targetColumn']}"
+        self._delete_vector_store(key, namespace="false_positives")
+
+    def delete_false_negative(self, candidate: Dict[str, Any]) -> None:
+        key = f"{candidate['sourceColumn']}::{candidate['targetColumn']}"
+        self._delete_vector_store(key, namespace="false_negatives")
 
     # Vector store operations
     def _add_vector_store(
@@ -597,7 +755,7 @@ Explanations: {formatted_explanations}
             return
 
         # Embed the text and add to collection
-        collection = self.collections.get(namespace, self.collection)
+        collection = self.collections.get(namespace, self.collections["user_memory"])
 
         embedding = self.embeddings.embed_documents([page_content])[0]
         collection.add(
@@ -606,6 +764,7 @@ Explanations: {formatted_explanations}
             metadatas=[metadata],
             embeddings=[embedding],
         )
+        self._increase_namespace_count(namespace, 1)
 
     def _search_vector_store(
         self,
@@ -622,7 +781,7 @@ Explanations: {formatted_explanations}
         if namespace is None:
             return []
 
-        collection = self.collections.get(namespace, self.collection)
+        collection = self.collections.get(namespace, self.collections["user_memory"])
 
         query_embedding = self.embeddings.embed_query(query)
         results = collection.query(
@@ -638,6 +797,30 @@ Explanations: {formatted_explanations}
             documents.append(Document(page_content=doc, metadata=metadata))
 
         return documents
+
+    def _delete_vector_store(self, id: str, namespace: Optional[str] = None):
+        if namespace is None:
+            logger.warning(f"No namespace provided for {id}")
+            return
+
+        collection = self.collections.get(namespace, self.collections["user_memory"])
+        collection.delete(ids=[id])
+        self._decrease_namespace_count(namespace, 1)
+
+    def get_namespace_count(self, namespace: str):
+        if namespace not in self.namespace_counts:
+            logger.warning(f"Namespace {namespace} not found in namespace_counts")
+            return 0
+        return self.namespace_counts[namespace]
+
+    def _increase_namespace_count(self, namespace: str, count: int):
+        self.namespace_counts[namespace] += count
+
+    def _decrease_namespace_count(self, namespace: str, count: int):
+        self.namespace_counts[namespace] -= count
+
+    def _reset_namespace_count(self, namespace: str):
+        self.namespace_counts[namespace] = 0
 
 
 MEMORY_RETRIEVER = None

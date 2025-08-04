@@ -89,20 +89,8 @@ class Agent:
         self, candidate: Dict[str, Any], with_memory=True
     ) -> CandidateExplanation:
         logger.info(f"[Agent] Explaining the candidate...")
-        # logger.info(f"{diagnose}")
 
-        # # search for related false negative / false positive candidates
-        # related_matches = self.store.search_matches(candidate["sourceColumn"], limit=3)
-        # related_mismatches = self.store.search_mismatches(
-        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        # )
-
-        # # search for related explanations
-        # related_explanations = self.store.search_explanations(
-        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        # )
-
-        if self.store.user_memory_count <= 0:
+        if self.store.get_namespace_count("user_memory") <= 0:
             with_memory = False
 
         target_description = load_property(candidate["targetColumn"])
@@ -131,36 +119,51 @@ class Agent:
     """
 
         instructions_with_memory = """
-    1. Review the operation details and use `recall_memory` to get more context if needed.
-    2. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
-    3. If the values are convertable, provide possible convertion methods in your explanation.
-    4. Conclude if the current candidate is a valid match based on:
-        a. Your explanations,
-        b. Similarity between the attribute names,
-        c. Consistency of the sample values, and descriptions provided,
-        d. The history of false positives and negatives,
-        e. The context from `recall_memory`.
-    5. Include any additional context or keywords that might support or contradict the current mapping.
-    """
+    **Tools you can use:**
+    - `recall_memory`: Recall the history of matches, mismatches, and explanations.
+    - `search_false_negatives`: Search for false negatives in the memory.
+    - `search_false_positives`: Search for false positives in the memory.
+    - `search_mismatches`: Search for mismatches in the memory.
+    - `search_matches`: Search for matches in the memory.
 
-        instructions_without_memory = """
     1. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
     2. If the values are convertable, provide possible convertion methods in your explanation.
     3. Conclude if the current candidate is a valid match based on:
         a. Your explanations,
         b. Similarity between the attribute names,
         c. Consistency of the sample values, and descriptions provided,
-        d. The history of false positives and negatives.
+        d. The history of false positives and negatives,
+        e. The context from `recall_memory`.
+        f. The history of false positives and negatives (where the user and agent disagree), matches and mismatches.
+    4. Include any additional context or keywords that might support or contradict the current mapping.
+    """
+
+        instructions_without_memory = """
+    **Tools you can use:**
+    - `search_false_negatives`: Search for false negatives in the memory.
+    - `search_false_positives`: Search for false positives in the memory.
+    - `search_mismatches`: Search for mismatches in the memory.
+    - `search_matches`: Search for matches in the memory.
+
+    1. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
+    2. If the values are convertable, provide possible convertion methods in your explanation.
+    3. Conclude if the current candidate is a valid match based on:
+        a. Your explanations,
+        b. Similarity between the attribute names,
+        c. Consistency of the sample values, and descriptions provided,
+        d. The history of false positives and negatives (where the user and agent disagree), matches and mismatches.
     4. Include any additional context or keywords that might support or contradict the current mapping.
     """
 
         prompt += (
             instructions_with_memory if with_memory else instructions_without_memory
         )
+
+        tools = self.store.get_validation_tools(with_memory)
         logger.info(f"[EXPLAIN] Prompt: {prompt}")
         response = self.invoke(
             prompt=prompt,
-            tools=[self.store.recall_memory_tool] if with_memory else [],
+            tools=tools,
             output_structure=CandidateExplanation,
         )
         return response
@@ -372,13 +375,65 @@ Important:
 
             yield (column_slice, response)
 
-    def remember_fp(self, candidate: Dict[str, Any]) -> None:
+    def _remember_false_positive(self, candidate: Dict[str, Any]) -> None:
         logger.info(f"🧠Memory: Remembering the false positive...")
+        self.store.put_false_positive(candidate)
+
+    def _remember_false_negative(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Remembering the false negative...")
+        self.store.put_false_negative(candidate)
+
+    def _remember_match(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Remembering the match...")
+        self.store.put_match(candidate)
+
+    def _remember_mismatch(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Remembering the mismatch...")
         self.store.put_mismatch(candidate)
 
-    def remember_fn(self, candidate: Dict[str, Any]) -> None:
-        logger.info(f"🧠Memory: Remembering the false negative...")
-        self.store.put_match(candidate)
+    def _forget_match(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Forgetting the match...")
+        self.store.delete_match(candidate)
+
+    def _forget_mismatch(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Forgetting the mismatch...")
+        self.store.delete_mismatch(candidate)
+
+    def _forget_false_positive(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Forgetting the false positive...")
+        self.store.delete_false_positive(candidate)
+
+    def _forget_false_negative(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Forgetting the false negative...")
+        self.store.delete_false_negative(candidate)
+
+    def handle_user_operation(
+        self, operation: str, candidate: Dict[str, Any], is_match_to_agent: bool
+    ) -> None:
+        if operation == "accept":
+            if is_match_to_agent:
+                self._remember_match(candidate)
+            else:
+                self._remember_false_negative(candidate)
+        elif operation == "reject":
+            if is_match_to_agent:
+                self._remember_false_positive(candidate)
+            else:
+                self._remember_mismatch(candidate)
+
+    def handle_undo_operation(
+        self, operation: str, candidate: Dict[str, Any], is_match_to_agent: bool
+    ) -> None:
+        if operation == "accept":
+            if is_match_to_agent:
+                self._forget_match(candidate)
+            else:
+                self._forget_false_negative(candidate)
+        elif operation == "reject":
+            if is_match_to_agent:
+                self._forget_false_positive(candidate)
+            else:
+                self._forget_mismatch(candidate)
 
     def remember_explanation(
         self, explanations: List[Dict[str, Any]], user_operation: Dict[str, Any]

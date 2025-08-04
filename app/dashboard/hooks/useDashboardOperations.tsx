@@ -9,9 +9,9 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 type DashboardOperationProps = {
     candidates: Candidate[];
     selectedCandidate: Candidate | undefined;
+    isMatch: boolean | undefined;
     selectedExplanations?: Explanation[];
     onCandidateUpdate: (candidates: Candidate[], sourceCluster?: SourceCluster[]) => void;
-    onMatchersUpdate: (matchers: Matcher[]) => void;
     onCandidateSelect: (candidate: Candidate | undefined) => void;
     onExplanation?: (candidate: Candidate, explanation: CandidateExplanation | undefined) => void;
     onUserOperationsUpdate: (userOperations: UserOperation[]) => void;
@@ -38,9 +38,9 @@ export const {
     useDashboardOperations: ({
         candidates,
         selectedCandidate,
+        isMatch,
         selectedExplanations,
         onCandidateUpdate,
-        onMatchersUpdate,
         onCandidateSelect,
         onExplanation,
         onUserOperationsUpdate,
@@ -59,28 +59,13 @@ export const {
             const userOperation: UserOperation = {
                 operation: 'accept',
                 candidate: selectedCandidate,
-                references
+                references,
+                isMatchToAgent: isMatch
             };
 
             onCandidateSelect(undefined);
 
             toastify("success", <p>Match accepted: <strong>{selectedCandidate.sourceColumn}</strong> - <strong>{selectedCandidate.targetColumn}</strong></p>);
-
-
-            // if (selectedExplanations && onSuggestions) {
-            //     const explanationObjects = selectedExplanations.map((explanation) => {
-            //         return {
-            //             type: explanation.type,
-            //             content: explanation.content,
-            //             confidence: explanation.confidence
-            //         } as Explanation;
-            //     });
-
-            //     const suggestions = await agentSuggestionsRequest(userOperation, explanationObjects);
-            //     if (suggestions) {
-            //         onSuggestions(suggestions);
-            //     }
-            // }
             
             applyUserOperation({
                 userOperations: [userOperation],
@@ -94,7 +79,7 @@ export const {
 
             setIsLoadingGlobal(false);
             
-        }, [candidates, selectedCandidate, selectedExplanations, onCandidateUpdate, onCandidateSelect, isLoadingGlobal, setIsLoadingGlobal]);
+        }, [candidates, selectedCandidate, isMatch, selectedExplanations, onCandidateUpdate, onCandidateSelect, isLoadingGlobal, setIsLoadingGlobal]);
 
         const rejectMatch = useCallback(async () => {
             if (!selectedCandidate) return;
@@ -106,27 +91,13 @@ export const {
             const userOperation: UserOperation = {
                 operation: 'reject',
                 candidate: selectedCandidate,
-                references
+                references,
+                isMatchToAgent: isMatch
             };
 
             onCandidateSelect(undefined);
             
             toastify("success", <p>Match rejected: <strong>{selectedCandidate.sourceColumn}</strong> - <strong>{selectedCandidate.targetColumn}</strong></p>);
-
-            // if (selectedExplanations && onSuggestions) {
-            //     const explanationObjects = selectedExplanations.map((explanation) => {
-            //         return {
-            //             type: explanation.type,
-            //             content: explanation.content,
-            //             confidence: explanation.confidence
-            //         } as Explanation;
-            //     });
-
-            //     const suggestions = await agentSuggestionsRequest(userOperation, explanationObjects);
-            //     if (suggestions) {
-            //         onSuggestions(suggestions);
-            //     }
-            // }
 
             applyUserOperation({
                 userOperations: [userOperation],
@@ -140,7 +111,7 @@ export const {
 
             setIsLoadingGlobal(false);
 
-        }, [candidates, selectedCandidate, onCandidateUpdate, onCandidateSelect]);
+        }, [candidates, selectedCandidate, isMatch, onCandidateUpdate, onCandidateSelect]);
 
         const discardColumn = useCallback(async () => {
             if (!selectedCandidate) return;
@@ -155,25 +126,10 @@ export const {
             const userOperation: UserOperation = {
                 operation: 'discard',
                 candidate: selectedCandidate,
-                references
+                references,
             };
 
             toastify("success", <p>Column discarded: <strong>{selectedCandidate.sourceColumn}</strong></p>);
-
-            // if (selectedExplanations && onSuggestions) {
-            //     const explanationObjects = selectedExplanations.map((explanation) => {
-            //         return {
-            //             type: explanation.type,
-            //             content: explanation.content,
-            //             confidence: explanation.confidence
-            //         } as Explanation;
-            //     });
-
-            //     const suggestions = await agentSuggestionsRequest(userOperation, explanationObjects);
-            //     if (suggestions) {
-            //         onSuggestions(suggestions);
-            //     }
-            // }
 
             applyUserOperation({
                 userOperations: [userOperation],

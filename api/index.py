@@ -661,59 +661,6 @@ def agent_explore():
     return response
 
 
-@app.route("/api/agent/suggest", methods=["POST"])
-def agent_suggest():
-    session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
-
-    data = request.json
-
-    explanations = data["explanations"]
-
-    user_operation = data["userOperation"]
-    operation = user_operation["operation"]
-    candidate = user_operation["candidate"]
-    references = user_operation["references"]
-
-    # Extract false positives and false negatives from user operation and agent explanations
-    source_col = candidate["sourceColumn"]
-    target_col = candidate["targetColumn"]
-    cached_explanation = read_candidate_explanation_json(source_col, target_col)
-    if cached_explanation:
-        agent_thinks_is_match = cached_explanation["is_match"]
-        source_values = matching_task.get_source_unique_values(source_col)
-        target_values = matching_task.get_target_unique_values(target_col)
-        agent = get_agent()
-        if agent_thinks_is_match and operation == "reject":
-            agent.remember_fp(
-                {
-                    "sourceColumn": source_col,
-                    "targetColumn": target_col,
-                    "sourceValues": source_values,
-                    "targetValues": target_values,
-                }
-            )
-        elif not agent_thinks_is_match and operation == "accept":
-            agent.remember_fn(
-                {
-                    "sourceColumn": source_col,
-                    "targetColumn": target_col,
-                    "sourceValues": source_values,
-                    "targetValues": target_values,
-                }
-            )
-
-    matching_task.apply_operation(operation, candidate, references)
-
-    # put into memory
-    agent = get_agent()
-    agent.remember_explanation(explanations, user_operation)
-    response = agent.make_suggestion(explanations, user_operation)
-    response = response.model_dump()
-
-    return response
-
-
 @app.route("/api/agent/outer-source", methods=["POST"])
 def agent_related_source():
     session = extract_session_name(request)
@@ -758,13 +705,14 @@ def user_operation():
         operation = operation_obj["operation"]
         candidate = operation_obj["candidate"]
         references = operation_obj["references"]
+        is_match_to_agent = operation_obj["isMatchToAgent"]
 
-        matching_task.apply_operation(operation, candidate, references)
+        matching_task.apply_operation(
+            operation, candidate, references, is_match_to_agent
+        )
 
-        # if operation == "accept":
-        # agent.remember_fn(candidate)
-        # elif operation == "reject":
-        # agent.remember_fp(candidate)
+        agent = get_agent()
+        agent.handle_user_operation(operation, candidate, is_match_to_agent)
 
     return {"message": "success"}
 
@@ -778,6 +726,13 @@ def undo_operation():
     if operation is None:
         return {"message": "failure", "userOperation": None}
 
+    operation_type = operation["operation"]
+    candidate = operation["candidate"]
+    is_match_to_agent = operation["isMatchToAgent"]
+
+    agent = get_agent()
+    agent.handle_undo_operation(operation_type, candidate, is_match_to_agent)
+
     return {"message": "success", "userOperation": operation}
 
 
@@ -789,6 +744,13 @@ def redo_operation():
     operation = matching_task.redo()
     if operation is None:
         return {"message": "failure", "userOperation": None}
+
+    operation_type = operation["operation"]
+    candidate = operation["candidate"]
+    is_match_to_agent = operation["isMatchToAgent"]
+
+    agent = get_agent()
+    agent.handle_user_operation(operation_type, candidate, is_match_to_agent)
 
     return {"message": "success", "userOperation": operation}
 
