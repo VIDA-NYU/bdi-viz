@@ -7,7 +7,7 @@ import SettingsGlobalContext from "../lib/settings/settings-context";
 import { useContext } from "react";
 interface RightPanelProps {
     // CombinedView
-    isMatch: boolean;
+    isMatch: boolean | undefined;
     currentExplanations: Explanation[];
     selectedExplanations: Explanation[];
     thumbUpExplanations: string[];

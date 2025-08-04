@@ -1,4 +1,4 @@
-<h1 align="center">BDIViz: An Interactive Visualization System for Biomedical Schema Matching with LLM-Supported Validation</h2>
+<h1 align="center">BDIViz: An Interactive Visualization System for Biomedical Schema Matching with LLM-Powered Validation</h2>
 
 [![read-the-docs](https://img.shields.io/badge/User_Manual-Read_the_Docs-blue?style=for-the-badge&logo=read-the-docs)](https://vida-nyu.github.io/bdi-viz-manual/) [![paper-arxiv](https://img.shields.io/badge/Paper-IEEE_VIS_2025-brown?style=for-the-badge&logo=arxiv)](https://arxiv.org/abs/2507.16117)
 

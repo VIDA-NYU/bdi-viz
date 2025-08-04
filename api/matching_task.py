@@ -1101,6 +1101,7 @@ class MatchingTask:
         operation: str,
         candidate: Dict[str, Any],
         references: List[Dict[str, Any]],
+        is_match_to_agent: Optional[bool] = None,
     ) -> None:
         logger.info(f"Applying operation: {operation}, on candidate: {candidate}...")
 
@@ -1111,7 +1112,9 @@ class MatchingTask:
             )
 
         # Add operation to history
-        self.history.add_operation(UserOperation(operation, candidate, references))
+        self.history.add_operation(
+            UserOperation(operation, candidate, references, is_match_to_agent)
+        )
 
         # Apply the operation
         if operation == "accept":
@@ -1568,6 +1571,7 @@ class UserOperation:
         operation: str,
         candidate: Dict[str, Any],
         references: List[Dict[str, Any]],
+        is_match_to_agent: Optional[bool] = None,
     ) -> None:
         """
         operation: str - the operation to be applied: accept, reject, discard, append, prune
@@ -1577,6 +1581,7 @@ class UserOperation:
         self.operation = operation
         self.candidate = candidate
         self.references = references
+        self.is_match_to_agent = is_match_to_agent
 
     def _json_serialize(self) -> Dict[str, Any]:
         return {
@@ -1585,4 +1590,5 @@ class UserOperation:
             "references": (
                 self.references if self.operation in ["append", "prune"] else []
             ),
+            "isMatchToAgent": self.is_match_to_agent,
         }

@@ -16,7 +16,7 @@ import { handleCopy } from '../../utils/clipboard';
 import { toastify } from '@/app/lib/toastify/toastify-helper';
 
 interface SchemaExplanationProps {
-    isMatch: boolean;
+    isMatch: boolean | undefined;
     currentExplanations: Explanation[];
     selectedExplanations: Explanation[];
     thumbUpExplanations: string[];
