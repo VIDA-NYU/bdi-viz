@@ -1,11 +1,9 @@
 <h1 align="center">BDIViz: An Interactive Visualization System for Biomedical Schema Matching with LLM-Supported Validation</h2>
 
-[![HitCount](https://hits.dwyl.com/VIDA-NYU/bdi-viz.svg?style=flat-square)](http://hits.dwyl.com/VIDA-NYU/bdi-viz)
+[![read-the-docs](https://img.shields.io/badge/User_Manual-Read_the_Docs-blue?style=for-the-badge&logo=read-the-docs)](https://vida-nyu.github.io/bdi-viz-manual/) [![paper-arxiv](https://img.shields.io/badge/Paper-IEEE_VIS_2025-brown?style=for-the-badge&logo=arxiv)](https://arxiv.org/abs/2507.16117)
 
-<div align="center">
-  <a href="https://vida-nyu.github.io/bdi-viz-manual/">
-    <img src="https://img.shields.io/badge/User%20Manual-Read%20the%20Docs-blue?style=for-the-badge&logo=read-the-docs" alt="User Manual" />
-  </a>
+[![docker-amd64-portkey](https://img.shields.io/badge/docker-amd64_gemini-lightblue?style=for-the-badge&logo=docker)](https://hub.docker.com/layers/edenwu/bdi-viz-react/amd64/images/sha256-be8167ca3bb406e0d704a9805cb990e5cde04fd929ac23c51e13e5aed6c6d901) [![docker-arm64-portkey](https://img.shields.io/badge/docker-arm64_gemini-lightblue?style=for-the-badge&logo=docker)](https://hub.docker.com/layers/edenwu/bdi-viz-react/arm64/images/sha256-dfedf5a2c525182c65e3b30b31c0fe2e986a98cb9b17d1c9c876479bfee39800)
+  
 </div>
 
 
