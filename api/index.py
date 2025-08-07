@@ -705,7 +705,7 @@ def user_operation():
         operation = operation_obj["operation"]
         candidate = operation_obj["candidate"]
         references = operation_obj["references"]
-        is_match_to_agent = operation_obj["isMatchToAgent"]
+        is_match_to_agent = operation_obj.get("isMatchToAgent", None)
 
         matching_task.apply_operation(
             operation, candidate, references, is_match_to_agent
@@ -728,7 +728,7 @@ def undo_operation():
 
     operation_type = operation["operation"]
     candidate = operation["candidate"]
-    is_match_to_agent = operation["isMatchToAgent"]
+    is_match_to_agent = operation.get("isMatchToAgent", None)
 
     agent = get_agent()
     agent.handle_undo_operation(operation_type, candidate, is_match_to_agent)
@@ -747,7 +747,7 @@ def redo_operation():
 
     operation_type = operation["operation"]
     candidate = operation["candidate"]
-    is_match_to_agent = operation["isMatchToAgent"]
+    is_match_to_agent = operation.get("isMatchToAgent", None)
 
     agent = get_agent()
     agent.handle_user_operation(operation_type, candidate, is_match_to_agent)
