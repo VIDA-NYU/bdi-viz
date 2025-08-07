@@ -408,8 +408,16 @@ Important:
         self.store.delete_false_negative(candidate)
 
     def handle_user_operation(
-        self, operation: str, candidate: Dict[str, Any], is_match_to_agent: bool
+        self,
+        operation: str,
+        candidate: Dict[str, Any],
+        is_match_to_agent: Optional[bool] = None,
     ) -> None:
+        if is_match_to_agent is None:
+            logger.warning(
+                f"🧠Memory: No match to agent provided, skipping operation..."
+            )
+            return
         if operation == "accept":
             if is_match_to_agent:
                 self._remember_match(candidate)
@@ -422,8 +430,16 @@ Important:
                 self._remember_mismatch(candidate)
 
     def handle_undo_operation(
-        self, operation: str, candidate: Dict[str, Any], is_match_to_agent: bool
+        self,
+        operation: str,
+        candidate: Dict[str, Any],
+        is_match_to_agent: Optional[bool] = None,
     ) -> None:
+        if is_match_to_agent is None:
+            logger.warning(
+                f"🧠Memory: No match to agent provided, skipping operation..."
+            )
+            return
         if operation == "accept":
             if is_match_to_agent:
                 self._forget_match(candidate)
