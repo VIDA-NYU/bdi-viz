@@ -15,7 +15,6 @@ class TestMatchingTask:
         session_manager,
         sample_source_csv,
         sample_target_csv,
-        mock_load_ontology_flat,
     ):
         """Test successful matching task execution."""
 
@@ -57,7 +56,6 @@ class TestMatchingTask:
         session_manager,
         sample_source_csv,
         sample_target_csv,
-        mock_load_ontology_flat,
     ):
         """Test matching task with filtered by nodes."""
         session_manager.add_session("test_session")
@@ -75,7 +73,6 @@ class TestMatchingTask:
         session_manager,
         sample_source_csv,
         sample_target_csv,
-        mock_load_ontology_flat,
     ):
         """Test getting all nodes."""
         session_manager.add_session("test_session")
@@ -91,7 +88,6 @@ class TestMatchingTask:
         session_manager,
         sample_source_csv,
         sample_target_csv,
-        mock_load_ontology_flat,
     ):
         """Test candidate manipulation."""
         session_manager.add_session("test_session")
@@ -149,7 +145,6 @@ class TestMatchingTask:
         session_manager,
         sample_source_csv,
         sample_target_csv,
-        mock_load_ontology_flat,
     ):
         """Test getting value matches."""
         session_manager.add_session("test_session")
@@ -165,7 +160,6 @@ class TestMatchingTask:
         session_manager,
         sample_source_csv,
         sample_target_csv,
-        mock_load_ontology_flat,
     ):
         """Test value binning."""
         session_manager.add_session("test_session")
@@ -187,7 +181,6 @@ class TestMatchingTask:
         session_manager,
         sample_source_csv,
         sample_target_csv,
-        mock_load_ontology_flat,
     ):
         """Test getting unique values."""
         session_manager.add_session("test_session")
@@ -209,7 +202,6 @@ class TestMatchingTask:
         session_manager,
         sample_source_csv,
         sample_target_csv,
-        mock_load_ontology_flat,
     ):
         """Test new matcher."""
         session_manager.add_session("test_session")

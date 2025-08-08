@@ -318,6 +318,20 @@ class MemoryRetriever:
         for namespace in namespaces:
             self._reset_namespace_count(namespace)
 
+    def reset_memory(self):
+        logger.info("🧠Memory: Resetting memory...")
+        self.clear_namespaces(self.supported_namespaces)
+        self.namespace_counts = {
+            "candidates": 0,
+            "schema": 0,
+            "mismatches": 0,
+            "matches": 0,
+            "false_positives": 0,
+            "false_negatives": 0,
+            "explanations": 0,
+            "user_memory": 0,
+        }
+
     # puts
     def put_target_schema(self, property: Dict[str, Any]):
         """
@@ -716,7 +730,8 @@ Explanations: {formatted_explanations}
         elif explanations_count < limit:
             limit = explanations_count
         logger.info(
-            f"🧰Tool called: search_explanations with query='{query}', " f"limit={limit}"
+            f"🧰Tool called: search_explanations with query='{query}', "
+            f"limit={limit}"
         )
         results = self._search_vector_store(query, limit, namespace="explanations")
         logger.info(

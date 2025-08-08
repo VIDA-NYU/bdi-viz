@@ -5,7 +5,7 @@ import pytest
 import tempfile
 import shutil
 import pandas as pd
-from typing import List
+from typing import List, Optional
 from unittest.mock import Mock, patch
 
 # Add the parent directory to sys.path so we can import from api package
@@ -15,6 +15,51 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from api.index import app as flask_app  # noqa: E402
 from api.langchain.memory import MemoryRetriever  # noqa: E402
 from api.session_manager import SessionManager  # noqa: E402
+from api.matching_task import MatchingTask  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_cwd(tmp_path, monkeypatch):
+    """Isolate each test's CWD to a temporary directory.
+
+    This prevents tests from writing files like .source.csv/.target.csv or
+    .source.json/.target.json into the project root.
+    """
+    monkeypatch.chdir(tmp_path)
+
+
+@pytest.fixture(autouse=True)
+def _redirect_matching_results(tmp_path, monkeypatch):
+    """Redirect matching_results_*.json R/W to the temp directory.
+
+    Prevents touching files under api/ such as matching_results_default.json.
+    """
+
+    def _export_cache_to_json(self, json_obj):
+        output_path = tmp_path / f"matching_results_{self.session_name}.json"
+        with open(output_path, "w") as f:
+            import json as _json
+
+            _json.dump(json_obj, f, indent=4)
+
+    def _import_cache_from_json(self):
+        import json as _json
+
+        output_path = tmp_path / f"matching_results_{self.session_name}.json"
+        if output_path.exists() and output_path.stat().st_size > 0:
+            try:
+                with open(output_path, "r") as f:
+                    return _json.load(f)
+            except Exception:
+                return None
+        return None
+
+    monkeypatch.setattr(
+        MatchingTask, "_export_cache_to_json", _export_cache_to_json, raising=True
+    )
+    monkeypatch.setattr(
+        MatchingTask, "_import_cache_from_json", _import_cache_from_json, raising=True
+    )
 
 
 MOCK_TARGET_ONTOLOGY = {
@@ -31,7 +76,8 @@ MOCK_TARGET_ONTOLOGY = {
         "category": "clinical",
         "node": "demographic",
         "type": "integer",
-        "description": "The patient's age (in years) on the reference or anchor date used during date obfuscation.",
+        "description": "The patient's age (in years) on the reference or "
+        "anchor date used during date obfuscation.",
     },
     "ajcc_pathologic_t": {
         "column_name": "ajcc_pathologic_t",
@@ -57,7 +103,8 @@ MOCK_SOURCE_ONTOLOGY = {
         "category": "demographic",
         "node": "demographic",
         "type": "integer",
-        "description": "The patient's age (in years) on the reference or anchor date used during date obfuscation.",
+        "description": "The patient's age (in years) on the reference or "
+        "anchor date used during date obfuscation.",
     },
     "AJCC_Path_pT": {
         "column_name": "AJCC_Path_pT",
@@ -121,9 +168,7 @@ def runner(app):
 def mock_memory_retriever():
     """Mock memory retriever for testing."""
     memory_retriever = MemoryRetriever()
-    memory_retriever.clear_namespaces(
-        ["user_memory", "schema", "candidates", "ontology"]
-    )
+    memory_retriever.reset_memory()
     return memory_retriever
 
 
@@ -152,7 +197,7 @@ def sample_target_csv():
 
 
 # Mock utils load ontology
-@pytest.fixture
+@pytest.fixture(scope="session", autouse=True)
 def mock_load_ontology_flat():
     """Mock load ontology for testing."""
     with patch("api.matching_task.load_ontology_flat") as mock_load_ontology_flat:
@@ -160,7 +205,7 @@ def mock_load_ontology_flat():
         yield mock_load_ontology_flat
 
 
-@pytest.fixture
+@pytest.fixture(scope="session", autouse=True)
 def mock_load_ontology_flat_utils():
     """Mock load ontology for testing."""
     with patch("api.utils.load_ontology_flat") as mock_load_ontology_flat:
@@ -168,7 +213,7 @@ def mock_load_ontology_flat_utils():
         yield mock_load_ontology_flat
 
 
-def _mock_load_ontology(dataset: str = "target", columns: List[str] = None):
+def _mock_load_ontology(dataset: str = "target", columns: Optional[List[str]] = None):
     if dataset == "target":
         if columns is None:
             columns = list(MOCK_TARGET_ONTOLOGY.keys())
@@ -211,7 +256,11 @@ def _mock_load_ontology(dataset: str = "target", columns: List[str] = None):
         ]
 
 
-@pytest.fixture
+def _mock_load_property(target_column: str):
+    return MOCK_TARGET_ONTOLOGY[target_column]
+
+
+@pytest.fixture(scope="session", autouse=True)
 def mock_load_ontology():
     """Mock load ontology for testing."""
     with patch("api.matching_task.load_ontology") as mock_load_ontology:
@@ -219,12 +268,28 @@ def mock_load_ontology():
         yield mock_load_ontology
 
 
-@pytest.fixture
+@pytest.fixture(scope="session", autouse=True)
 def mock_load_ontology_utils():
     """Mock load ontology for testing."""
     with patch("api.utils.load_ontology") as mock_load_ontology:
         mock_load_ontology.side_effect = _mock_load_ontology
         yield mock_load_ontology
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_load_property():
+    """Mock load property for testing."""
+    with patch("api.matching_task.load_property") as mock_load_property:
+        mock_load_property.side_effect = _mock_load_property
+        yield mock_load_property
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_load_property_utils():
+    """Mock load property for testing."""
+    with patch("api.utils.load_property") as mock_load_property:
+        mock_load_property.side_effect = _mock_load_property
+        yield mock_load_property
 
 
 @pytest.fixture

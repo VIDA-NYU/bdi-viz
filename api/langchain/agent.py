@@ -95,7 +95,7 @@ class Agent:
 
         target_description = load_property(candidate["targetColumn"])
         target_values = candidate["targetValues"]
-        if "enum" in target_description:
+        if target_description is not None and "enum" in target_description:
             target_enum = target_description["enum"]
             if target_enum is not None:
                 if len(target_enum) >= 50:
@@ -195,46 +195,7 @@ class Agent:
 
         return response
 
-    def infer_ontology(self, target_df: pd.DataFrame) -> Ontology:
-        logger.info(f"[Agent] Inferring ontology...")
-
-        # Set pandas display options only when needed
-        pd.set_option("display.max_columns", None)
-        df_preview = target_df.head().to_string()
-        # Reset to default to save memory
-        pd.reset_option("display.max_columns")
-
-        prompt = f"""
-    Analyze the DataFrame preview below to create an ontology for each column.
-
-    DataFrame Preview:
-    {df_preview}
-
-    Task:
-    Create an AttributeProperties object for EACH column with the following information:
-    - column_name: The exact name of the column
-    - category: Group columns into at most 3 high-level categories (grandparent level)
-    - node: Group columns into at most 10 mid-level nodes (parent level)
-    - type: Classify as "enum" (categorical), "number", "string", "boolean", or "other"
-    - description: A clear description of what the column represents
-    - enum: For categorical columns, list observed and inferred possible values
-    - maximum/minimum: For numerical columns, provide range constraints if applicable
-
-    Important:
-    - Organize columns into NO MORE THAN 3 categories and 10 nodes total
-    - For "enum" types, include all observed values plus likely additional values
-    - Return ONLY a valid JSON object following the Ontology schema with no additional text
-    """
-
-        logger.info(f"[INFER-ONTOLOGY] Prompt: {prompt}")
-        response = self.invoke(
-            prompt=prompt,
-            tools=[],
-            output_structure=Ontology,
-        )
-        return response
-
-    def stream_infer_ontology(
+    def infer_ontology(
         self, target_df: pd.DataFrame
     ) -> Generator[Tuple[List[str], Ontology], None, None]:
         """
@@ -457,11 +418,6 @@ Important:
         logger.info(f"🧠Memory: Remembering the explanation...")
         self.store.put_explanation(explanations, user_operation)
 
-    def remember_candidates(self, candidates: List[Dict[str, Any]]) -> None:
-        logger.info(f"🧠Memory: Remembering the candidates...")
-        for candidate in candidates:
-            self.store.put_candidate(candidate)
-
     def remember_ontology(self, ontology: Dict[str, AttributeProperties]) -> None:
         logger.info(f"🧠Memory: Remembering the ontology...")
         for _, property in ontology.items():
@@ -505,21 +461,6 @@ Important:
         raise RuntimeError(
             f"Failed to parse agent response after {self.retries} attempts. Last error: {last_exception}"
         )
-
-    def invoke_system(self, prompt: str) -> Generator[AIMessage, None, None]:
-        agent_executor = create_react_agent(self.llm, store=self.store)
-        for chunk in agent_executor.stream(
-            {"messages": [SystemMessage(content=prompt)]}, self.agent_config
-        ):
-            logger.info(chunk)
-            yield chunk
-
-    def bind_tools(self, tools: List, tool_choice: Optional[str] = None) -> None:
-        if tool_choice is not None:
-            return self.llm.bind_tools(tools, tool_choice=tool_choice)
-        else:
-            logger.info(f"[Agent] Binding tools to the agent...")
-            return self.llm.bind_tools(tools)
 
     def generate_prompt(self, prompt: str, output_parser: PydanticOutputParser) -> str:
         instructions = output_parser.get_format_instructions()
