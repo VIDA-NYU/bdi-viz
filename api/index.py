@@ -108,7 +108,11 @@ def get_langgraph_agent():
 
 @celery.task(bind=True)
 def run_matching_task(
-    self, session, nodes=None, infer_source_ontology=False, infer_target_ontology=False
+    self,
+    session,
+    nodes=None,
+    infer_source_ontology=False,
+    infer_target_ontology=False,
 ):
     try:
         app.logger.info(f"Running matching task for session: {session}")
@@ -131,15 +135,14 @@ def run_matching_task(
                 agent = get_agent()
                 properties = []
                 for i, (column_slice, ontology) in enumerate(
-                    agent.stream_infer_ontology(source)
+                    agent.infer_ontology(source)
                 ):
                     ontology = ontology.model_dump()
                     properties += ontology["properties"]
                     matching_task._update_task_state(
                         current_step="Infer source ontology",
-                        progress=int(
-                            (25 / (len(source.columns))) * i
-                        ),  # total 5 percent, each i is a batch of 5 columns
+                        progress=int((25 / (len(source.columns))) * i),
+                        # total 5 percent, each i is a batch of 5 columns
                         log_message=f"Source ontology: {i}...",
                     )
                 parsed_ontology = parse_llm_generated_ontology(
@@ -158,7 +161,7 @@ def run_matching_task(
                 agent = get_agent()
                 properties = []
                 for i, (column_slice, ontology) in enumerate(
-                    agent.stream_infer_ontology(target)
+                    agent.infer_ontology(target)
                 ):
                     ontology = ontology.model_dump()
                     properties.extend(ontology["properties"])
@@ -182,11 +185,17 @@ def run_matching_task(
 
             return {"status": "completed", "candidates_count": len(candidates)}
 
-        return {"status": "failed", "message": "Source or target files not found"}
+        return {
+            "status": "failed",
+            "message": "Source or target files not found",
+        }
     except Exception as e:
         # Handle the NoneType Redis error and other potential exceptions
         app.logger.error(f"Error in matching task: {str(e)}")
-        return {"status": "failed", "message": f"Error processing task: {str(e)}"}
+        return {
+            "status": "failed",
+            "message": f"Error processing task: {str(e)}",
+        }
 
 
 @app.route("/api/matching/start", methods=["POST"])
@@ -257,7 +266,7 @@ def matching_status():
     task = run_matching_task.AsyncResult(task_id)
 
     app.logger.info(
-        f"Task state: {task.state}, {task.info}, {task.result}, {task.traceback}"
+        f"Task state: {task.state}, {task.info}, {task.result}, " f"{task.traceback}"
     )
 
     if task.state == "PENDING":
@@ -426,8 +435,7 @@ def get_source_ontology():
 
 @app.route("/api/gdc/property", methods=["POST"])
 def get_gdc_property():
-    session = extract_session_name(request)
-    # Unused variable removed to save memory
+    # Unused local variable 'session' removed
     target_col = request.json["targetColumn"]
 
     property = load_gdc_property(target_col)
@@ -437,8 +445,7 @@ def get_gdc_property():
 
 @app.route("/api/property", methods=["POST"])
 def get_property():
-    session = extract_session_name(request)
-    # Unused variable removed to save memory
+    # Unused local variable 'session' removed
     target_col = request.json["targetColumn"]
 
     property = load_property(target_col)
@@ -497,7 +504,10 @@ def run_new_matcher_task(self, session, name, code, params):
                     target = pd.read_csv(".target.csv")
                 else:
                     target = pd.read_csv(GDC_DATA_PATH)
-                matching_task.update_dataframe(source_df=source, target_df=target)
+                matching_task.update_dataframe(
+                    source_df=source,
+                    target_df=target,
+                )
             _ = matching_task.get_candidates()
         error, matchers = matching_task.new_matcher(name, code, params)
 
@@ -541,7 +551,7 @@ def matcher_status():
     task = run_new_matcher_task.AsyncResult(task_id)
 
     app.logger.info(
-        f"Task state: {task.state}, {task.info}, {task.result}, {task.traceback}"
+        f"Task state: {task.state}, {task.info}, {task.result}, " f"{task.traceback}"
     )
 
     if task.state == "PENDING":
@@ -551,7 +561,11 @@ def matcher_status():
             "taskState": None,
         }
     elif task.state == "FAILURE":
-        response = {"status": "failed", "message": str(task.info), "taskState": None}
+        response = {
+            "status": "failed",
+            "message": str(task.info),
+            "taskState": None,
+        }
     elif task.state == "SUCCESS":
         result = task.result
         app.logger.info(f"Result: {result}")
@@ -560,7 +574,7 @@ def matcher_status():
 
         response = {
             "status": result["status"],
-            "message": result["error"] if result["status"] == "failed" else "success",
+            "message": (result["error"] if result["status"] == "failed" else "success"),
             "taskState": matching_task._load_task_state(),
             "matchers": matching_task.get_matchers(),
         }
@@ -669,8 +683,8 @@ def agent_related_source():
     data = request.json
     source_col = data["sourceColumn"]
     target_col = data["targetColumn"]
-    source_values = matching_task.get_source_unique_values(source_col)
-    target_values = matching_task.get_target_unique_values(target_col)
+    _ = matching_task.get_source_unique_values(source_col)
+    _ = matching_task.get_target_unique_values(target_col)
 
     # Unused variable removed to save memory
     # agent = get_agent()
@@ -787,7 +801,10 @@ def rematch():
     nodes = data.get("nodes", [])  # Get nodes from request body
 
     if not os.path.exists(".source.csv") or not os.path.exists(".target.csv"):
-        return {"status": "failed", "message": "Source or target files not found"}, 400
+        return {
+            "status": "failed",
+            "message": "Source or target files not found",
+        }, 400
 
     # Start a new matching task with the specified nodes
 

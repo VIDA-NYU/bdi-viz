@@ -1079,6 +1079,7 @@ class MatchingTask:
     def undo(self) -> Optional[Dict[str, Any]]:
         logger.info("Undoing last operation...")
         operation = self.history.undo_last_operation()
+        logger.critical(f"Operation: {operation}")
         if operation:
             self.undo_operation(
                 operation.operation, operation.candidate, operation.references
@@ -1405,10 +1406,10 @@ class MatchingTask:
                 )
 
                 # Update weight updater if needed
-                self.cached_candidates[
-                    "matchers"
-                ] = self.weight_updater.update_matchers(
-                    self.cached_candidates["matchers"]
+                self.cached_candidates["matchers"] = (
+                    self.weight_updater.update_matchers(
+                        self.cached_candidates["matchers"]
+                    )
                 )
                 self._update_task_state(
                     progress=95,

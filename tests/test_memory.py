@@ -6,8 +6,8 @@ class TestMemoryRetriever:
 
     def test_init(self, mock_memory_retriever):
         """Test memory retriever initialization."""
-        assert mock_memory_retriever.user_memory_count == 0
-        assert mock_memory_retriever.collection is not None
+        assert mock_memory_retriever.get_namespace_count("user_memory") == 0
+        assert mock_memory_retriever.collections is not None
 
     def test_target_schema(self, mock_memory_retriever):
         """Test target schema."""
@@ -67,9 +67,9 @@ class TestMemoryRetriever:
         """Test clearing specific namespaces."""
         mock_memory_retriever.put_user_memory("This is a test memory content")
         results = mock_memory_retriever.search_user_memory("test_user_memory")
-        assert mock_memory_retriever.user_memory_count == 1
+        assert mock_memory_retriever.get_namespace_count("user_memory") == 1
 
         mock_memory_retriever.clear_namespaces(["user_memory"])
         results = mock_memory_retriever.search_user_memory("test_user_memory")
-        assert mock_memory_retriever.user_memory_count == 0
+        assert mock_memory_retriever.get_namespace_count("user_memory") == 0
         assert results is None
