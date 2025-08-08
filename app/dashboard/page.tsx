@@ -116,9 +116,9 @@ export default function Dashboard() {
     } = useDashboardOperations({
         candidates,
         selectedCandidate,
+        isMatch,
         selectedExplanations,
         onCandidateUpdate: handleFileUpload,
-        onMatchersUpdate: handleMatchers,
         onCandidateSelect: setSelectedCandidate,
         onExplanation: generateExplanations,
         onUserOperationsUpdate: handleUserOperationsUpdate,

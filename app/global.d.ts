@@ -70,6 +70,7 @@ declare interface UserOperation {
     operation: UserOperationType | string;
     candidate: AggregatedCandidate | Candidate; // the candidate to operate on
     references: Candidate[]; // the references to the candidate
+    isMatchToAgent?: boolean; // whether the candidate is a match to the agent
 }
 
 declare type ExplanationType = 'name' | 'token' | 'value' | 'semantic' | 'pattern' | 'history' | 'knowledge' | 'other';

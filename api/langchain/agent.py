@@ -89,25 +89,13 @@ class Agent:
         self, candidate: Dict[str, Any], with_memory=True
     ) -> CandidateExplanation:
         logger.info(f"[Agent] Explaining the candidate...")
-        # logger.info(f"{diagnose}")
 
-        # # search for related false negative / false positive candidates
-        # related_matches = self.store.search_matches(candidate["sourceColumn"], limit=3)
-        # related_mismatches = self.store.search_mismatches(
-        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        # )
-
-        # # search for related explanations
-        # related_explanations = self.store.search_explanations(
-        #     f"{candidate['sourceColumn']}::{candidate['targetColumn']}", limit=3
-        # )
-
-        if self.store.user_memory_count <= 0:
+        if self.store.get_namespace_count("user_memory") <= 0:
             with_memory = False
 
         target_description = load_property(candidate["targetColumn"])
         target_values = candidate["targetValues"]
-        if "enum" in target_description:
+        if target_description is not None and "enum" in target_description:
             target_enum = target_description["enum"]
             if target_enum is not None:
                 if len(target_enum) >= 50:
@@ -131,36 +119,51 @@ class Agent:
     """
 
         instructions_with_memory = """
-    1. Review the operation details and use `recall_memory` to get more context if needed.
-    2. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
-    3. If the values are convertable, provide possible convertion methods in your explanation.
-    4. Conclude if the current candidate is a valid match based on:
-        a. Your explanations,
-        b. Similarity between the attribute names,
-        c. Consistency of the sample values, and descriptions provided,
-        d. The history of false positives and negatives,
-        e. The context from `recall_memory`.
-    5. Include any additional context or keywords that might support or contradict the current mapping.
-    """
+    **Tools you can use:**
+    - `recall_memory`: Recall the history of matches, mismatches, and explanations.
+    - `search_false_negatives`: Search for false negatives in the memory.
+    - `search_false_positives`: Search for false positives in the memory.
+    - `search_mismatches`: Search for mismatches in the memory.
+    - `search_matches`: Search for matches in the memory.
 
-        instructions_without_memory = """
     1. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
     2. If the values are convertable, provide possible convertion methods in your explanation.
     3. Conclude if the current candidate is a valid match based on:
         a. Your explanations,
         b. Similarity between the attribute names,
         c. Consistency of the sample values, and descriptions provided,
-        d. The history of false positives and negatives.
+        d. The history of false positives and negatives,
+        e. The context from `recall_memory`.
+        f. The history of false positives and negatives (where the user and agent disagree), matches and mismatches.
+    4. Include any additional context or keywords that might support or contradict the current mapping.
+    """
+
+        instructions_without_memory = """
+    **Tools you can use:**
+    - `search_false_negatives`: Search for false negatives in the memory.
+    - `search_false_positives`: Search for false positives in the memory.
+    - `search_mismatches`: Search for mismatches in the memory.
+    - `search_matches`: Search for matches in the memory.
+
+    1. Provide up to four possible explanations that justify whether the attributes are a match or not. Reference the historical matches, mismatches, and explanations where relevant.
+    2. If the values are convertable, provide possible convertion methods in your explanation.
+    3. Conclude if the current candidate is a valid match based on:
+        a. Your explanations,
+        b. Similarity between the attribute names,
+        c. Consistency of the sample values, and descriptions provided,
+        d. The history of false positives and negatives (where the user and agent disagree), matches and mismatches.
     4. Include any additional context or keywords that might support or contradict the current mapping.
     """
 
         prompt += (
             instructions_with_memory if with_memory else instructions_without_memory
         )
+
+        tools = self.store.get_validation_tools(with_memory)
         logger.info(f"[EXPLAIN] Prompt: {prompt}")
         response = self.invoke(
             prompt=prompt,
-            tools=[self.store.recall_memory_tool] if with_memory else [],
+            tools=tools,
             output_structure=CandidateExplanation,
         )
         return response
@@ -192,46 +195,7 @@ class Agent:
 
         return response
 
-    def infer_ontology(self, target_df: pd.DataFrame) -> Ontology:
-        logger.info(f"[Agent] Inferring ontology...")
-
-        # Set pandas display options only when needed
-        pd.set_option("display.max_columns", None)
-        df_preview = target_df.head().to_string()
-        # Reset to default to save memory
-        pd.reset_option("display.max_columns")
-
-        prompt = f"""
-    Analyze the DataFrame preview below to create an ontology for each column.
-
-    DataFrame Preview:
-    {df_preview}
-
-    Task:
-    Create an AttributeProperties object for EACH column with the following information:
-    - column_name: The exact name of the column
-    - category: Group columns into at most 3 high-level categories (grandparent level)
-    - node: Group columns into at most 10 mid-level nodes (parent level)
-    - type: Classify as "enum" (categorical), "number", "string", "boolean", or "other"
-    - description: A clear description of what the column represents
-    - enum: For categorical columns, list observed and inferred possible values
-    - maximum/minimum: For numerical columns, provide range constraints if applicable
-
-    Important:
-    - Organize columns into NO MORE THAN 3 categories and 10 nodes total
-    - For "enum" types, include all observed values plus likely additional values
-    - Return ONLY a valid JSON object following the Ontology schema with no additional text
-    """
-
-        logger.info(f"[INFER-ONTOLOGY] Prompt: {prompt}")
-        response = self.invoke(
-            prompt=prompt,
-            tools=[],
-            output_structure=Ontology,
-        )
-        return response
-
-    def stream_infer_ontology(
+    def infer_ontology(
         self, target_df: pd.DataFrame
     ) -> Generator[Tuple[List[str], Ontology], None, None]:
         """
@@ -372,24 +336,87 @@ Important:
 
             yield (column_slice, response)
 
-    def remember_fp(self, candidate: Dict[str, Any]) -> None:
+    def _remember_false_positive(self, candidate: Dict[str, Any]) -> None:
         logger.info(f"🧠Memory: Remembering the false positive...")
+        self.store.put_false_positive(candidate)
+
+    def _remember_false_negative(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Remembering the false negative...")
+        self.store.put_false_negative(candidate)
+
+    def _remember_match(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Remembering the match...")
+        self.store.put_match(candidate)
+
+    def _remember_mismatch(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Remembering the mismatch...")
         self.store.put_mismatch(candidate)
 
-    def remember_fn(self, candidate: Dict[str, Any]) -> None:
-        logger.info(f"🧠Memory: Remembering the false negative...")
-        self.store.put_match(candidate)
+    def _forget_match(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Forgetting the match...")
+        self.store.delete_match(candidate)
+
+    def _forget_mismatch(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Forgetting the mismatch...")
+        self.store.delete_mismatch(candidate)
+
+    def _forget_false_positive(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Forgetting the false positive...")
+        self.store.delete_false_positive(candidate)
+
+    def _forget_false_negative(self, candidate: Dict[str, Any]) -> None:
+        logger.info(f"🧠Memory: Forgetting the false negative...")
+        self.store.delete_false_negative(candidate)
+
+    def handle_user_operation(
+        self,
+        operation: str,
+        candidate: Dict[str, Any],
+        is_match_to_agent: Optional[bool] = None,
+    ) -> None:
+        if is_match_to_agent is None:
+            logger.warning(
+                f"🧠Memory: No match to agent provided, skipping operation..."
+            )
+            return
+        if operation == "accept":
+            if is_match_to_agent:
+                self._remember_match(candidate)
+            else:
+                self._remember_false_negative(candidate)
+        elif operation == "reject":
+            if is_match_to_agent:
+                self._remember_false_positive(candidate)
+            else:
+                self._remember_mismatch(candidate)
+
+    def handle_undo_operation(
+        self,
+        operation: str,
+        candidate: Dict[str, Any],
+        is_match_to_agent: Optional[bool] = None,
+    ) -> None:
+        if is_match_to_agent is None:
+            logger.warning(
+                f"🧠Memory: No match to agent provided, skipping operation..."
+            )
+            return
+        if operation == "accept":
+            if is_match_to_agent:
+                self._forget_match(candidate)
+            else:
+                self._forget_false_negative(candidate)
+        elif operation == "reject":
+            if is_match_to_agent:
+                self._forget_false_positive(candidate)
+            else:
+                self._forget_mismatch(candidate)
 
     def remember_explanation(
         self, explanations: List[Dict[str, Any]], user_operation: Dict[str, Any]
     ) -> None:
         logger.info(f"🧠Memory: Remembering the explanation...")
         self.store.put_explanation(explanations, user_operation)
-
-    def remember_candidates(self, candidates: List[Dict[str, Any]]) -> None:
-        logger.info(f"🧠Memory: Remembering the candidates...")
-        for candidate in candidates:
-            self.store.put_candidate(candidate)
 
     def remember_ontology(self, ontology: Dict[str, AttributeProperties]) -> None:
         logger.info(f"🧠Memory: Remembering the ontology...")
@@ -434,21 +461,6 @@ Important:
         raise RuntimeError(
             f"Failed to parse agent response after {self.retries} attempts. Last error: {last_exception}"
         )
-
-    def invoke_system(self, prompt: str) -> Generator[AIMessage, None, None]:
-        agent_executor = create_react_agent(self.llm, store=self.store)
-        for chunk in agent_executor.stream(
-            {"messages": [SystemMessage(content=prompt)]}, self.agent_config
-        ):
-            logger.info(chunk)
-            yield chunk
-
-    def bind_tools(self, tools: List, tool_choice: Optional[str] = None) -> None:
-        if tool_choice is not None:
-            return self.llm.bind_tools(tools, tool_choice=tool_choice)
-        else:
-            logger.info(f"[Agent] Binding tools to the agent...")
-            return self.llm.bind_tools(tools)
 
     def generate_prompt(self, prompt: str, output_parser: PydanticOutputParser) -> str:
         instructions = output_parser.get_format_instructions()

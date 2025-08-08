@@ -6,7 +6,7 @@ const useSchemaExplanations = () => {
     const [thumbUpExplanations, setThumbUpExplanations] = useState<string[]>([]);
     const [thumbDownExplanations, setThumbDownExplanations] = useState<string[]>([]);
     const [selectedExplanations, setSelectedExplanations] = useState<Explanation[]>([]);
-    const [isMatch, setIsMatch] = useState<boolean>(false);
+    const [isMatch, setIsMatch] = useState<boolean | undefined>(undefined);
     const [relevantKnowledge, setRelevantKnowledge] = useState<RelevantKnowledge[]>([]);
     const [relatedOuterSources, setRelatedOuterSources] = useState<RelatedSource[]>([]);
     
@@ -15,7 +15,7 @@ const useSchemaExplanations = () => {
         if (!candidateExplanation || !candidate) {
             setCurrentExplanations([]);
             setSelectedExplanations([]);
-            setIsMatch(false);
+            setIsMatch(undefined);
             setRelevantKnowledge([]);
             return;
         }

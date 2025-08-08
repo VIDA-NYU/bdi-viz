@@ -7,7 +7,7 @@ import Split from '@uiw/react-split';
 
 
 interface CombinedViewProps {
-    isMatch: boolean;
+    isMatch: boolean | undefined;
     currentExplanations: Explanation[];
     selectedExplanations: Explanation[];
     thumbUpExplanations: string[];

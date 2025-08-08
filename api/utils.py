@@ -239,7 +239,9 @@ def load_ontology_flat() -> Dict[str, Any]:
     return ontology_flat
 
 
-def load_ontology(dataset: str = "target", columns: List[str] = None) -> List[Dict]:
+def load_ontology(
+    dataset: str = "target", columns: Optional[List[str]] = None
+) -> List[Dict]:
     """
     Load the ontology from a JSON file.
 
