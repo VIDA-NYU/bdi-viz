@@ -23,7 +23,7 @@ class ValentineMatcher(BaseMatcher):
         self, source: pd.DataFrame, target: pd.DataFrame, top_k: int = 20, **kwargs
     ) -> List[Dict[str, Any]]:
         matcher = self._get_matcher_object(self.name)
-        matches = valentine_match(source, target, matcher)
+        matches = valentine_match(source.astype(str), target.astype(str), matcher)
 
         matcher_candidates = self._layer_candidates_valentine(matches, self.name, top_k)
         return matcher_candidates

@@ -1,11 +1,11 @@
 import logging
 import random
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import pandas as pd
 from rapidfuzz import fuzz, process, utils
 
-from ..utils import load_gdc_property
+from ..utils import load_property
 from .utils import BaseMatcher
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -30,8 +30,8 @@ class RapidFuzzValueMatcher(BaseMatcher):
         for source_v in source_values:
             source_top_k = []
             best_matches = process.extract(
-                source_v,
-                target_values,
+                str(source_v),
+                [str(v) for v in target_values],
                 scorer=fuzz.WRatio,
                 processor=utils.default_process,
                 limit=top_k,
@@ -70,7 +70,9 @@ class RapidFuzzValueMatcher(BaseMatcher):
         source_types = {
             col: self._determine_dtype(source, col) for col in source.columns
         }
-        target_types = {col: self._determine_dtype_gdc(col) for col in target.columns}
+        target_types = {
+            col: self._determine_dtype_schema(col) for col in target.columns
+        }
 
         source_uniques = {
             col: source[col].dropna().unique().astype(str).tolist()
@@ -148,8 +150,8 @@ class RapidFuzzValueMatcher(BaseMatcher):
         else:
             return "unknown"
 
-    def _determine_dtype_gdc(self, gdc_col: str) -> str:
-        gdc_property = load_gdc_property(gdc_col)
+    def _determine_dtype_schema(self, col: str) -> str:
+        gdc_property = load_property(col)
         if gdc_property:
             type = gdc_property["type"]
             if type == "string" or type == "enum":
