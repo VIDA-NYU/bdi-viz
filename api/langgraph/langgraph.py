@@ -100,7 +100,12 @@ class AgentType(str, Enum):
 
 
 class LangGraphAgent:
-    def __init__(self, memory_retriever: MemoryRetriever, session_id: str = "default"):
+    def __init__(
+        self,
+        memory_retriever: MemoryRetriever,
+        session_id: str = "default",
+        retries: int = 3,
+    ):
         # Configurable timeout from environment or default to 1000 seconds
         llm_timeout = int(os.getenv("LLM_TIMEOUT", "1000"))
         llm_provider = os.getenv("LLM_PROVIDER", "portkey")
@@ -124,7 +129,7 @@ class LangGraphAgent:
                 ),
                 default_headers=portkey_headers,
                 timeout=llm_timeout,
-                max_retries=3,
+                max_retries=retries,
             )
             self.worker_llm = ChatOpenAI(
                 model="gemini-2.5-flash",
@@ -136,7 +141,7 @@ class LangGraphAgent:
                 ),
                 default_headers=portkey_headers,
                 timeout=llm_timeout,
-                max_retries=3,
+                max_retries=retries,
             )
         elif llm_provider == "openai":
             self.master_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
@@ -148,6 +153,7 @@ class LangGraphAgent:
         self.session_id = session_id
         self._state = self._init_state()
         self.graph = self._build_graph()
+        self.retries = retries
 
     def _summarize_with_llm(
         self,
@@ -258,11 +264,14 @@ class LangGraphAgent:
         workflow = StateGraph(AgentState)
 
         # Define agent nodes with enhanced prompts for conversation awareness
+        supervisor_tools = QueryTools(
+            self.session_id, self.memory_retriever
+        ).get_tools() + self.memory_retriever.get_validation_tools(with_memory=True)
         workflow.add_node(
             "supervisor",
             self._create_agent_node(
                 self._supervisor_prompt,
-                QueryTools(self.session_id, self.memory_retriever).get_tools(),
+                supervisor_tools,
                 self.worker_llm,
             ),
         )
@@ -387,10 +396,13 @@ class LangGraphAgent:
 
         2. **Information Management**: 
            - Use tools to read source/target data as needed, if the user asks for the data or analysis, you should use the tools to get the data and analyse.
+        
+        3. **Memory Management**:
            - Store important insights with `remember_this`
            - Retrieve relevant context with `recall_memory`
-
-        3. **Smart Routing**: Based on conversation context and current query:
+           - Use search tools to check if the user's query is a match, false negative, false positive, mismatch, or explanation
+           
+        4. **Smart Routing**: Based on conversation context and current query:
            - New candidate search → route to ["ontology"]
            - Candidate operations → route to ["candidate"]
            - Rerank/rescore → route to ["candidate"], pass the candidates list to the candidate agent as well
@@ -508,6 +520,7 @@ class LangGraphAgent:
             - Review candidates and conversation history.
             - Adjust scores based on user feedback and matcher weights.
             - Sort candidates by new scores.
+            - Update the rescored candidates calling `update_candidates` tool.
         4. **Update**: Use `update_candidates` with source attribute and re-ranked list.
         5. **Explain**: In `message`, describe changes and reasons.
 
@@ -627,7 +640,7 @@ class RapidFuzzMatcher():
         agent_executor = create_react_agent(llm, tools, store=store)
 
         # Retry logic with exponential backoff for handling gateway timeouts
-        max_retries = 3
+        max_retries = self.retries
         base_delay = 1  # seconds
 
         for attempt in range(max_retries):
@@ -638,7 +651,30 @@ class RapidFuzzMatcher():
                     )
                     # Reduced timeout to 2 minutes for better error handling
                     responses = future.result(timeout=120)
-                    break  # Success, exit retry loop
+                    if not responses:
+                        raise RuntimeError("Agent returned no responses")
+
+                    # Try to parse; if it fails, retry the whole call
+                    final_response = responses[-1]["agent"]["messages"][0].content
+                    try:
+                        return output_parser.parse(final_response)
+                    except Exception as parse_err:
+                        logger.warning(
+                            f"Response parsing error on attempt {attempt + 1}/{max_retries}: {parse_err}"
+                        )
+                        logger.debug(f"Final response content: {final_response}")
+                        if attempt < max_retries - 1:
+                            delay = base_delay * (2**attempt)
+                            logger.info(
+                                f"Retrying in {delay} seconds due to parse error..."
+                            )
+                            time.sleep(delay)
+                            continue
+                        else:
+                            logger.error(
+                                "All retry attempts exhausted due to parse errors"
+                            )
+                            return self._init_state()
             except concurrent.futures.TimeoutError:
                 logger.warning(
                     f"Request timeout on attempt {attempt + 1}/" f"{max_retries}"
@@ -667,18 +703,6 @@ class RapidFuzzMatcher():
                         continue
 
                 return self._init_state()
-
-        if not responses:
-            logger.error(f"Agent returned no responses. Prompt was:\n{prompt}")
-            return self._init_state()
-
-        try:
-            final_response = responses[-1]["agent"]["messages"][0].content
-            return output_parser.parse(final_response)
-        except Exception as e:
-            logger.error(f"Response parsing error: {e}\nResponse was: {responses}")
-            logger.error(traceback.format_exc())
-            return self._init_state()
 
     def _stream_responses(
         self, agent_executor, prompt: str, session_id: str
