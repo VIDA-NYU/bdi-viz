@@ -87,6 +87,13 @@ MOCK_TARGET_ONTOLOGY = {
         "description": "The patient's AJCC pathologic T stage.",
         "enum": ["AI", "II"],
     },
+    "age_is_obfuscated": {
+        "column_name": "age_is_obfuscated",
+        "category": "clinical",
+        "node": "demographic",
+        "type": "boolean",
+        "description": "Whether the patient's age is obfuscated.",
+    },
 }
 
 MOCK_SOURCE_ONTOLOGY = {
@@ -113,6 +120,13 @@ MOCK_SOURCE_ONTOLOGY = {
         "type": "enum",
         "description": "The patient's AJCC pathologic T stage.",
         "enum": ["pTa1", "pT2"],
+    },
+    "Is_Obfuscated": {
+        "column_name": "Is_Obfuscated",
+        "category": "demographic",
+        "node": "demographic",
+        "type": "boolean",
+        "description": "Whether the patient's age is obfuscated.",
     },
 }
 
@@ -180,6 +194,7 @@ def sample_source_csv():
             "Gender": ["Male", "Female"],
             "Age": ["70", "83"],
             "AJCC_Path_pT": ["pTa1", "pT2"],
+            "Is_Obfuscated": [True, True],
         }
     )
 
@@ -192,6 +207,7 @@ def sample_target_csv():
             "gender": ["male", "female"],
             "age": ["70", "83"],
             "ajcc_pathologic_t": ["AI", "II"],
+            "age_is_obfuscated": [True, False],
         }
     )
 
@@ -234,6 +250,11 @@ def _mock_load_ontology(dataset: str = "target", columns: Optional[List[str]] = 
                 "parent": "tumor",
                 "grandparent": "clinical",
             },
+            {
+                "name": "age_is_obfuscated",
+                "parent": "demographic",
+                "grandparent": "clinical",
+            },
         ]
         return [node for node in mock_target_tree if node["name"] in columns]
     else:
@@ -252,6 +273,11 @@ def _mock_load_ontology(dataset: str = "target", columns: Optional[List[str]] = 
                 "name": "AJCC_Path_pT",
                 "parent": "tumor",
                 "grandparent": "tumor",
+            },
+            {
+                "name": "Is_Obfuscated",
+                "parent": "demographic",
+                "grandparent": "demographic",
             },
         ]
 
@@ -288,6 +314,19 @@ def mock_load_property():
 def mock_load_property_utils():
     """Mock load property for testing."""
     with patch("api.utils.load_property") as mock_load_property:
+        mock_load_property.side_effect = _mock_load_property
+        yield mock_load_property
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_load_property_rapidfuzz_value():
+    """Ensure RapidFuzzValueMatcher uses the mocked load_property.
+
+    RapidFuzzValueMatcher imports load_property directly from api.utils via
+    a relative import (from ..utils import load_property). To affect that
+    bound name, we must patch in the module namespace where it is used.
+    """
+    with patch("api.matcher.rapidfuzz_value.load_property") as mock_load_property:
         mock_load_property.side_effect = _mock_load_property
         yield mock_load_property
 
