@@ -18,7 +18,6 @@ class TestMatchingTask:
     ):
         """Test successful matching task execution."""
 
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)
@@ -45,7 +44,6 @@ class TestMatchingTask:
 
     def test_get_candidates_missing_files(self, session_manager):
         """Test matching task with missing files."""
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         with pytest.raises(ValueError):
@@ -58,7 +56,6 @@ class TestMatchingTask:
         sample_target_csv,
     ):
         """Test matching task with filtered by nodes."""
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)
@@ -75,7 +72,6 @@ class TestMatchingTask:
         sample_target_csv,
     ):
         """Test getting all nodes."""
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)
@@ -90,7 +86,6 @@ class TestMatchingTask:
         sample_target_csv,
     ):
         """Test candidate manipulation."""
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)
@@ -147,7 +142,6 @@ class TestMatchingTask:
         sample_target_csv,
     ):
         """Test getting value matches."""
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)
@@ -162,7 +156,6 @@ class TestMatchingTask:
         sample_target_csv,
     ):
         """Test value binning."""
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)
@@ -183,7 +176,6 @@ class TestMatchingTask:
         sample_target_csv,
     ):
         """Test getting unique values."""
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)
@@ -204,7 +196,6 @@ class TestMatchingTask:
         sample_target_csv,
     ):
         """Test new matcher."""
-        session_manager.add_session("test_session")
         matching_task = session_manager.get_session("test_session").matching_task
 
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)

@@ -62,6 +62,20 @@ def _redirect_matching_results(tmp_path, monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _patch_tool_session_manager(session_manager, monkeypatch):
+    """Ensure tools use the same SessionManager instance as tests."""
+    monkeypatch.setattr(
+        "api.tools.candidate_tools.SESSION_MANAGER", session_manager, raising=True
+    )
+    monkeypatch.setattr(
+        "api.tools.query_tools.SESSION_MANAGER", session_manager, raising=True
+    )
+    monkeypatch.setattr(
+        "api.tools.task_tools.SESSION_MANAGER", session_manager, raising=True
+    )
+
+
 MOCK_TARGET_ONTOLOGY = {
     "gender": {
         "column_name": "gender",
@@ -137,7 +151,10 @@ def session_manager():
     # remove cache
     if os.path.exists("../matching_results_test_session.json"):
         os.remove("../matching_results_test_session.json")
-    return SessionManager()
+
+    session_manager = SessionManager()
+    session_manager.add_session("test_session")
+    return session_manager
 
 
 @pytest.fixture
