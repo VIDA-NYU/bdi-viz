@@ -7,7 +7,6 @@ from uuid import uuid4
 import pandas as pd
 from celery import Celery, Task
 from flask import Flask, request
-import time
 
 # Lazy import the agent to save resources
 from .langchain.pydantic import AgentResponse
@@ -143,7 +142,6 @@ def infer_source_ontology_task(self, session):
                 progress=progress,
                 current_step="Infer source ontology",
                 log_message=f"Source ontology batch {i+1}...",
-                replace_last_log=True,
             )
 
         parsed_ontology = parse_llm_generated_ontology(
@@ -170,7 +168,6 @@ def run_matching_task(
     self,
     session,
     nodes=None,
-    infer_source_ontology=False,
     infer_target_ontology=False,
 ):
     try:
@@ -190,14 +187,6 @@ def run_matching_task(
 
             matching_task.update_dataframe(source_df=source, target_df=target)
             matching_task.set_nodes(nodes)
-
-            if infer_source_ontology:
-                app.logger.info(
-                    (
-                        "Source ontology inference is handled by a separate "
-                        "task; skipping here."
-                    )
-                )
 
             # Repeat for target ontology...
             if infer_target_ontology:
@@ -224,7 +213,7 @@ def run_matching_task(
                     log_message="Target ontology inferred.",
                 )
 
-            candidates = matching_task.get_candidates()
+            candidates = matching_task.get_candidates(task_state=task_state)
 
             return {"status": "completed", "candidates_count": len(candidates)}
 
@@ -322,17 +311,20 @@ def matching_status():
         )
     )
 
+    # Always try to read the task state's JSON for progress/logs
+    task_state = TaskState(task_type="matching", task_id=task_id, new_task=False).get_task_state()
+
     if task.state == "PENDING":
         response = {
             "status": "pending",
             "message": "Task is pending",
-            "taskState": None,
+            "taskState": task_state,
         }
     elif task.state == "FAILURE":
         response = {
             "status": "failed",
             "message": str(task.info),
-            "taskState": None,
+            "taskState": task_state,
         }
     elif task.state == "SUCCESS":
         source = pd.read_csv(".source.csv")
@@ -351,10 +343,9 @@ def matching_status():
         response = {
             "status": "completed",
             "result": task.result,
-            "taskState": None,
+            "taskState": task_state,
         }
     else:
-        task_state = TaskState(task_type="matching", task_id=task_id, new_task=False).get_task_state()
         response = {
             "status": task.state,
             "message": "Task is in progress",
