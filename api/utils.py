@@ -426,15 +426,26 @@ class TaskState:
         }
         self._save_task_state()
 
+    def _task_state_dir(self) -> str:
+        # Always anchor to the api directory regardless of current working directory
+        return os.path.dirname(os.path.abspath(__file__))
+
     def _task_state_path(self) -> str:
-        return f"./api/task_state_{self.task_type}_{self.task_id}.json"
+        # New canonical location inside the api directory
+        return os.path.join(
+            self._task_state_dir(), f"task_state_{self.task_type}_{self.task_id}.json"
+        )
 
     def _save_task_state(self) -> None:
         # add attempt to save task state
         for attempt in range(5):
             try:
-                with open(self._task_state_path(), "w") as f:
+                # Ensure directory exists
+                os.makedirs(self._task_state_dir(), exist_ok=True)
+                path = self._task_state_path()
+                with open(path, "w") as f:
                     json.dump(self.task_state, f, indent=4)
+                logger.info(f"Saved task state to {os.path.abspath(path)}")
                 break
             except Exception as e:
                 logger.error(f"Failed to save task state: {str(e)}, attempt {attempt + 1}")
@@ -444,8 +455,11 @@ class TaskState:
         # add attempt to load task state
         for attempt in range(5):
             try:
-                if os.path.exists(self._task_state_path()):
-                    with open(self._task_state_path(), "r") as f:
+                # Try canonical path first
+                canonical_path = self._task_state_path()
+                if os.path.exists(canonical_path):
+                    with open(canonical_path, "r") as f:
+                        logger.info(f"Loading task state from {os.path.abspath(canonical_path)}")
                         loaded_state = json.load(f)
                     self.task_state = loaded_state
                     return
