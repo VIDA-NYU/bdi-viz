@@ -7,15 +7,12 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [isLoadingGlobal, setIsLoadingGlobal] = useState(false);
     const [developerMode, setDeveloperMode] = useState(false);
     const [hoverMode, setHoverMode] = useState(false);
-    const [taskState, setTaskState] = useState<TaskState>({
-        status: "idle",
-        progress: 0,
-        current_step: "",
-        completed_steps: 0,
-        total_steps: 0,
-        logs: [],
-    });
+    const [taskStates, setTaskStates] = useState<Record<string, TaskState>>({});
     const [ontologySearchPopupOpen, setOntologySearchPopupOpen] = useState(false);
+
+    const setTaskStateFor = (taskType: string, state: TaskState) => {
+        setTaskStates(prev => ({ ...prev, [taskType]: state }));
+    };
 
     const value = {
         isLoadingGlobal,
@@ -24,8 +21,8 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
         setDeveloperMode,
         hoverMode,
         setHoverMode,
-        taskState,
-        setTaskState,
+        taskStates,
+        setTaskStateFor,
         ontologySearchPopupOpen,
         setOntologySearchPopupOpen,
     }

@@ -1,3 +1,4 @@
+import time
 import importlib
 import json
 import logging
@@ -6,7 +7,7 @@ import re
 import subprocess
 import sys
 from io import StringIO
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import requests
@@ -381,3 +382,116 @@ def verify_new_matcher(
         error_message = f"Error verifying new matcher: {e}"
         logger.error(error_message)
         return error_message, None
+
+
+class TaskState:
+    """
+    A class to represent the state of a task.
+    task_type: str, task type
+    task_id: str, celery task id
+    state: str, task state
+    progress: int, task progress
+    log_message: str, task log message
+    total_steps: int, total steps
+    completed_steps: int, completed steps
+    logs: list, task logs
+
+    example json style:
+        {
+            "status": "idle",
+            "progress": 0,
+            "current_step": "Task start...",
+            "total_steps": 4,
+            "completed_steps": 0,
+            "logs": [],
+        }
+    """
+
+    def __init__(self, task_type: str, task_id: str, new_task: bool = False) -> None:
+        self.task_type = task_type
+        self.task_id = task_id
+        if new_task:
+            self._initialize_task_state()
+        else:
+            self._load_task_state()
+
+    def _initialize_task_state(self) -> None:
+        self.task_state = {
+            "status": "idle",
+            "progress": 0,
+            "current_step": "Task start...",
+            "total_steps": 4,
+            "completed_steps": 0,
+            "logs": [],
+        }
+        self._save_task_state()
+
+    def _task_state_path(self) -> str:
+        return f"./api/task_state_{self.task_type}_{self.task_id}.json"
+
+    def _save_task_state(self) -> None:
+        # add attempt to save task state
+        for attempt in range(5):
+            try:
+                with open(self._task_state_path(), "w") as f:
+                    json.dump(self.task_state, f, indent=4)
+                break
+            except Exception as e:
+                logger.error(f"Failed to save task state: {str(e)}, attempt {attempt + 1}")
+                time.sleep(0.05 * (attempt + 1))
+
+    def _load_task_state(self) -> None:
+        # add attempt to load task state
+        for attempt in range(5):
+            try:
+                if os.path.exists(self._task_state_path()):
+                    with open(self._task_state_path(), "r") as f:
+                        loaded_state = json.load(f)
+                    self.task_state = loaded_state
+                    return
+            except Exception as e:
+                logger.error(f"Failed to load task state: {str(e)}, attempt {attempt + 1}")
+                time.sleep(0.05 * (attempt + 1))
+        self._initialize_task_state()
+
+    def _update_task_state(
+        self,
+        replace_last_log: bool = False,
+        log_message: Optional[str] = None,
+        **kwargs,
+    ) -> None:
+        """Update task state with provided values in a uniform way"""
+        updated = False
+        for key in kwargs:
+            if key in self.task_state:
+                self.task_state[key] = kwargs[key]
+                updated = True
+
+        # Add log entry for step changes, progress changes, or explicit log_message
+        log_entry = None
+        if "current_step" in kwargs or "progress" in kwargs or log_message:
+            log_entry = {
+                "timestamp": pd.Timestamp.now().isoformat(),
+                "step": kwargs.get("current_step", self.task_state["current_step"]),
+                "progress": kwargs.get("progress", self.task_state["progress"]),
+            }
+            if log_message:
+                log_entry["message"] = log_message
+
+            if replace_last_log and self.task_state["logs"]:
+                self.task_state["logs"][-1] = log_entry
+            else:
+                self.task_state["logs"].append(log_entry)
+
+            logger.info(
+                f"Task step: {log_entry['step']} - Progress: {log_entry['progress']}%"
+                + (f" - {log_message}" if log_message else "")
+            )
+
+        # Save task state after each update
+        if updated or log_entry:
+            self._save_task_state()
+
+    def get_task_state(self) -> Dict[str, Any]:
+        """Return the current state of the task for monitoring progress"""
+        return self.task_state

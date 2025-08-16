@@ -56,7 +56,7 @@ class MyCustomMatcher():
 
 const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
     ({ open, onClose, onSubmit, matchersCallback }, ref) => {
-        const { isLoadingGlobal, setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext); 
+        const { isLoadingGlobal, setIsLoadingGlobal, setTaskStateFor } = useContext(SettingsGlobalContext); 
         const [name, setName] = useState('MyCustomMatcher');
         const [code, setCode] = useState('');
         const [paramItems, setParamItems] = useState<ParamItem[]>([{ name: '', value: '' }]);
@@ -171,7 +171,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                     },
                     taskStateCallback: (taskState) => {
                         console.log("Task state:", taskState);
-                        setTaskState(taskState);
+                        setTaskStateFor('new_matcher', taskState);
                     }
                 });
                 // Reset form

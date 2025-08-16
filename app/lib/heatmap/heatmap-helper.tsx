@@ -7,10 +7,18 @@ import https from 'https';
 
 // Matching Task
 
-const startMatchingTask = async (uploadData: FormData) => {
+interface StartMatchingIds {
+    taskId: string;
+    sourceOntologyTaskId?: string | null;
+}
+
+const startMatchingTask = async (uploadData: FormData): Promise<StartMatchingIds> => {
     console.log("startMatchingTask", uploadData.get("type"));
     const response = await axios.post("/api/matching/start", uploadData);
-    return response.data.task_id;
+    return {
+        taskId: response.data.task_id,
+        sourceOntologyTaskId: response.data.source_ontology_task_id ?? null,
+    };
 };
 
 interface MatchingStatusProps {
@@ -51,18 +59,77 @@ const pollForMatchingStatus = async ({
     }, 5000);
 };
 
+// Source Ontology Task
+
+interface SourceOntologyStatusProps {
+    taskId: string;
+    taskStateCallback?: (taskState: TaskState) => void;
+    onReady: (sourceOntology: Ontology[]) => void;
+    onError: (error: any) => void;
+}
+
+const pollForSourceOntologyStatus = async ({
+    taskId,
+    taskStateCallback,
+    onReady,
+    onError,
+}: SourceOntologyStatusProps) => {
+    const interval = setInterval(async () => {
+        try {
+            const response = await axios.post("/api/ontology/source/status", { taskId });
+            const status = response.data.status;
+            const taskState = response.data.taskState as TaskState;
+            if (taskStateCallback) taskStateCallback(taskState);
+
+            if (status === "completed") {
+                clearInterval(interval);
+                // fetch the inferred source ontology
+                getSourceOntology({
+                    callback: (sourceOntology) => onReady(sourceOntology),
+                });
+            } else if (status === "failed") {
+                clearInterval(interval);
+                onError(response.data.message || "Source ontology task failed");
+            }
+        } catch (error) {
+            onError(error);
+            console.error("Error polling for source ontology status:", error);
+            clearInterval(interval);
+        }
+    }, 5000);
+};
+
 interface RunMatchingTaskProps {
     uploadData: FormData;
     onResult: (result: any) => void;
     onError: (error: any) => void;
     taskStateCallback: (taskState: TaskState) => void;
+    onSourceOntologyReady?: (ontology: Ontology[]) => void;
+    sourceOntologyTaskStateCallback?: (taskState: TaskState) => void;
 }
 
-const runMatchingTask = async ({ uploadData, onResult, onError, taskStateCallback }: RunMatchingTaskProps) => {
+const runMatchingTask = async ({
+    uploadData,
+    onResult,
+    onError,
+    taskStateCallback,
+    onSourceOntologyReady,
+    sourceOntologyTaskStateCallback,
+}: RunMatchingTaskProps) => {
     try {
-        const taskId = await startMatchingTask(uploadData);
-        console.log("Matching task started with taskId:", taskId);
+        const { taskId, sourceOntologyTaskId } = await startMatchingTask(uploadData);
+        console.log("Matching task started with taskId:", taskId, "; source task:", sourceOntologyTaskId);
+        // Start matching poller
         pollForMatchingStatus({ taskId, taskStateCallback, onResult, onError });
+        // Start source ontology poller if provided by backend and callbacks exist
+        if (sourceOntologyTaskId && onSourceOntologyReady) {
+            pollForSourceOntologyStatus({
+                taskId: sourceOntologyTaskId,
+                taskStateCallback: sourceOntologyTaskStateCallback,
+                onReady: onSourceOntologyReady,
+                onError,
+            });
+        }
     } catch (error) {
         console.error("Error running matching task:", error);
         onError(error);
