@@ -7,6 +7,7 @@ from uuid import uuid4
 import pandas as pd
 from celery import Celery, Task
 from flask import Flask, request
+import time
 
 # Lazy import the agent to save resources
 from .langchain.pydantic import AgentResponse
@@ -19,6 +20,7 @@ from .utils import (
     parse_llm_generated_ontology,
     read_candidate_explanation_json,
     write_candidate_explanation_json,
+    TaskState,
 )
 
 GDC_DATA_PATH = os.path.join(os.path.dirname(__file__), "./resources/cptac-3.csv")
@@ -107,6 +109,63 @@ def get_langgraph_agent():
 
 
 @celery.task(bind=True)
+def infer_source_ontology_task(self, session):
+    try:
+        app.logger.info(f"Running source ontology task for session: {session}")
+        celery_task_id = getattr(self.request, "id", "unknown")
+        task_state = TaskState(task_type="source", task_id=celery_task_id, new_task=True)
+        task_state._update_task_state(
+            status="running",
+            progress=0,
+            current_step="Infer source ontology",
+            completed_steps=0,
+            log_message="Starting source ontology inference.",
+        )
+
+        if not os.path.exists(".source.csv"):
+            task_state._update_task_state(
+                status="failed",
+                progress=100,
+                log_message="Source file .source.csv not found.",
+            )
+            return {"status": "failed", "message": "Source file not found"}
+
+        source = pd.read_csv(".source.csv")
+
+        agent = get_agent()
+        properties = []
+        total_cols = max(1, len(source.columns))
+        for i, (_slice, ontology) in enumerate(agent.infer_ontology(source)):
+            ontology = ontology.model_dump()
+            properties += ontology.get("properties", [])
+            progress = min(95, int(((i + 1) / total_cols) * 90))
+            task_state._update_task_state(
+                progress=progress,
+                current_step="Infer source ontology",
+                log_message=f"Source ontology batch {i+1}...",
+                replace_last_log=True,
+            )
+
+        parsed_ontology = parse_llm_generated_ontology(
+            {"properties": properties}
+        )
+        with open(".source.json", "w") as f:
+            json.dump(parsed_ontology, f)
+
+        task_state._update_task_state(
+            status="completed",
+            progress=100,
+            completed_steps=1,
+            current_step="Infer source ontology",
+            log_message="Source ontology inferred.",
+        )
+        return {"status": "completed", "taskId": celery_task_id}
+    except Exception as e:
+        app.logger.error(f"Error in infer_source_ontology_task: {str(e)}")
+        return {"status": "failed", "message": str(e)}
+
+
+@celery.task(bind=True)
 def run_matching_task(
     self,
     session,
@@ -115,6 +174,8 @@ def run_matching_task(
     infer_target_ontology=False,
 ):
     try:
+        celery_task_id = getattr(self.request, "id", "unknown")
+        task_state = TaskState(task_type="matching", task_id=celery_task_id, new_task=True)
         app.logger.info(f"Running matching task for session: {session}")
 
         # Clear specific namespaces for new task
@@ -128,32 +189,14 @@ def run_matching_task(
             target = pd.read_csv(".target.csv")
 
             matching_task.update_dataframe(source_df=source, target_df=target)
-            matching_task._initialize_task_state()
             matching_task.set_nodes(nodes)
 
             if infer_source_ontology:
-                agent = get_agent()
-                properties = []
-                for i, (column_slice, ontology) in enumerate(
-                    agent.infer_ontology(source)
-                ):
-                    ontology = ontology.model_dump()
-                    properties += ontology["properties"]
-                    matching_task._update_task_state(
-                        current_step="Infer source ontology",
-                        progress=int((25 / (len(source.columns))) * i),
-                        # total 5 percent, each i is a batch of 5 columns
-                        log_message=f"Source ontology: {i}...",
+                app.logger.info(
+                    (
+                        "Source ontology inference is handled by a separate "
+                        "task; skipping here."
                     )
-                parsed_ontology = parse_llm_generated_ontology(
-                    {"properties": properties}
-                )
-                with open(".source.json", "w") as f:
-                    json.dump(parsed_ontology, f)
-                matching_task._update_task_state(
-                    current_step="Infer source ontology",
-                    progress=5,
-                    log_message="Source ontology inferred.",
                 )
 
             # Repeat for target ontology...
@@ -165,7 +208,7 @@ def run_matching_task(
                 ):
                     ontology = ontology.model_dump()
                     properties.extend(ontology["properties"])
-                    matching_task._update_task_state(
+                    task_state._update_task_state(
                         current_step="Infer target ontology",
                         progress=int(len(target.columns) // 5 * i) + 5,
                         log_message=f"Target ontology: {i}...",
@@ -175,7 +218,7 @@ def run_matching_task(
                 )
                 with open(".target.json", "w") as f:
                     json.dump(parsed_ontology, f)
-                matching_task._update_task_state(
+                task_state._update_task_state(
                     current_step="Infer target ontology",
                     progress=10,
                     log_message="Target ontology inferred.",
@@ -242,14 +285,21 @@ def start_matching():
     memory_retriever = get_memory_retriever()
     memory_retriever.clear_namespaces(["user_memory", "schema", "explanations"])
 
-    # Fix argument order: pass nodes=None explicitly
+    # Kick off tasks in parallel: source ontology (if needed) and matching
+    source_task = None
+    if infer_source_ontology:
+        source_task = infer_source_ontology_task.delay(session)
+
+    # Matching task should not wait for source ontology
     task = run_matching_task.delay(
         session,
         nodes=None,
-        infer_source_ontology=infer_source_ontology,
         infer_target_ontology=infer_target_ontology,
     )
-    return {"task_id": task.id}
+    return {
+        "task_id": task.id,
+        "source_ontology_task_id": (source_task.id if source_task else None),
+    }
 
 
 @app.route("/api/matching/status", methods=["POST"])
@@ -266,7 +316,10 @@ def matching_status():
     task = run_matching_task.AsyncResult(task_id)
 
     app.logger.info(
-        f"Task state: {task.state}, {task.info}, {task.result}, " f"{task.traceback}"
+        (
+            f"Task state: {task.state}, {task.info}, "
+            f"{task.result}, {task.traceback}"
+        )
     )
 
     if task.state == "PENDING":
@@ -301,7 +354,54 @@ def matching_status():
             "taskState": None,
         }
     else:
-        task_state = matching_task._load_task_state()
+        task_state = TaskState(task_type="matching", task_id=task_id, new_task=False).get_task_state()
+        response = {
+            "status": task.state,
+            "message": "Task is in progress",
+            "taskState": task_state,
+        }
+
+    return response
+
+
+@app.route("/api/ontology/source/status", methods=["POST"])
+def source_ontology_status():
+    data = request.json or {}
+    task_id = data.get("taskId")
+
+    if not task_id:
+        return {"status": "error", "message": "No task_id provided"}, 400
+
+    task = infer_source_ontology_task.AsyncResult(task_id)
+
+    app.logger.info(
+        (
+            f"Source ontology task state: {task.state}, {task.info}, "
+            f"{task.result}, {task.traceback}"
+        )
+    )
+
+    task_state = TaskState(task_type="source", task_id=task_id, new_task=False).get_task_state()
+
+    if task.state == "PENDING":
+        response = {
+            "status": "pending",
+            "message": "Task is pending",
+            "taskState": task_state,
+        }
+    elif task.state == "FAILURE":
+        response = {
+            "status": "failed",
+            "message": str(task.info),
+            "taskState": task_state,
+        }
+    elif task.state == "SUCCESS":
+        response = {
+            "status": "completed",
+            "result": task.result,
+            "taskState": task_state,
+        }
+    else:
         response = {
             "status": task.state,
             "message": "Task is in progress",
@@ -494,6 +594,8 @@ def get_matchers():
 @celery.task(bind=True)
 def run_new_matcher_task(self, session, name, code, params):
     try:
+        celery_task_id = getattr(self.request, "id", "unknown")
+        task_state = TaskState(task_type="new_matcher", task_id=celery_task_id, new_task=True)
         app.logger.info(f"Running new matcher task for session: {session}")
         matching_task = SESSION_MANAGER.get_session(session).matching_task
 
@@ -509,7 +611,7 @@ def run_new_matcher_task(self, session, name, code, params):
                     target_df=target,
                 )
             _ = matching_task.get_candidates()
-        error, matchers = matching_task.new_matcher(name, code, params)
+        error, matchers = matching_task.new_matcher(name, code, params, task_state)
 
         if error:
             return {"status": "failed", "error": error, "matchers": None}
@@ -551,7 +653,10 @@ def matcher_status():
     task = run_new_matcher_task.AsyncResult(task_id)
 
     app.logger.info(
-        f"Task state: {task.state}, {task.info}, {task.result}, " f"{task.traceback}"
+        (
+            f"Task state: {task.state}, {task.info}, "
+            f"{task.result}, {task.traceback}"
+        )
     )
 
     if task.state == "PENDING":
@@ -574,15 +679,17 @@ def matcher_status():
 
         response = {
             "status": result["status"],
-            "message": (result["error"] if result["status"] == "failed" else "success"),
-            "taskState": matching_task._load_task_state(),
+            "message": (
+                result["error"] if result["status"] == "failed" else "success"
+            ),
+            "taskState": TaskState(task_type="new_matcher", task_id=task_id, new_task=False).get_task_state(),
             "matchers": matching_task.get_matchers(),
         }
     else:
         response = {
             "status": task.state,
             "message": "Task is in progress",
-            "taskState": matching_task._load_task_state(),
+            "taskState": TaskState(task_type="new_matcher", task_id=task_id, new_task=False).get_task_state(),
         }
 
     return response

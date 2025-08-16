@@ -13,7 +13,7 @@ interface RematchButtonProps {
 }
 
 export default function RematchButton({ callback, ontologyCallback, uniqueValuesCallback, valueMatchesCallback }: RematchButtonProps) {
-    const { setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext);
+    const { setIsLoadingGlobal, setTaskStateFor } = useContext(SettingsGlobalContext);
     const { selectedNodes } = useContext(HighlightGlobalContext);
 
     const handleRematch = () => {
@@ -36,7 +36,7 @@ export default function RematchButton({ callback, ontologyCallback, uniqueValues
                 },
                 taskStateCallback: (taskState) => {
                     console.log("Task state:", taskState);
-                    setTaskState(taskState);
+                    setTaskStateFor('matching', taskState);
                 }
             });
         } catch (error) {

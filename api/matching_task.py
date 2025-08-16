@@ -26,6 +26,7 @@ from .utils import (
     load_ontology_flat,
     load_property,
     verify_new_matcher,
+    TaskState,
 )
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -75,9 +76,6 @@ class MatchingTask:
         self.history = UserOperationHistory()
         self.weight_updater = None
 
-        # Task state tracking
-        self._initialize_task_state()
-
     def _initialize_cache(self) -> None:
         # Try to load existing cache first
         cached_json = self._import_cache_from_json()
@@ -108,17 +106,6 @@ class MatchingTask:
                 "matcher_code": {},
                 "nodes": [],  # Initialize empty nodes list
             }
-
-    def _initialize_task_state(self) -> None:
-        self.task_state = {
-            "status": "idle",
-            "progress": 0,
-            "current_step": "Task start...",
-            "total_steps": 4,
-            "completed_steps": 0,
-            "logs": [],
-        }
-        self._save_task_state()
 
     def _load_cached_matchers_async(self, cached_json: Dict[str, Any]) -> None:
         """Start an asynchronous process to load cached matchers"""
@@ -292,12 +279,15 @@ class MatchingTask:
         else:
             logger.info("No columns found for specified nodes, keeping all columns")
 
-    def get_candidates(self, is_candidates_cached: bool = True) -> Dict[str, list]:
+    def get_candidates(self, is_candidates_cached: bool = True, task_state: Optional[TaskState] = None) -> Dict[str, list]:
         with self.lock:
             if self.source_df is None or self.target_df is None:
                 raise ValueError("Source and Target dataframes must be provided.")
+            
+            if task_state is None:
+                task_state = TaskState(task_type="matching", task_id="api_call", new_task=True)
 
-            self._update_task_state(
+            task_state._update_task_state(
                 status="running",
                 progress=20,
                 current_step="Computing hashes",
@@ -306,7 +296,7 @@ class MatchingTask:
             )
 
             source_hash, target_hash = self._compute_hashes()
-            self._update_task_state(
+            task_state._update_task_state(
                 progress=30,
                 current_step="Checking cache",
                 completed_steps=1,
@@ -324,7 +314,7 @@ class MatchingTask:
             num_of_columns = len(self.target_df.columns)
             self._filter_target_by_nodes()
             num_of_columns_after_filtering = len(self.target_df.columns)
-            self._update_task_state(
+            task_state._update_task_state(
                 progress=50,
                 current_step="Filtering target by nodes",
                 completed_steps=2,
@@ -339,7 +329,7 @@ class MatchingTask:
             if self._is_cache_valid(cached_json, source_hash, target_hash):
                 self.cached_candidates = cached_json
                 candidates = cached_json["candidates"]
-                self._update_task_state(
+                task_state._update_task_state(
                     progress=75,
                     current_step="Using cached results",
                     completed_steps=3,
@@ -350,7 +340,7 @@ class MatchingTask:
                 self.cached_candidates, source_hash, target_hash
             ):
                 candidates = self.get_cached_candidates()
-                self._update_task_state(
+                task_state._update_task_state(
                     progress=75,
                     current_step="Using in-memory cached results",
                     completed_steps=3,
@@ -358,18 +348,18 @@ class MatchingTask:
                 )
             # Generate new candidates
             else:
-                self._update_task_state(
+                task_state._update_task_state(
                     progress=40,
                     current_step="Generating candidates",
                     completed_steps=2,
                     log_message=("Generating new candidates."),
                 )
                 candidates = self._generate_candidates(
-                    source_hash, target_hash, is_candidates_cached
+                    source_hash, target_hash, is_candidates_cached, task_state
                 )
 
             # Always initialize weight updater with current matchers and candidates
-            self._update_task_state(
+            task_state._update_task_state(
                 current_step="Updating matcher weights",
                 log_message=("Updating matcher weights."),
             )
@@ -382,7 +372,7 @@ class MatchingTask:
             # Update the cached matchers with normalized weights
             self.cached_candidates["matchers"] = self.weight_updater.matchers
             self._export_cache_to_json(self.cached_candidates)
-            self._update_task_state(
+            task_state._update_task_state(
                 progress=100,
                 current_step="Complete",
                 status="complete",
@@ -391,69 +381,6 @@ class MatchingTask:
             )
 
             return candidates
-
-    def _update_task_state(
-        self,
-        log_message: Optional[str] = None,
-        replace_last_log: bool = False,
-        **kwargs,
-    ) -> None:
-        """Update task state with provided values in a uniform way"""
-        updated = False
-        for key in kwargs:
-            if key in self.task_state:
-                self.task_state[key] = kwargs[key]
-                updated = True
-
-        # Add log entry for step changes, progress changes, or explicit log_message
-        log_entry = None
-        if "current_step" in kwargs or "progress" in kwargs or log_message:
-            log_entry = {
-                "timestamp": pd.Timestamp.now().isoformat(),
-                "step": kwargs.get("current_step", self.task_state["current_step"]),
-                "progress": kwargs.get("progress", self.task_state["progress"]),
-            }
-            if log_message:
-                log_entry["message"] = log_message
-
-            if replace_last_log and self.task_state["logs"]:
-                self.task_state["logs"][-1] = log_entry
-            else:
-                self.task_state["logs"].append(log_entry)
-
-            logger.info(
-                f"Task step: {log_entry['step']} - Progress: {log_entry['progress']}%"
-                + (f" - {log_message}" if log_message else "")
-            )
-
-        # Save task state after each update
-        if updated or log_entry:
-            self._save_task_state()
-
-    def _save_task_state(self) -> None:
-        """Save task state to a JSON file"""
-        task_state_path = os.path.join(os.path.dirname(__file__), "task_state.json")
-        try:
-            with open(task_state_path, "w") as f:
-                json.dump(self.task_state, f, indent=4)
-        except Exception as e:
-            logger.error(f"Failed to save task state: {str(e)}")
-
-    def _load_task_state(self) -> Optional[Dict[str, Any]]:
-        """Load task state from a JSON file if it exists"""
-        task_state_path = os.path.join(os.path.dirname(__file__), "task_state.json")
-        if os.path.exists(task_state_path):
-            try:
-                with open(task_state_path, "r") as f:
-                    loaded_state = json.load(f)
-                return loaded_state
-            except Exception as e:
-                logger.error(f"Failed to load task state: {str(e)}")
-        return None
-
-    def get_task_state(self) -> Dict[str, Any]:
-        """Return the current state of the task for monitoring progress"""
-        return self.task_state
 
     def append_candidates_from_agent(
         self, source_col: str, candidates: List[Dict[str, Any]]
@@ -606,7 +533,7 @@ class MatchingTask:
             return False
 
     def _generate_candidates(
-        self, source_hash: int, target_hash: int, is_candidates_cached: bool
+        self, source_hash: int, target_hash: int, is_candidates_cached: bool, task_state: TaskState
     ) -> Dict[str, list]:
         # Define generation steps for better logging
         generation_steps = [
@@ -617,7 +544,7 @@ class MatchingTask:
             "Generating value matches",
         ]
 
-        self._update_task_state(
+        task_state._update_task_state(
             current_step=generation_steps[0],
             log_message="Starting embedding generation.",
         )
@@ -634,19 +561,19 @@ class MatchingTask:
         source_embeddings = embedding_clusterer.get_source_embeddings(
             source_df=self.source_df
         )
-        self._update_task_state(progress=60, log_message="Source embeddings generated.")
+        task_state._update_task_state(progress=60, log_message="Source embeddings generated.")
 
         # Step 2: Cluster source columns
-        self._update_task_state(
+        task_state._update_task_state(
             current_step=generation_steps[1], log_message="Clustering source columns."
         )
 
         # Generate clusters
         source_clusters = self._generate_source_clusters(source_embeddings)
-        self._update_task_state(progress=70, log_message="Source columns clustered.")
+        task_state._update_task_state(progress=70, log_message="Source columns clustered.")
 
         # Step 3: Apply candidate quadrants
-        self._update_task_state(
+        task_state._update_task_state(
             current_step=generation_steps[2],
             log_message="Identifying candidate quadrants.",
         )
@@ -666,12 +593,12 @@ class MatchingTask:
             layered_candidates.extend(
                 self.candidate_quadrants.get_easy_target_json(source_column)
             )
-        self._update_task_state(
+        task_state._update_task_state(
             progress=80, log_message="Candidate quadrants identified."
         )
 
         # Step 4: Run matchers
-        self._update_task_state(
+        task_state._update_task_state(
             current_step=generation_steps[3], log_message="Running matchers."
         )
         total_matchers = len(self.matcher_objs)
@@ -686,16 +613,16 @@ class MatchingTask:
             layered_candidates.extend(matcher_candidates)
             # Calculate progress based on matcher position
             matcher_progress = 80 + ((i + 1) / total_matchers * 10)
-            self._update_task_state(
+            task_state._update_task_state(
                 progress=matcher_progress,
                 current_step=f"Completed matcher: {matcher_name}",
                 log_message=f"Matcher {matcher_name} produced {len(matcher_candidates)} candidates.",
             )
 
-        self._update_task_state(progress=90, log_message="All matchers completed.")
+        task_state._update_task_state(progress=90, log_message="All matchers completed.")
 
         # Step 5: Generate value matches
-        self._update_task_state(
+        task_state._update_task_state(
             current_step=generation_steps[4],
             log_message="Generating value matches for candidates.",
         )
@@ -706,12 +633,12 @@ class MatchingTask:
                 candidate["sourceColumn"], candidate["targetColumn"]
             )
             if idx % 10 == 0:
-                self._update_task_state(
+                task_state._update_task_state(
                     log_message=f"Generated value matches for {idx+1}/{len(layered_candidates)} candidates.",
                     replace_last_log=True,
                 )
 
-        self._update_task_state(
+        task_state._update_task_state(
             progress=95, log_message="Value matches generated for all candidates."
         )
 
@@ -739,9 +666,9 @@ class MatchingTask:
                 "nodes": self.cached_candidates["nodes"],  # Preserve nodes in cache
             }
             self._export_cache_to_json(self.cached_candidates)
-            self._update_task_state(log_message="Cache exported to JSON.")
+            task_state._update_task_state(log_message="Cache exported to JSON.")
 
-        self._update_task_state(
+        task_state._update_task_state(
             progress=100, log_message="Candidate generation complete."
         )
         return layered_candidates
@@ -1303,9 +1230,12 @@ class MatchingTask:
         self.cached_candidates["matchers"] = matchers
 
     def new_matcher(
-        self, name: str, code: str, params: Dict[str, Any]
+        self, name: str, code: str, params: Dict[str, Any], task_state: Optional[TaskState] = None
     ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         try:
+            if task_state is None:
+                task_state = TaskState(task_type="new_matcher", task_id="api_call", new_task=True)
+
             if "name" not in params:
                 params["name"] = name
 
@@ -1318,7 +1248,7 @@ class MatchingTask:
             # Verify and create the new matcher
             error, matcher_obj = verify_new_matcher(name, code, params)
             if error:
-                self._update_task_state(
+                task_state._update_task_state(
                     status="error",
                     progress=100,
                     current_step=f"Error creating new matcher: {error}",
@@ -1342,10 +1272,10 @@ class MatchingTask:
 
                 # Clear logs for new matcher task
                 self.task_state["logs"] = []
-                self._update_task_state(
+                task_state._update_task_state(
                     status="running",
                     progress=0,
-                    current_step=f"Task start",
+                    current_step="Task start",
                     log_message=f"Starting new matcher task '{name}'. Logs cleared.",
                 )
 
@@ -1353,7 +1283,7 @@ class MatchingTask:
                 existing_candidates = self.get_cached_candidates()
 
                 # Run only the new matcher
-                self._update_task_state(
+                task_state._update_task_state(
                     progress=10,
                     current_step=f"Running new matcher: {name}",
                     log_message=f"Running matcher_obj.top_matches for '{name}'.",
@@ -1365,7 +1295,7 @@ class MatchingTask:
                 )
 
                 # Update progress
-                self._update_task_state(
+                task_state._update_task_state(
                     progress=50,
                     current_step=f"Generating value matches for {name}",
                     log_message=f"Generating value matches for matcher '{name}'.",
@@ -1377,8 +1307,11 @@ class MatchingTask:
                         candidate["sourceColumn"], candidate["targetColumn"]
                     )
                     if idx % 10 == 0:
-                        self._update_task_state(
-                            log_message=f"Generated value matches for {idx+1}/{len(new_matcher_candidates)} candidates in matcher '{name}'.",
+                        task_state._update_task_state(
+                            log_message=(
+                                f"Generated value matches for {idx+1}/{len(new_matcher_candidates)} "
+                                f"candidates in matcher '{name}'."
+                            ),
                             replace_last_log=True,
                         )
 
@@ -1400,7 +1333,7 @@ class MatchingTask:
 
                 # Export updated cache to JSON
                 self._export_cache_to_json(self.cached_candidates)
-                self._update_task_state(
+                task_state._update_task_state(
                     progress=90,
                     log_message=f"Cache exported to JSON after running matcher '{name}'.",
                 )
@@ -1411,13 +1344,13 @@ class MatchingTask:
                         self.cached_candidates["matchers"]
                     )
                 )
-                self._update_task_state(
+                task_state._update_task_state(
                     progress=95,
                     log_message=f"Matcher weights updated after running matcher '{name}'.",
                 )
 
                 # Update task state to indicate completion
-                self._update_task_state(
+                task_state._update_task_state(
                     progress=100,
                     current_step=f"Completed new matcher: {name}",
                     status="complete",
@@ -1428,7 +1361,7 @@ class MatchingTask:
         except Exception as e:
             error_message = f"Error creating or running new matcher '{name}': {str(e)}"
             # Record detailed error message to task state
-            self._update_task_state(
+            task_state._update_task_state(
                 status="failed",
                 progress=100,
                 current_step=error_message,

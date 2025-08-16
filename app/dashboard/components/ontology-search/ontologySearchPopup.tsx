@@ -54,7 +54,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
     const { ontologySearchPopupOpen, setOntologySearchPopupOpen } = useContext(
         SettingsGlobalContext
     );
-    const { setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext);
+    const { setIsLoadingGlobal, setTaskStateFor } = useContext(SettingsGlobalContext);
 
     useEffect(() => {
         if (chatEndRef.current) {
@@ -113,7 +113,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                         },
                         taskStateCallback: (taskState) => {
                             console.log("Task state:", taskState);
-                            setTaskState(taskState);
+                            setTaskStateFor('matching', taskState);
                         }
                     });
                 } else if (result.matcher_task_id) {
@@ -133,7 +133,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                         },
                         taskStateCallback: (taskState) => {
                             console.log("Task state:", taskState);
-                            setTaskState(taskState);
+                            setTaskStateFor('new_matcher', taskState);
                         }
                     });
                 }

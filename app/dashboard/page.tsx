@@ -40,8 +40,7 @@ export default function Dashboard() {
         setDeveloperMode,
         hoverMode,
         setHoverMode,
-        taskState,
-        setTaskState,
+        taskStates,
     } = useContext(SettingsGlobalContext);
 
     const {
@@ -286,11 +285,11 @@ export default function Dashboard() {
                     borderRadius: 2,
                     overflow: 'hidden'
                 }}>
-                    <LoadingPopup taskState={taskState} />
+                    <LoadingPopup taskStates={taskStates} />
                 </Box>
             </Box>
         );
-    }, [isLoadingGlobal, taskState]);
+    }, [isLoadingGlobal, taskStates]);
 
     return (
         <RootContainer>

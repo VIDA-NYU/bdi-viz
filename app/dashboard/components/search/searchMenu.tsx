@@ -39,7 +39,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
     const [query, setQuery] = useState<string>('');
     
     const { setGlobalQuery, selectedNodes } = useContext(HighlightGlobalContext);
-    const { setIsLoadingGlobal, setTaskState, ontologySearchPopupOpen, setOntologySearchPopupOpen } = useContext(SettingsGlobalContext);
+    const { setIsLoadingGlobal, setTaskStateFor, ontologySearchPopupOpen, setOntologySearchPopupOpen } = useContext(SettingsGlobalContext);
 
     const handleKeyPress = async (event: React.KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Enter') {
@@ -78,7 +78,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
                 },
                 taskStateCallback: (taskState) => {
                     console.log("Task state:", taskState);
-                    setTaskState(taskState);
+                    setTaskStateFor('matching', taskState);
                 }
             });
         } catch (error) {

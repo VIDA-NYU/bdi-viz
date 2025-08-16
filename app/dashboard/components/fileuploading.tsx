@@ -9,6 +9,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import { Dropzone } from "./file-upload/fileUploadBox";
+import { toastify } from "@/app/lib/toastify/toastify-helper";
 
 interface FileUploadingProps {
     callback: (candidates: Candidate[], sourceCluster: SourceCluster[]) => void;
@@ -25,7 +26,7 @@ const FileUploading: React.FC<FileUploadingProps> = ({
     uniqueValuesCallback,
     valueMatchesCallback,
 }) => {
-    const { setIsLoadingGlobal, setTaskState } = useContext(SettingsGlobalContext);
+    const { setIsLoadingGlobal, setTaskStateFor } = useContext(SettingsGlobalContext);
     const [isVisible, setIsVisible] = useState(false);
 
     const readFileAsync = (file: File | null): Promise<string | null> => {
@@ -71,32 +72,34 @@ const FileUploading: React.FC<FileUploadingProps> = ({
             if (targetCsv) uploadData.append("target_csv", targetCsv);
             if (targetJson) uploadData.append("target_json", targetJson);
 
-            // Add keep alive agents for long-running requests
-            // const httpAgent = new http.Agent({ keepAlive: true });
-            // const httpsAgent = new https.Agent({ keepAlive: true });
             runMatchingTask({
                 uploadData,
                 onResult: (result) => {
                     console.log("Matching task completed with result:", result);
                     getCachedResults({ callback });
                     getTargetOntology({ callback: ontologyCallback });
-                    getSourceOntology({ callback: sourceOntologyCallback });
                     getValueBins({ callback: uniqueValuesCallback });
                     getValueMatches({ callback: valueMatchesCallback });
-                    setIsLoadingGlobal(false);
                 },
                 onError: (error) => {
                     console.error("Matching task failed with error:", error);
-                    setIsLoadingGlobal(false);
+                    toastify("error", "Matching task failed with error: " + error);
                 },
                 taskStateCallback: (taskState) => {
                     console.log("Task state:", taskState);
-                    setTaskState(taskState);
-                }
+                    setTaskStateFor('matching', taskState);
+                },
+                onSourceOntologyReady: (sourceOntology) => {
+                    console.log("Source ontology task completed.");
+                    sourceOntologyCallback(sourceOntology);
+                },
+                sourceOntologyTaskStateCallback: (taskState) => {
+                    setTaskStateFor('source', taskState);
+                },
             });
         } catch (error) {
             console.error(error);
-            setIsLoadingGlobal(false);
+            toastify("error", "Internal error: " + error);
         }
     };
 
