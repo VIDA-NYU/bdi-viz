@@ -84,3 +84,8 @@ matching_results_test_session.json
 
 # jest
 report.json
+
+# celery
+api/task_state_*.json
+.task_state_*.json
+celery.log
