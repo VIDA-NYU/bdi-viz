@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "redis-server": "redis-server --port 6380 --dir .cache/redis",
-    "celery-dev": "celery -A api.index.celery worker --pool threads --loglevel=debug",
+    "celery-dev": "celery -A api.index.celery worker --pool threads --loglevel=debug --logfile=celery.log",
     "flask-dev": "FLASK_DEBUG=1 python3 -m flask --app api/index run -p 5328 --debug",
     "next-dev": "next dev",
-    "celery-start": "celery -A api.index.celery worker --pool threads --loglevel=info",
+    "celery-start": "celery -A api.index.celery worker -n match@%h --pool threads -Q matching,new_matcher --prefetch-multiplier=1 -Ofair --loglevel=info --logfile=celery.log",
+    "celery-ontology": "celery -A api.index.celery worker -n onto@%h --pool prefork -Q ontology --prefetch-multiplier=1 -Ofair --loglevel=info --logfile=celery.log",
     "next-start": "next start",
     "flask-start": "python3 -m flask --app api/index run -p 5328",
     "dev": "concurrently \"pnpm run next-dev\" \"pnpm run flask-dev\" \"pnpm run redis-server\" \"pnpm run celery-dev\"",
-    "start": "concurrently \"pnpm run next-start\" \"pnpm run flask-start\" \"pnpm run redis-server\" \"pnpm run celery-start\"",
+    "start": "concurrently \"pnpm run next-start\" \"pnpm run flask-start\" \"pnpm run redis-server\" \"pnpm run celery-start\" \"pnpm run celery-ontology\"",
     "build": "pip3 install -U pip && pip3 install -r requirements.txt --break-system-packages && next build",
     "lint": "next lint",
     "test": "jest"

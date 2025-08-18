@@ -443,8 +443,8 @@ Important:
                 },
                 self.agent_config,
             ):
-                logger.info(chunk)
-                logger.info("----")
+                # logger.info(chunk)
+                # logger.info("----")
                 responses.append(chunk)
 
             final_response = responses[-1]["agent"]["messages"][0].content

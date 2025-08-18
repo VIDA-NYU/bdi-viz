@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ReactNode } from 'react';
+import { useEffect, useMemo, useState, ReactNode } from 'react';
 import SettingsGlobalContext from './settings-context';
 
 const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -13,6 +13,17 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
     const setTaskStateFor = (taskType: string, state: TaskState) => {
         setTaskStates(prev => ({ ...prev, [taskType]: state }));
     };
+
+    // Derive global loading from task states: true if ANY task is active, false if all finished or none started
+    const isAnyTaskActive = useMemo(() => {
+        const values = Object.values(taskStates);
+        if (values.length === 0) return false;
+        return values.some((s) => ["running", "pending", "started"].includes((s?.status || "").toLowerCase()));
+    }, [taskStates]);
+
+    useEffect(() => {
+        setIsLoadingGlobal(isAnyTaskActive);
+    }, [isAnyTaskActive]);
 
     const value = {
         isLoadingGlobal,

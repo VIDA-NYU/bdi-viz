@@ -279,13 +279,17 @@ class MatchingTask:
         else:
             logger.info("No columns found for specified nodes, keeping all columns")
 
-    def get_candidates(self, is_candidates_cached: bool = True, task_state: Optional[TaskState] = None) -> Dict[str, list]:
+    def get_candidates(
+        self, is_candidates_cached: bool = True, task_state: Optional[TaskState] = None
+    ) -> Dict[str, list]:
         with self.lock:
             if self.source_df is None or self.target_df is None:
                 raise ValueError("Source and Target dataframes must be provided.")
-            
+
             if task_state is None:
-                task_state = TaskState(task_type="matching", task_id="api_call", new_task=True)
+                task_state = TaskState(
+                    task_type="matching", task_id="api_call", new_task=True
+                )
 
             task_state._update_task_state(
                 status="running",
@@ -495,9 +499,6 @@ class MatchingTask:
         # Preserve matcher code in the cache
         self.cached_candidates["matcher_code"] = cached_matcher_code.copy()
 
-    def update_exact_matches(self) -> List[Dict[str, Any]]:
-        return self.get_candidates()
-
     def _compute_hashes(self) -> Tuple[int, int]:
         source_hash = int(
             hashlib.sha256(
@@ -533,7 +534,11 @@ class MatchingTask:
             return False
 
     def _generate_candidates(
-        self, source_hash: int, target_hash: int, is_candidates_cached: bool, task_state: TaskState
+        self,
+        source_hash: int,
+        target_hash: int,
+        is_candidates_cached: bool,
+        task_state: TaskState,
     ) -> Dict[str, list]:
         # Define generation steps for better logging
         generation_steps = [
@@ -561,7 +566,9 @@ class MatchingTask:
         source_embeddings = embedding_clusterer.get_source_embeddings(
             source_df=self.source_df
         )
-        task_state._update_task_state(progress=60, log_message="Source embeddings generated.")
+        task_state._update_task_state(
+            progress=60, log_message="Source embeddings generated."
+        )
 
         # Step 2: Cluster source columns
         task_state._update_task_state(
@@ -570,7 +577,9 @@ class MatchingTask:
 
         # Generate clusters
         source_clusters = self._generate_source_clusters(source_embeddings)
-        task_state._update_task_state(progress=70, log_message="Source columns clustered.")
+        task_state._update_task_state(
+            progress=70, log_message="Source columns clustered."
+        )
 
         # Step 3: Apply candidate quadrants
         task_state._update_task_state(
@@ -619,7 +628,9 @@ class MatchingTask:
                 log_message=f"Matcher {matcher_name} produced {len(matcher_candidates)} candidates.",
             )
 
-        task_state._update_task_state(progress=90, log_message="All matchers completed.")
+        task_state._update_task_state(
+            progress=90, log_message="All matchers completed."
+        )
 
         # Step 5: Generate value matches
         task_state._update_task_state(
@@ -1006,7 +1017,6 @@ class MatchingTask:
     def undo(self) -> Optional[Dict[str, Any]]:
         logger.info("Undoing last operation...")
         operation = self.history.undo_last_operation()
-        logger.critical(f"Operation: {operation}")
         if operation:
             self.undo_operation(
                 operation.operation, operation.candidate, operation.references
@@ -1230,11 +1240,17 @@ class MatchingTask:
         self.cached_candidates["matchers"] = matchers
 
     def new_matcher(
-        self, name: str, code: str, params: Dict[str, Any], task_state: Optional[TaskState] = None
+        self,
+        name: str,
+        code: str,
+        params: Dict[str, Any],
+        task_state: Optional[TaskState] = None,
     ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         try:
             if task_state is None:
-                task_state = TaskState(task_type="new_matcher", task_id="api_call", new_task=True)
+                task_state = TaskState(
+                    task_type="new_matcher", task_id="api_call", new_task=True
+                )
 
             if "name" not in params:
                 params["name"] = name

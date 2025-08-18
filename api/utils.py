@@ -448,7 +448,9 @@ class TaskState:
                 logger.info(f"Saved task state to {os.path.abspath(path)}")
                 break
             except Exception as e:
-                logger.error(f"Failed to save task state: {str(e)}, attempt {attempt + 1}")
+                logger.error(
+                    f"Failed to save task state: {str(e)}, attempt {attempt + 1}"
+                )
                 time.sleep(0.05 * (attempt + 1))
 
     def _load_task_state(self) -> None:
@@ -459,12 +461,16 @@ class TaskState:
                 canonical_path = self._task_state_path()
                 if os.path.exists(canonical_path):
                     with open(canonical_path, "r") as f:
-                        logger.info(f"Loading task state from {os.path.abspath(canonical_path)}")
+                        logger.info(
+                            f"Loading task state from {os.path.abspath(canonical_path)}"
+                        )
                         loaded_state = json.load(f)
                     self.task_state = loaded_state
                     return
             except Exception as e:
-                logger.error(f"Failed to load task state: {str(e)}, attempt {attempt + 1}")
+                logger.error(
+                    f"Failed to load task state: {str(e)}, attempt {attempt + 1}"
+                )
                 time.sleep(0.05 * (attempt + 1))
         self._initialize_task_state()
 

@@ -1,3 +1,4 @@
+import sys
 import json
 import logging
 import os
@@ -107,12 +108,15 @@ def get_langgraph_agent():
     return _LANGGRAPH_AGENT
 
 
-@celery.task(bind=True)
+@celery.task(bind=True, name="api.index.infer_source_ontology_task", queue="ontology")
 def infer_source_ontology_task(self, session):
     try:
+        app.logger.critical("PID=%s CWD=%s ARGV=%s", os.getpid(), os.getcwd(), sys.argv)
         app.logger.info(f"Running source ontology task for session: {session}")
         celery_task_id = getattr(self.request, "id", "unknown")
-        task_state = TaskState(task_type="source", task_id=celery_task_id, new_task=True)
+        task_state = TaskState(
+            task_type="source", task_id=celery_task_id, new_task=True
+        )
         task_state._update_task_state(
             status="running",
             progress=0,
@@ -144,9 +148,7 @@ def infer_source_ontology_task(self, session):
                 log_message=f"Source ontology batch {i+1}...",
             )
 
-        parsed_ontology = parse_llm_generated_ontology(
-            {"properties": properties}
-        )
+        parsed_ontology = parse_llm_generated_ontology({"properties": properties})
         with open(".source.json", "w") as f:
             json.dump(parsed_ontology, f)
 
@@ -163,7 +165,7 @@ def infer_source_ontology_task(self, session):
         return {"status": "failed", "message": str(e)}
 
 
-@celery.task(bind=True)
+@celery.task(bind=True, name="api.index.run_matching_task", queue="matching")
 def run_matching_task(
     self,
     session,
@@ -171,8 +173,11 @@ def run_matching_task(
     infer_target_ontology=False,
 ):
     try:
+        app.logger.critical("PID=%s CWD=%s ARGV=%s", os.getpid(), os.getcwd(), sys.argv)
         celery_task_id = getattr(self.request, "id", "unknown")
-        task_state = TaskState(task_type="matching", task_id=celery_task_id, new_task=True)
+        task_state = TaskState(
+            task_type="matching", task_id=celery_task_id, new_task=True
+        )
         app.logger.info(f"Running matching task for session: {session}")
 
         # Clear specific namespaces for new task
@@ -277,13 +282,16 @@ def start_matching():
     # Kick off tasks in parallel: source ontology (if needed) and matching
     source_task = None
     if infer_source_ontology:
-        source_task = infer_source_ontology_task.delay(session)
+        # Route to ontology queue for concurrency/isolation
+        source_task = infer_source_ontology_task.apply_async(
+            (session,), queue="ontology"
+        )
 
     # Matching task should not wait for source ontology
-    task = run_matching_task.delay(
-        session,
-        nodes=None,
-        infer_target_ontology=infer_target_ontology,
+    task = run_matching_task.apply_async(
+        (session,),
+        {"nodes": None, "infer_target_ontology": infer_target_ontology},
+        queue="matching",
     )
     return {
         "task_id": task.id,
@@ -305,14 +313,13 @@ def matching_status():
     task = run_matching_task.AsyncResult(task_id)
 
     app.logger.info(
-        (
-            f"Task state: {task.state}, {task.info}, "
-            f"{task.result}, {task.traceback}"
-        )
+        (f"Task state: {task.state}, {task.info}, " f"{task.result}, {task.traceback}")
     )
 
     # Always try to read the task state's JSON for progress/logs
-    task_state = TaskState(task_type="matching", task_id=task_id, new_task=False).get_task_state()
+    task_state = TaskState(
+        task_type="matching", task_id=task_id, new_task=False
+    ).get_task_state()
 
     if task.state == "PENDING":
         response = {
@@ -372,7 +379,9 @@ def source_ontology_status():
         )
     )
 
-    task_state = TaskState(task_type="source", task_id=task_id, new_task=False).get_task_state()
+    task_state = TaskState(
+        task_type="source", task_id=task_id, new_task=False
+    ).get_task_state()
 
     if task.state == "PENDING":
         response = {
@@ -415,6 +424,9 @@ def get_results():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
+        app.logger.critical(
+            "[get_results] PID=%s CWD=%s ARGV=%s", os.getpid(), os.getcwd(), sys.argv
+        )
         _ = matching_task.get_candidates()
         # AGENT.remember_candidates(candidates)
         if os.path.exists(".target.json"):
@@ -461,6 +473,12 @@ def get_value_matches():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
+        app.logger.critical(
+            "[get_value_matches] PID=%s CWD=%s ARGV=%s",
+            os.getpid(),
+            os.getcwd(),
+            sys.argv,
+        )
         _ = matching_task.get_candidates()
     results = matching_task.value_matches_to_frontend_json()
 
@@ -478,6 +496,12 @@ def get_gdc_ontology():
             matching_task.update_dataframe(
                 source_df=source, target_df=pd.read_csv(GDC_DATA_PATH)
             )
+        app.logger.critical(
+            "[get_gdc_ontology] PID=%s CWD=%s ARGV=%s",
+            os.getpid(),
+            os.getcwd(),
+            sys.argv,
+        )
         _ = matching_task.get_candidates()
     results = matching_task._generate_gdc_ontology()
 
@@ -497,6 +521,12 @@ def get_target_ontology():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
+        app.logger.critical(
+            "[get_target_ontology] PID=%s CWD=%s ARGV=%s",
+            os.getpid(),
+            os.getcwd(),
+            sys.argv,
+        )
         _ = matching_task.get_candidates()
 
     results = matching_task._generate_target_ontology()
@@ -517,6 +547,12 @@ def get_source_ontology():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
+        app.logger.critical(
+            "[get_source_ontology] PID=%s CWD=%s ARGV=%s",
+            os.getpid(),
+            os.getcwd(),
+            sys.argv,
+        )
         _ = matching_task.get_candidates()
 
     results = matching_task._generate_source_ontology()
@@ -577,16 +613,21 @@ def get_matchers():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
+        app.logger.critical(
+            "[get_matchers] PID=%s CWD=%s ARGV=%s", os.getpid(), os.getcwd(), sys.argv
+        )
         _ = matching_task.get_candidates()
     matchers = matching_task.get_matchers()
     return {"message": "success", "matchers": matchers}
 
 
-@celery.task(bind=True)
+@celery.task(bind=True, name="api.index.run_new_matcher_task", queue="new_matcher")
 def run_new_matcher_task(self, session, name, code, params):
     try:
         celery_task_id = getattr(self.request, "id", "unknown")
-        task_state = TaskState(task_type="new_matcher", task_id=celery_task_id, new_task=True)
+        task_state = TaskState(
+            task_type="new_matcher", task_id=celery_task_id, new_task=True
+        )
         app.logger.info(f"Running new matcher task for session: {session}")
         matching_task = SESSION_MANAGER.get_session(session).matching_task
 
@@ -601,7 +642,7 @@ def run_new_matcher_task(self, session, name, code, params):
                     source_df=source,
                     target_df=target,
                 )
-            _ = matching_task.get_candidates()
+            _ = matching_task.get_candidates(task_state=task_state)
         error, matchers = matching_task.new_matcher(name, code, params, task_state)
 
         if error:
@@ -642,45 +683,45 @@ def matcher_status():
         return {"status": "error", "message": "No task_id provided"}, 400
 
     task = run_new_matcher_task.AsyncResult(task_id)
+    task_state = TaskState(
+        task_type="new_matcher", task_id=task_id, new_task=False
+    ).get_task_state()
 
     app.logger.info(
-        (
-            f"Task state: {task.state}, {task.info}, "
-            f"{task.result}, {task.traceback}"
-        )
+        (f"Task state: {task.state}, {task.info}, " f"{task.result}, {task.traceback}")
     )
 
     if task.state == "PENDING":
         response = {
             "status": "pending",
             "message": "Task is pending",
-            "taskState": None,
+            "taskState": task_state,
         }
     elif task.state == "FAILURE":
         response = {
             "status": "failed",
             "message": str(task.info),
-            "taskState": None,
+            "taskState": task_state,
         }
     elif task.state == "SUCCESS":
         result = task.result
         app.logger.info(f"Result: {result}")
         if result["status"] == "completed":
-            _ = matching_task.get_candidates()
+            _ = matching_task.get_candidates(task_state=task_state)
 
         response = {
             "status": result["status"],
-            "message": (
-                result["error"] if result["status"] == "failed" else "success"
-            ),
-            "taskState": TaskState(task_type="new_matcher", task_id=task_id, new_task=False).get_task_state(),
+            "message": (result["error"] if result["status"] == "failed" else "success"),
+            "taskState": task_state,
             "matchers": matching_task.get_matchers(),
         }
     else:
         response = {
             "status": task.state,
             "message": "Task is in progress",
-            "taskState": TaskState(task_type="new_matcher", task_id=task_id, new_task=False).get_task_state(),
+            "taskState": TaskState(
+                task_type="new_matcher", task_id=task_id, new_task=False
+            ).get_task_state(),
         }
 
     return response
