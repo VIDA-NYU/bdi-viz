@@ -703,14 +703,14 @@ class MatchingTask:
         candidates = self.get_cached_candidates()
         return load_gdc_ontology(candidates)
 
-    def _generate_target_ontology(self) -> List[Dict]:
+    def _generate_target_ontology(self) -> Optional[List[Dict]]:
         candidates = self.get_cached_candidates()
         target_columns = set()
         for candidate in candidates:
             target_columns.add(candidate["targetColumn"])
         return load_ontology(dataset="target", columns=list(target_columns))
 
-    def _generate_source_ontology(self) -> List[Dict]:
+    def _generate_source_ontology(self) -> Optional[List[Dict]]:
         return load_ontology(dataset="source")
 
     def _initialize_value_matches(self) -> None:
@@ -1252,7 +1252,7 @@ class MatchingTask:
                     task_type="new_matcher", task_id="api_call", new_task=True
                 )
 
-            if "name" not in params:
+            if "name" not in params or params["name"] == "":
                 params["name"] = name
 
             matcher = {
@@ -1286,8 +1286,6 @@ class MatchingTask:
                 if self.source_df is None or self.target_df is None:
                     return "Source and Target dataframes must be provided.", None
 
-                # Clear logs for new matcher task
-                self.task_state["logs"] = []
                 task_state._update_task_state(
                     status="running",
                     progress=0,

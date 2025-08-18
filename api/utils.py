@@ -242,15 +242,19 @@ def load_ontology_flat() -> Dict[str, Any]:
 
 def load_ontology(
     dataset: str = "target", columns: Optional[List[str]] = None
-) -> List[Dict]:
+) -> Optional[List[Dict]]:
     """
     Load the ontology from a JSON file.
 
     Returns:
         List[Dict]: The loaded ontology.
     """
-    with open(f".{dataset}.json", "r") as f:
-        ontology_flat = json.load(f)
+    try:
+        with open(f".{dataset}.json", "r") as f:
+            ontology_flat = json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading ontology: {e}")
+        return None
 
     hiarchies = {}
 
