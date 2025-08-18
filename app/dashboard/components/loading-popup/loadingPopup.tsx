@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useMemo, useState } from 'react';
-import { Box, Paper, Typography, LinearProgress, List, ListItem, ListItemText, CircularProgress, Tabs, Tab } from '@mui/material';
+import React, { useEffect, useRef, useMemo, useState, useContext } from 'react';
+import { Box, Paper, Typography, LinearProgress, List, ListItem, ListItemText, CircularProgress, Tabs, Tab, IconButton } from '@mui/material';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import SettingsGlobalContext from '@/app/lib/settings/settings-context';
 
 interface LoadingPopupProps {
     taskStates: Record<string, TaskState>;
@@ -128,6 +130,8 @@ const TaskPanel = ({ taskState }: { taskState: TaskState | null }) => {
 };
 
 const LoadingPopup = ({ taskStates }: LoadingPopupProps) => {
+    const { setIsLoadingGlobal } = useContext(SettingsGlobalContext);
+    const [collapsed, setCollapsed] = useState(false);
     const tabs: Array<{ key: string; label: string; state: TaskState | null }> = useMemo(() => {
         const entries = Object.entries(taskStates || {});
         if (entries.length === 0) return [];
@@ -156,6 +160,44 @@ const LoadingPopup = ({ taskStates }: LoadingPopupProps) => {
 
     const current = tabs[currentTab]?.state || null;
 
+    // Build a compact summary when collapsed
+    const { overallProgress, summaryText } = useMemo(() => {
+        const active = tabs.filter(
+            (t) => t.state && ["running", "pending", "started"].includes((t.state.status || '').toLowerCase())
+        );
+        const used = active.length > 0 ? active : tabs;
+        const progresses = used.map((t) => t.state?.progress ?? 0);
+        const overall = progresses.length ? Math.round(progresses.reduce((a, b) => a + b, 0) / progresses.length) : 0;
+        const text = used.length
+            ? used.map((t) => `${t.label} ${t.state?.progress ?? 0}%`).join(' • ')
+            : 'Preparing...';
+        return { overallProgress: overall, summaryText: text };
+    }, [tabs]);
+
+    if (collapsed) {
+        return (
+            <Paper
+                elevation={3}
+                sx={{
+                    width: '380px',
+                    p: 1,
+                    borderRadius: 2,
+                    bgcolor: 'background.paper',
+                    cursor: 'pointer',
+                }}
+                onClick={() => setCollapsed(false)}
+                title="Show details"
+            >
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                    <Typography variant="caption" noWrap sx={{ flexGrow: 1 }}>
+                        {summaryText}
+                    </Typography>
+                </Box>
+                <LinearProgress variant="determinate" value={overallProgress} sx={{ height: 4, borderRadius: 2 }} />
+            </Paper>
+        );
+    }
+
     return (
         <Paper
             elevation={3}
@@ -164,8 +206,20 @@ const LoadingPopup = ({ taskStates }: LoadingPopupProps) => {
                 p: 2,
                 borderRadius: 2,
                 bgcolor: 'background.paper',
+                position: 'relative',
             }}
         >
+            {/* Hide button */}
+            <IconButton
+                size="small"
+                aria-label="Hide"
+                title="Hide"
+                onClick={() => setCollapsed(true)}
+                sx={{ position: 'absolute', top: 6, right: 6 }}
+            >
+                <KeyboardArrowDownIcon fontSize="small" />
+            </IconButton>
+
             <Tabs
                 value={currentTab}
                 onChange={(_, v) => setCurrentTab(v)}

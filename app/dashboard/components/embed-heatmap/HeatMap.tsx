@@ -278,6 +278,11 @@ const HeatMap: React.FC<HeatMapProps> = ({
     );
   }, [tooltip.visible, tooltip.x, tooltip.y, tooltip.content]);
 
+  // Determine whether source ontology exists from props
+  const hasSourceOntology = useMemo(() => {
+    return Array.isArray(sourceOntologies) && sourceOntologies.length > 0;
+  }, [sourceOntologies]);
+
   return (
     <>
       <Box
@@ -304,16 +309,18 @@ const HeatMap: React.FC<HeatMapProps> = ({
             {/* Color Legend */}
             <Legend color={color} />
             
-            {/* Y Axis */}
-            {/* <YAxis
-              y={y}
-              getHeight={getHeight}
-              sourceColumn={sourceColumn}
-              setSourceColumn={setSourceColumn}
-              sourceColumns={sourceColumns}
-              hideTooltip={hideTooltip}
-              sourceTreeData={sourceTreeData}
-            /> */}
+            {/* Y Axis shown when no source ontology is available */}
+            {!hasSourceOntology && (
+              <YAxis
+                y={y}
+                getHeight={getHeight}
+                sourceColumn={sourceColumn}
+                setSourceColumn={setSourceColumn}
+                sourceColumns={sourceColumns}
+                hideTooltip={hideTooltip}
+                sourceTreeData={sourceTreeData}
+              />
+            )}
           </g>
         </svg>
 
@@ -321,15 +328,17 @@ const HeatMap: React.FC<HeatMapProps> = ({
         {tooltipElement}
       </Box>
 
-      <Box sx={{ position: "absolute", top: 160, left: MARGIN.left + 120, zIndex: 1000 }}>
-        <SourceHierarchyColumnViz
-          sourceTreeData={sourceTreeData}
-          currentExpanding={currentExpanding as AggregatedCandidate}
-          transform={`translate(${0},${0})`}
-          hideTooltip={hideTooltip}
-          setSourceColumn={setSourceColumn}
-        />
-      </Box>
+      {hasSourceOntology && (
+        <Box sx={{ position: "absolute", top: 160, left: MARGIN.left + 120, zIndex: 1000 }}>
+          <SourceHierarchyColumnViz
+            sourceTreeData={sourceTreeData}
+            currentExpanding={currentExpanding as AggregatedCandidate}
+            transform={`translate(${0},${0})`}
+            hideTooltip={hideTooltip}
+            setSourceColumn={setSourceColumn}
+          />
+        </Box>
+      )}
 
       <Box sx={{ flexGrow: 1, paddingLeft: 0, flexBasis: "280px" }}>
         <HierarchicalColumnViz

@@ -11,7 +11,18 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [ontologySearchPopupOpen, setOntologySearchPopupOpen] = useState(false);
 
     const setTaskStateFor = (taskType: string, state: TaskState) => {
-        setTaskStates(prev => ({ ...prev, [taskType]: state }));
+        setTaskStates(prev => {
+            const next = { ...prev } as Record<string, TaskState>;
+            const status = (state?.status || '').toLowerCase();
+            const isComplete = status === 'complete' || status === 'completed' || status === 'success';
+            if (isComplete) {
+                // Remove finished task from registry
+                if (taskType in next) delete next[taskType];
+            } else {
+                next[taskType] = state;
+            }
+            return next;
+        });
     };
 
     // Derive global loading from task states: true if ANY task is active, false if all finished or none started

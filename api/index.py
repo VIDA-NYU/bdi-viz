@@ -137,11 +137,11 @@ def infer_source_ontology_task(self, session):
 
         agent = get_agent()
         properties = []
-        total_cols = max(1, len(source.columns))
+        total_batches = len(source.columns) // 5 + 1
         for i, (_slice, ontology) in enumerate(agent.infer_ontology(source)):
             ontology = ontology.model_dump()
             properties += ontology.get("properties", [])
-            progress = min(95, int(((i + 1) / total_cols) * 90))
+            progress = (i + 1) / total_batches * 100
             task_state._update_task_state(
                 progress=progress,
                 current_step="Infer source ontology",
@@ -683,9 +683,7 @@ def matcher_status():
         return {"status": "error", "message": "No task_id provided"}, 400
 
     task = run_new_matcher_task.AsyncResult(task_id)
-    task_state = TaskState(
-        task_type="new_matcher", task_id=task_id, new_task=False
-    ).get_task_state()
+    task_state = TaskState(task_type="new_matcher", task_id=task_id, new_task=False)
 
     app.logger.info(
         (f"Task state: {task.state}, {task.info}, " f"{task.result}, {task.traceback}")
@@ -695,13 +693,13 @@ def matcher_status():
         response = {
             "status": "pending",
             "message": "Task is pending",
-            "taskState": task_state,
+            "taskState": task_state.get_task_state(),
         }
     elif task.state == "FAILURE":
         response = {
             "status": "failed",
             "message": str(task.info),
-            "taskState": task_state,
+            "taskState": task_state.get_task_state(),
         }
     elif task.state == "SUCCESS":
         result = task.result
@@ -712,16 +710,14 @@ def matcher_status():
         response = {
             "status": result["status"],
             "message": (result["error"] if result["status"] == "failed" else "success"),
-            "taskState": task_state,
+            "taskState": task_state.get_task_state(),
             "matchers": matching_task.get_matchers(),
         }
     else:
         response = {
             "status": task.state,
             "message": "Task is in progress",
-            "taskState": TaskState(
-                task_type="new_matcher", task_id=task_id, new_task=False
-            ).get_task_state(),
+            "taskState": task_state.get_task_state(),
         }
 
     return response
