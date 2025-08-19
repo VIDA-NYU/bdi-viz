@@ -28,6 +28,22 @@ def _isolate_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _kill_redis_6380_before_tests():
+    """Ensure no Redis process is bound to 6380 before running tests."""
+    try:
+        import subprocess
+        # Try lsof first (macOS/Linux), fall back to pkill
+        result = subprocess.run(["bash", "-lc", "lsof -ti :6380 || true"], capture_output=True, text=True)
+        pids = result.stdout.strip()
+        if pids:
+            subprocess.run(["bash", "-lc", f"kill -9 {pids} || true"], check=False)
+        else:
+            subprocess.run(["bash", "-lc", "pkill -f 'redis-server.*6380' || true"], check=False)
+    except Exception:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def _redirect_matching_results(tmp_path, monkeypatch):
     """Redirect matching_results_*.json R/W to the temp directory.
