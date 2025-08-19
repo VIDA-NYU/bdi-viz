@@ -60,7 +60,16 @@ const FileUploading: React.FC<FileUploadingProps> = ({
         uploadData.append("type", "csv_input");
 
         try {
-            setIsLoadingGlobal(true);
+            // Initialize a local 'matching' task state so the global overlay is driven by taskStates,
+            // and will reliably clear even if the backend returns cached results without spawning tasks.
+            setTaskStateFor('matching', {
+                status: 'started',
+                progress: 0,
+                current_step: 'Preparing...',
+                completed_steps: 0,
+                total_steps: 1,
+                logs: [],
+            } as TaskState);
 
             const [sourceCsv, targetCsv, targetJson] = await Promise.all([
                 readFileAsync(sourceFile),
@@ -80,6 +89,15 @@ const FileUploading: React.FC<FileUploadingProps> = ({
                     getTargetOntology({ callback: ontologyCallback });
                     getValueBins({ callback: uniqueValuesCallback });
                     getValueMatches({ callback: valueMatchesCallback });
+                    // Mark the local 'matching' task complete to clear the overlay if no other tasks are active
+                    setTaskStateFor('matching', {
+                        status: 'success',
+                        progress: 100,
+                        current_step: 'Done',
+                        completed_steps: 1,
+                        total_steps: 1,
+                        logs: [],
+                    } as TaskState);
                 },
                 onError: (error) => {
                     console.error("Matching task failed with error:", error);
@@ -96,6 +114,13 @@ const FileUploading: React.FC<FileUploadingProps> = ({
                 sourceOntologyTaskStateCallback: (taskState) => {
                     setTaskStateFor('source', taskState);
                 },
+                onTargetOntologyReady: (targetOntology) => {
+                    console.log("Target ontology available.");
+                    ontologyCallback(targetOntology);
+                },
+                targetOntologyTaskStateCallback: (taskState) => {
+                    setTaskStateFor('target', taskState);
+                }
             });
         } catch (error) {
             console.error(error);
@@ -276,7 +301,7 @@ const FileUploadForm: React.FC<{
 
             <Box sx={{ display: "flex", gap: 1.5, mt: 2, justifyContent: 'flex-end' }}>
                 <BasicButton variant="outlined" color="info" onClick={onCancel}>
-                    Cancel
+                    Close
                 </BasicButton>
                 <BasicButton variant="contained" color="primary" type="submit">
                     Start Matching
