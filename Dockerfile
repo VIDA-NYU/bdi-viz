@@ -46,6 +46,9 @@ COPY --chown=yfw215:yfw215 .cache/magneto-gdc-v0.1 /home/bdi-viz-react/.cache/
 RUN mkdir -p /home/bdi-viz-react/chroma_db && chown -R yfw215:yfw215 /home/bdi-viz-react/chroma_db
 RUN mkdir -p /home/bdi-viz-react/.cache/redis && chown -R yfw215:yfw215 /home/bdi-viz-react/.cache/redis
 
+# Create celery log file
+RUN touch /home/bdi-viz-react/celery.log && chown yfw215:yfw215 /home/bdi-viz-react/celery.log
+
 USER yfw215
 
 ENV NODE_ENV=production \
