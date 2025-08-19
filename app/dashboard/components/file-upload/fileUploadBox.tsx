@@ -1,19 +1,25 @@
 import React, {useRef} from 'react';
-import {useDropzone} from 'react-dropzone';
-import {Box, Typography, List, ListItem, ListItemText, Paper} from '@mui/material';
+import {useDropzone, type Accept} from 'react-dropzone';
+import {Box, Typography, List, ListItem, ListItemText, Chip, Stack} from '@mui/material';
 import { SectionLabel } from '../../layout/components';
 
 interface DropzoneProps {
     required?: boolean;
     name: string;
+    label: string;
+    fileKind: 'csv' | 'json';
 }
 
 export function Dropzone(props: DropzoneProps) {
-    const {required, name} = props; 
+    const {required, name, label, fileKind} = props; 
 
     const hiddenInputRef = useRef<HTMLInputElement>(null);
 
-    const {getRootProps, getInputProps, open, acceptedFiles, isDragActive} = useDropzone({
+    const accept: Accept = fileKind === 'csv'
+        ? { 'text/csv': ['.csv'] as const }
+        : { 'application/json': ['.json'] as const };
+
+    const {getRootProps, getInputProps, acceptedFiles, isDragActive} = useDropzone({
         onDrop: (incomingFiles: File[]) => {
             if (hiddenInputRef.current) {
                 const dataTransfer = new DataTransfer();
@@ -23,10 +29,7 @@ export function Dropzone(props: DropzoneProps) {
                 hiddenInputRef.current.files = dataTransfer.files;
             }
         },
-        accept: {
-            'text/csv': ['.csv'],
-            'application/json': ['.json']
-        },
+        accept,
         maxFiles: 1
     });
 
@@ -38,35 +41,40 @@ export function Dropzone(props: DropzoneProps) {
 
     return (
         <Box>
+            <SectionLabel>{label}</SectionLabel>
             <Box 
                 {...getRootProps({className: 'dropzone'})} 
                 sx={{ 
                     p: 2, 
                     textAlign: 'center', 
                     cursor: 'pointer', 
-                    border: '4px dashed #ccc', 
-                    transition: 'border-color 0.3s ease-in-out',
-                    ...(isDragActive && {
-                        borderColor: '#000',
-                        animation: 'pulse 1s infinite'
-                    }),
-                    '@keyframes pulse': {
-                        '0%': { borderColor: '#000' },
-                        '50%': { borderColor: '#ccc' },
-                        '100%': { borderColor: '#000' }
-                    }
+                    border: '2px dashed',
+                    borderColor: isDragActive ? 'primary.main' : '#ccc',
+                    borderRadius: 1,
+                    bgcolor: isDragActive ? 'action.hover' : 'background.paper',
+                    transition: 'border-color 0.2s ease-in-out, background-color 0.2s ease-in-out'
                 }}
             >
-                <input type="file" name={name} required={required} style={{ display: 'none' }} ref={hiddenInputRef} accept=".csv"/>
+                <input
+                    type="file"
+                    name={name}
+                    required={required}
+                    style={{ display: 'none' }}
+                    ref={hiddenInputRef}
+                    accept={fileKind === 'csv' ? '.csv' : '.json'}
+                />
                 <input {...getInputProps()} />
-                <Typography variant="body1" sx={{
-                    fontSize: '0.9rem',
-                    fontWeight: '800',
-                    color: '#bbb'
-                }}>Drag &apos;n&apos; drop a CSV file here</Typography>
+                <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
+                    <Typography variant="body1" sx={{ fontSize: '0.95rem', fontWeight: 600 }}>
+                        Drag & drop or click to select
+                    </Typography>
+                    <Chip size="small" label={fileKind === 'csv' ? '.csv only' : '.json only'} variant="outlined" />
+                </Stack>
+                <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 0.5 }}>
+                    Max 1 file. This field is {required ? 'required' : 'optional'}.
+                </Typography>
             </Box>
             <Box sx={{ mt: 1 }}>
-                <SectionLabel>{name}</SectionLabel>
                 <List>{files}</List>
             </Box>
         </Box>
