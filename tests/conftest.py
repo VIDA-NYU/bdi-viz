@@ -360,3 +360,79 @@ def mock_celery_task():
         mock_task.delay.return_value = mock_result
         mock_task.AsyncResult.return_value = mock_result
         yield mock_task
+
+
+# Ensure Celery tasks do not try to connect to Redis during tests
+@pytest.fixture(autouse=True)
+def _mock_celery_apply_async(monkeypatch):
+    """Mock Celery apply_async and AsyncResult for API tasks to avoid broker IO."""
+    # Mock run_matching_task.apply_async
+    def _mock_apply_async_match(args, kwargs=None, queue=None):
+        mock_result = Mock()
+        mock_result.id = "test-matching-task-id"
+        return mock_result
+
+    def _mock_async_result_match(task_id):
+        mock_result = Mock()
+        mock_result.state = "PENDING"
+        mock_result.info = None
+        mock_result.result = None
+        mock_result.traceback = None
+        return mock_result
+
+    monkeypatch.setattr(
+        "api.index.run_matching_task.apply_async", _mock_apply_async_match, raising=True
+    )
+    monkeypatch.setattr(
+        "api.index.run_matching_task.AsyncResult", _mock_async_result_match, raising=True
+    )
+
+    # Mock infer_source_ontology_task.apply_async
+    def _mock_apply_async_source(args, queue=None):
+        mock_result = Mock()
+        mock_result.id = "test-source-task-id"
+        return mock_result
+
+    def _mock_async_result_source(task_id):
+        mock_result = Mock()
+        mock_result.state = "PENDING"
+        mock_result.info = None
+        mock_result.result = None
+        mock_result.traceback = None
+        return mock_result
+
+    monkeypatch.setattr(
+        "api.index.infer_source_ontology_task.apply_async",
+        _mock_apply_async_source,
+        raising=True,
+    )
+    monkeypatch.setattr(
+        "api.index.infer_source_ontology_task.AsyncResult",
+        _mock_async_result_source,
+        raising=True,
+    )
+
+    # Mock infer_target_ontology_task.apply_async
+    def _mock_apply_async_target(args, queue=None):
+        mock_result = Mock()
+        mock_result.id = "test-target-task-id"
+        return mock_result
+
+    def _mock_async_result_target(task_id):
+        mock_result = Mock()
+        mock_result.state = "PENDING"
+        mock_result.info = None
+        mock_result.result = None
+        mock_result.traceback = None
+        return mock_result
+
+    monkeypatch.setattr(
+        "api.index.infer_target_ontology_task.apply_async",
+        _mock_apply_async_target,
+        raising=True,
+    )
+    monkeypatch.setattr(
+        "api.index.infer_target_ontology_task.AsyncResult",
+        _mock_async_result_target,
+        raising=True,
+    )

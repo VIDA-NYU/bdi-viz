@@ -272,3 +272,60 @@ class TestAPIEndpoints:
             assert response.status_code == 200
             data = response.get_json()
             assert "task_id" in data
+
+    def test_ontology_status_endpoints(self, client):
+        # Source ontology status: SUCCESS
+        with patch("api.index.infer_source_ontology_task.AsyncResult") as mock_async:
+            mock_task = MagicMock()
+            mock_task.state = "SUCCESS"
+            mock_task.result = {"status": "completed", "taskId": "task-src-1"}
+            mock_async.return_value = mock_task
+            response = client.post("/api/ontology/source/status", json={"taskId": "task-src-1"})
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data["status"] in {"completed", "pending", "failed", "SUCCESS"}
+
+        # Target ontology status: PENDING
+        with patch("api.index.infer_target_ontology_task.AsyncResult") as mock_async:
+            mock_task = MagicMock()
+            mock_task.state = "PENDING"
+            mock_task.result = None
+            mock_async.return_value = mock_task
+            response = client.post("/api/ontology/target/status", json={"taskId": "task-tgt-1"})
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data["status"] in {"pending", "PENDING"}
+
+    def test_agent_endpoint(self, client):
+        with patch("api.index.get_agent") as mock_get_agent:
+            mock_agent = MagicMock()
+            mock_response = MagicMock()
+            mock_response.model_dump.return_value = {"answer": "ok"}
+            mock_agent.invoke.return_value = mock_response
+            mock_get_agent.return_value = mock_agent
+            response = client.post("/api/agent", json={"prompt": "hello"})
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data.get("answer") == "ok"
+
+    def test_agent_explore_endpoint(self, client):
+        with patch("api.index.get_langgraph_agent") as mock_get_agent:
+            mock_agent = MagicMock()
+            mock_agent.invoke.return_value = {"result": "explored"}
+            mock_get_agent.return_value = mock_agent
+            response = client.post("/api/agent/explore", json={"query": "q"})
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data.get("result") == "explored"
+
+    def test_agent_outer_source_endpoint(self, client, sample_source_csv, sample_target_csv):
+        # Ensure matching task has data loaded
+        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task.update_dataframe(sample_source_csv, sample_target_csv)
+        response = client.post(
+            "/api/agent/outer-source",
+            json={"sourceColumn": "Age", "targetColumn": "age"},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"

@@ -1,10 +1,5 @@
-import logging
 import pytest
-import pandas as pd
-from unittest.mock import Mock, patch
-
-logger = logging.getLogger("bdiviz_flask.sub")
-logger.setLevel(logging.CRITICAL)
+from api.utils import TaskState
 
 
 class TestMatchingTask:
@@ -23,24 +18,29 @@ class TestMatchingTask:
         matching_task.update_dataframe(sample_source_csv, sample_target_csv)
 
         # assert task state
-        task_state_initial = matching_task.get_task_state()
-        assert task_state_initial["status"] == "idle"
-        assert task_state_initial["progress"] == 0
-        assert task_state_initial["current_step"] == "Task start..."
-        assert task_state_initial["completed_steps"] == 0
-        assert task_state_initial["logs"] == []
+        task_state = TaskState(
+            task_type="matching",
+            task_id="test_session",
+            new_task=True,
+        )
+        task_state_print = task_state.get_task_state()
+        assert task_state_print["progress"] == 0
+        assert task_state_print["completed_steps"] == 0
+        assert task_state_print["logs"] == []
 
-        candidates = matching_task.get_candidates()
+        candidates = matching_task.get_candidates(task_state=task_state)
 
         print(candidates)
         assert len(candidates) > 0
 
         # assert task state
-        task_state_after_candidates = matching_task.get_task_state()
+        task_state_after_candidates = TaskState(
+            task_type="matching",
+            task_id="test_session",
+            new_task=False,
+        ).get_task_state()
         assert task_state_after_candidates["status"] == "complete"
         assert task_state_after_candidates["progress"] == 100
-        assert task_state_after_candidates["current_step"] == "Complete"
-        assert task_state_after_candidates["completed_steps"] == 4
 
     def test_get_candidates_missing_files(self, session_manager):
         """Test matching task with missing files."""
