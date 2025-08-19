@@ -56,8 +56,16 @@ def create_app() -> Flask:
             result_backend="redis://localhost:6380/0",
             task_ignore_result=False,
             task_track_started=True,
-            task_time_limit=300,  # hard limit: 300s (5 min)
-            task_soft_time_limit=240,  # soft limit: 240s (4 min)
+            # Increase time limits to avoid soft-limit kill during model load/inference
+            task_time_limit=1200,  # hard limit: 20 min
+            task_soft_time_limit=900,  # soft limit: 15 min
+            # Heartbeat/transport tuning for Redis broker
+            broker_heartbeat=120,
+            broker_connection_retry_on_startup=True,
+            broker_transport_options={
+                "visibility_timeout": 3600,
+                "health_check_interval": 30,
+            },
         ),
     )
     app.config.from_prefixed_env()
