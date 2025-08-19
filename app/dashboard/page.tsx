@@ -275,7 +275,7 @@ export default function Dashboard() {
                 alignItems: 'flex-end',
                 justifyContent: 'flex-start',
                 pointerEvents: 'none',
-                zIndex: 1200,
+                zIndex: 2000,
             }}>
                 <Box sx={{ 
                     pointerEvents: 'auto',

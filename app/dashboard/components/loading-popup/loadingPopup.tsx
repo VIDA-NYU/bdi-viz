@@ -139,11 +139,12 @@ const LoadingPopup = ({ taskStates }: LoadingPopupProps) => {
         const prettyLabel = (key: string) => {
             if (key === 'matching') return 'Matching';
             if (key === 'source') return 'Source Ontology';
+            if (key === 'target') return 'Target Ontology';
             if (key === 'new_matcher') return 'New Matcher';
             return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
         };
 
-        const preferred = ['matching', 'source', 'new_matcher'];
+        const preferred = ['matching', 'source', 'target', 'new_matcher'];
         const orderedKeys = [
             ...preferred.filter((k) => k in taskStates),
             ...entries.map(([k]) => k).filter((k) => !preferred.includes(k)),
@@ -225,7 +226,7 @@ const LoadingPopup = ({ taskStates }: LoadingPopupProps) => {
                 onChange={(_, v) => setCurrentTab(v)}
                 variant="scrollable"
                 scrollButtons="auto"
-                sx={{ mb: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36 } }}
+                sx={{ mb: 1, minHeight: 36, pr: 2, '& .MuiTab-root': { minHeight: 36 } }}
             >
                 {tabs.map((t, idx) => (
                     <Tab key={t.key} label={t.label} value={idx} sx={{ fontSize: '0.8rem' }} />

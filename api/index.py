@@ -119,8 +119,12 @@ def get_langgraph_agent():
 @celery.task(bind=True, name="api.index.infer_source_ontology_task", queue="ontology")
 def infer_source_ontology_task(self, session):
     try:
-        app.logger.critical("PID=%s CWD=%s ARGV=%s", os.getpid(), os.getcwd(), sys.argv)
-        app.logger.info(f"Running source ontology task for session: {session}")
+        app.logger.critical(
+            "[infer_source_ontology_task] PID=%s CWD=%s ARGV=%s",
+            os.getpid(),
+            os.getcwd(),
+            sys.argv,
+        )
         celery_task_id = getattr(self.request, "id", "unknown")
         task_state = TaskState(
             task_type="source", task_id=celery_task_id, new_task=True
@@ -173,20 +177,84 @@ def infer_source_ontology_task(self, session):
         return {"status": "failed", "message": str(e)}
 
 
+@celery.task(bind=True, name="api.index.infer_target_ontology_task", queue="ontology")
+def infer_target_ontology_task(self, session):
+    try:
+        app.logger.critical(
+            "[infer_target_ontology_task] PID=%s CWD=%s ARGV=%s",
+            os.getpid(),
+            os.getcwd(),
+            sys.argv,
+        )
+        celery_task_id = getattr(self.request, "id", "unknown")
+        task_state = TaskState(
+            task_type="target", task_id=celery_task_id, new_task=True
+        )
+        task_state._update_task_state(
+            status="running",
+            progress=0,
+            current_step="Infer target ontology",
+            completed_steps=0,
+            log_message="Starting target ontology inference.",
+        )
+
+        if not os.path.exists(".target.csv"):
+            task_state._update_task_state(
+                status="failed",
+                progress=100,
+                log_message="Target file .target.csv not found.",
+            )
+            return {"status": "failed", "message": "Target file not found"}
+
+        target = pd.read_csv(".target.csv")
+
+        agent = get_agent()
+        properties = []
+        total_batches = len(target.columns) // 5 + 1
+        for i, (_slice, ontology) in enumerate(agent.infer_ontology(target)):
+            ontology = ontology.model_dump()
+            properties += ontology.get("properties", [])
+            progress = (i + 1) / total_batches * 100
+            task_state._update_task_state(
+                progress=progress,
+                current_step="Infer target ontology",
+                log_message=f"Target ontology batch {i+1}...",
+            )
+
+        parsed_ontology = parse_llm_generated_ontology({"properties": properties})
+        with open(".target.json", "w") as f:
+            json.dump(parsed_ontology, f)
+
+        task_state._update_task_state(
+            status="completed",
+            progress=100,
+            completed_steps=1,
+            current_step="Infer target ontology",
+            log_message="Target ontology inferred.",
+        )
+        return {"status": "completed", "taskId": celery_task_id}
+    except Exception as e:
+        app.logger.error(f"Error in infer_target_ontology_task: {str(e)}")
+        return {"status": "failed", "message": str(e)}
+
+
 @celery.task(bind=True, name="api.index.run_matching_task", queue="matching")
 def run_matching_task(
     self,
     session,
     nodes=None,
-    infer_target_ontology=False,
 ):
     try:
-        app.logger.critical("PID=%s CWD=%s ARGV=%s", os.getpid(), os.getcwd(), sys.argv)
+        app.logger.critical(
+            "[run_matching_task] PID=%s CWD=%s ARGV=%s",
+            os.getpid(),
+            os.getcwd(),
+            sys.argv,
+        )
         celery_task_id = getattr(self.request, "id", "unknown")
         task_state = TaskState(
             task_type="matching", task_id=celery_task_id, new_task=True
         )
-        app.logger.info(f"Running matching task for session: {session}")
 
         # Clear specific namespaces for new task
         memory_retriever = get_memory_retriever()
@@ -201,30 +269,7 @@ def run_matching_task(
             matching_task.update_dataframe(source_df=source, target_df=target)
             matching_task.set_nodes(nodes)
 
-            # Repeat for target ontology...
-            if infer_target_ontology:
-                agent = get_agent()
-                properties = []
-                for i, (column_slice, ontology) in enumerate(
-                    agent.infer_ontology(target)
-                ):
-                    ontology = ontology.model_dump()
-                    properties.extend(ontology["properties"])
-                    task_state._update_task_state(
-                        current_step="Infer target ontology",
-                        progress=int(len(target.columns) // 5 * i) + 5,
-                        log_message=f"Target ontology: {i}...",
-                    )
-                parsed_ontology = parse_llm_generated_ontology(
-                    {"properties": properties}
-                )
-                with open(".target.json", "w") as f:
-                    json.dump(parsed_ontology, f)
-                task_state._update_task_state(
-                    current_step="Infer target ontology",
-                    progress=10,
-                    log_message="Target ontology inferred.",
-                )
+            # Target ontology is now handled by a dedicated task when needed
 
             candidates = matching_task.get_candidates(task_state=task_state)
 
@@ -275,6 +320,7 @@ def start_matching():
     else:
         app.logger.info("Using uploaded target")
         if target_json is None:
+            # Defer target ontology inference to a dedicated task
             infer_target_ontology = True
         else:
             app.logger.info("Using cached ontology for uploaded target")
@@ -289,21 +335,31 @@ def start_matching():
 
     # Kick off tasks in parallel: source ontology (if needed) and matching
     source_task = None
+    target_task = None
+
+    # Kick off target ontology inference if needed (parallel to matching)
+    if infer_target_ontology:
+        target_task = infer_target_ontology_task.apply_async(
+            (session,),
+            queue="ontology",
+        )
+
     if infer_source_ontology:
         # Route to ontology queue for concurrency/isolation
         source_task = infer_source_ontology_task.apply_async(
             (session,), queue="ontology"
         )
 
-    # Matching task should not wait for source ontology
+    # Matching task should not wait for ontology tasks
     task = run_matching_task.apply_async(
         (session,),
-        {"nodes": None, "infer_target_ontology": infer_target_ontology},
+        {"nodes": None},
         queue="matching",
     )
     return {
         "task_id": task.id,
         "source_ontology_task_id": (source_task.id if source_task else None),
+        "target_ontology_task_id": (target_task.id if target_task else None),
     }
 
 
@@ -355,6 +411,55 @@ def matching_status():
         matching_task.sync_cache()
         # matching_task.get_candidates()
 
+        response = {
+            "status": "completed",
+            "result": task.result,
+            "taskState": task_state,
+        }
+    else:
+        response = {
+            "status": task.state,
+            "message": "Task is in progress",
+            "taskState": task_state,
+        }
+
+    return response
+
+
+@app.route("/api/ontology/target/status", methods=["POST"])
+def target_ontology_status():
+    data = request.json or {}
+    task_id = data.get("taskId")
+
+    if not task_id:
+        return {"status": "error", "message": "No task_id provided"}, 400
+
+    task = infer_target_ontology_task.AsyncResult(task_id)
+
+    app.logger.info(
+        (
+            f"Target ontology task state: {task.state}, {task.info}, "
+            f"{task.result}, {task.traceback}"
+        )
+    )
+
+    task_state = TaskState(
+        task_type="target", task_id=task_id, new_task=False
+    ).get_task_state()
+
+    if task.state == "PENDING":
+        response = {
+            "status": "pending",
+            "message": "Task is pending",
+            "taskState": task_state,
+        }
+    elif task.state == "FAILURE":
+        response = {
+            "status": "failed",
+            "message": str(task.info),
+            "taskState": task_state,
+        }
+    elif task.state == "SUCCESS":
         response = {
             "status": "completed",
             "result": task.result,

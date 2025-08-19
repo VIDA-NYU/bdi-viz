@@ -10,6 +10,7 @@ import https from 'https';
 interface StartMatchingIds {
     taskId: string;
     sourceOntologyTaskId?: string | null;
+    targetOntologyTaskId?: string | null;
 }
 
 const startMatchingTask = async (uploadData: FormData): Promise<StartMatchingIds> => {
@@ -18,6 +19,7 @@ const startMatchingTask = async (uploadData: FormData): Promise<StartMatchingIds
     return {
         taskId: response.data.task_id,
         sourceOntologyTaskId: response.data.source_ontology_task_id ?? null,
+        targetOntologyTaskId: response.data.target_ontology_task_id ?? null,
     };
 };
 
@@ -99,6 +101,46 @@ const pollForSourceOntologyStatus = async ({
     }, 5000);
 };
 
+// Target Ontology Task
+
+interface TargetOntologyStatusProps {
+    taskId: string;
+    taskStateCallback?: (taskState: TaskState) => void;
+    onReady: (targetOntology: Ontology[]) => void;
+    onError: (error: any) => void;
+}
+
+const pollForTargetOntologyStatus = async ({
+    taskId,
+    taskStateCallback,
+    onReady,
+    onError,
+}: TargetOntologyStatusProps) => {
+    const interval = setInterval(async () => {
+        try {
+            const response = await axios.post("/api/ontology/target/status", { taskId });
+            const status = response.data.status;
+            const taskState = response.data.taskState as TaskState;
+            if (taskStateCallback) taskStateCallback(taskState);
+
+            if (status === "completed") {
+                clearInterval(interval);
+                // fetch the inferred target ontology
+                getTargetOntology({
+                    callback: (targetOntology) => onReady(targetOntology),
+                });
+            } else if (status === "failed") {
+                clearInterval(interval);
+                onError(response.data.message || "Target ontology task failed");
+            }
+        } catch (error) {
+            onError(error);
+            console.error("Error polling for target ontology status:", error);
+            clearInterval(interval);
+        }
+    }, 5000);
+};
+
 interface RunMatchingTaskProps {
     uploadData: FormData;
     onResult: (result: any) => void;
@@ -106,6 +148,8 @@ interface RunMatchingTaskProps {
     taskStateCallback: (taskState: TaskState) => void;
     onSourceOntologyReady?: (ontology: Ontology[]) => void;
     sourceOntologyTaskStateCallback?: (taskState: TaskState) => void;
+    onTargetOntologyReady?: (ontology: Ontology[]) => void;
+    targetOntologyTaskStateCallback?: (taskState: TaskState) => void;
 }
 
 const runMatchingTask = async ({
@@ -115,10 +159,12 @@ const runMatchingTask = async ({
     taskStateCallback,
     onSourceOntologyReady,
     sourceOntologyTaskStateCallback,
+    onTargetOntologyReady,
+    targetOntologyTaskStateCallback,
 }: RunMatchingTaskProps) => {
     try {
-        const { taskId, sourceOntologyTaskId } = await startMatchingTask(uploadData);
-        console.log("Matching task started with taskId:", taskId, "; source task:", sourceOntologyTaskId);
+        const { taskId, sourceOntologyTaskId, targetOntologyTaskId } = await startMatchingTask(uploadData);
+        console.log("Matching task started with taskId:", taskId, "; source task:", sourceOntologyTaskId, "; target task:", targetOntologyTaskId);
         // Start matching poller
         pollForMatchingStatus({ taskId, taskStateCallback, onResult, onError });
         // Start source ontology poller if provided by backend and callbacks exist
@@ -127,6 +173,15 @@ const runMatchingTask = async ({
                 taskId: sourceOntologyTaskId,
                 taskStateCallback: sourceOntologyTaskStateCallback,
                 onReady: onSourceOntologyReady,
+                onError,
+            });
+        }
+        // Start target ontology poller if provided by backend and callbacks exist
+        if (targetOntologyTaskId && onTargetOntologyReady) {
+            pollForTargetOntologyStatus({
+                taskId: targetOntologyTaskId,
+                taskStateCallback: targetOntologyTaskStateCallback,
+                onReady: onTargetOntologyReady,
                 onError,
             });
         }
