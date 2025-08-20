@@ -504,7 +504,7 @@ def get_agent(memory_retriever):
                 max_retries=3,
             )
         elif llm_provider == "openai":
-            llm_model = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+            llm_model = ChatOpenAI(model="gpt-5-nano")
         else:
             raise ValueError(f"Invalid LLM provider: {llm_provider}")
         AGENT = Agent(memory_retriever, llm_model=llm_model)
