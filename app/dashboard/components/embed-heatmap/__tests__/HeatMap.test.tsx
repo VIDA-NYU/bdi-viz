@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import HeatMap from '../HeatMap';
-import { mockData, mockSourceColumns, mockTargetOntologies } from '../__mocks__/mocks';
+import { mockData, mockSourceColumns, mockTargetOntologies, mockMetaData } from '../__mocks__/mocks';
 
 describe('HeatMap Component', () => {
   it('should toggle the expanded state of a cell when clicked', () => {
@@ -20,6 +20,7 @@ describe('HeatMap Component', () => {
         targetUniqueValues={[]}
         highlightSourceColumns={[]}
         highlightTargetColumns={[]}
+        metaData={mockMetaData}
       />
     );
 
@@ -44,6 +45,7 @@ describe('HeatMap Component', () => {
         targetUniqueValues={[]}
         highlightSourceColumns={[]}
         highlightTargetColumns={[]}
+        metaData={mockMetaData}
       />
     );
 

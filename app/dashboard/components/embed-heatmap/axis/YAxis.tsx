@@ -92,8 +92,19 @@ const AxisLabel = ({
   // Update text width whenever text changes.
   useLayoutEffect(() => {
     if (textRef.current) {
-      const { width } = textRef.current.getBBox();
-      setTextWidth(width);
+      const svgText: any = textRef.current as any;
+      if (typeof svgText.getBBox === "function") {
+        try {
+          const { width } = svgText.getBBox();
+          setTextWidth(width);
+          return;
+        } catch (_) {
+          // fallthrough to approximation below
+        }
+      }
+      // Fallback for test/jsdom where getBBox is not implemented
+      const approxWidth = (displayedText?.length || 0) * 7; // ~7px per character
+      setTextWidth(approxWidth);
     }
   }, [displayedText]);
 
