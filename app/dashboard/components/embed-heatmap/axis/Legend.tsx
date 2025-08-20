@@ -13,7 +13,8 @@ const Legend: React.FC<LegendProps> = ({
 
   const legendWidth = 25;
   const legendHeight = 300;
-  const legendOffset = -200;
+  const legendOffsetX = -200;
+  const legendOffsetY = 30;
 
   const colorRamp = color;
     
@@ -21,7 +22,7 @@ const Legend: React.FC<LegendProps> = ({
   return (
     <g>
       <rect
-        transform={`translate(${legendOffset - 16}, 0)`}
+        transform={`translate(${legendOffsetX - 16}, ${legendOffsetY})`}
         // style={{ filter: "drop-shadow(1px 1px 1px rgba(0,0,0,0.3))" }}
         width={legendWidth + 30}
         // height={y.range()[1]}
@@ -30,7 +31,7 @@ const Legend: React.FC<LegendProps> = ({
         rx={3}
         ry={3}
       />
-      <g transform={`translate(${legendOffset}, 15)`}>
+      <g transform={`translate(${legendOffsetX}, ${legendOffsetY + 15})`}>
         <StyledText
           x={-2}
           y={0}
@@ -70,7 +71,7 @@ const Legend: React.FC<LegendProps> = ({
       </g>
 
       {/* Accepted Legend */}
-      <g transform={`translate(${legendOffset}, 160)`}>
+      <g transform={`translate(${legendOffsetX}, ${legendOffsetY + 160})`}>
         <StyledText
           x={-12}
           y={0}
@@ -95,7 +96,7 @@ const Legend: React.FC<LegendProps> = ({
       </g>
 
       {/* Rejected Legend */}
-      <g transform={`translate(${legendOffset}, 205)`}>
+      <g transform={`translate(${legendOffsetX}, ${legendOffsetY + 205})`}>
         <StyledText
           x={-10}
           y={0}
@@ -120,7 +121,7 @@ const Legend: React.FC<LegendProps> = ({
       </g>
 
       {/* Searched Legend */}
-      <g transform={`translate(${legendOffset}, 250)`}>
+      <g transform={`translate(${legendOffsetX}, ${legendOffsetY + 250})`}>
         <StyledText
           x={-17}
           y={0}

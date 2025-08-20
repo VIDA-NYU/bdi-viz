@@ -21,6 +21,10 @@ from .utils import (
     read_candidate_explanation_json,
     write_candidate_explanation_json,
     TaskState,
+    write_csv_with_comments,
+    load_source_df,
+    load_target_df,
+    read_csv_with_comments,
 )
 
 GDC_DATA_PATH = os.path.join(os.path.dirname(__file__), "./resources/cptac-3.csv")
@@ -145,7 +149,7 @@ def infer_source_ontology_task(self, session):
             )
             return {"status": "failed", "message": "Source file not found"}
 
-        source = pd.read_csv(".source.csv")
+        source = load_source_df()
 
         agent = get_agent()
         properties = []
@@ -206,7 +210,7 @@ def infer_target_ontology_task(self, session):
             )
             return {"status": "failed", "message": "Target file not found"}
 
-        target = pd.read_csv(".target.csv")
+        target = load_target_df()
 
         agent = get_agent()
         properties = []
@@ -263,8 +267,8 @@ def run_matching_task(
         matching_task = SESSION_MANAGER.get_session(session).matching_task
 
         if os.path.exists(".source.csv") and os.path.exists(".target.csv"):
-            source = pd.read_csv(".source.csv")
-            target = pd.read_csv(".target.csv")
+            source = load_source_df()
+            target = load_target_df()
 
             matching_task.update_dataframe(source_df=source, target_df=target)
             matching_task.set_nodes(nodes)
@@ -325,9 +329,43 @@ def start_matching():
         else:
             app.logger.info("Using cached ontology for uploaded target")
 
-    # cache csvs
-    source.to_csv(".source.csv", index=False)
-    target.to_csv(".target.csv", index=False)
+    # cache csvs with leading metadata comments
+    src_name = request.form.get("source_csv_name") if request.form is not None else None
+    tgt_name = request.form.get("target_csv_name") if request.form is not None else None
+    write_csv_with_comments(
+        source,
+        ".source.csv",
+        {
+            "original_filename": src_name or "source.csv",
+            "timestamp": (
+                request.form.get("source_csv_timestamp")
+                if request.form is not None
+                else None
+            ),
+            "size": (
+                request.form.get("source_csv_size")
+                if request.form is not None
+                else None
+            ),
+        },
+    )
+    write_csv_with_comments(
+        target,
+        ".target.csv",
+        {
+            "original_filename": tgt_name or "cptac-3.csv",
+            "timestamp": (
+                request.form.get("target_csv_timestamp")
+                if request.form is not None
+                else None
+            ),
+            "size": (
+                request.form.get("target_csv_size")
+                if request.form is not None
+                else None
+            ),
+        },
+    )
 
     # Clear specific namespaces for new task
     memory_retriever = get_memory_retriever()
@@ -398,8 +436,8 @@ def matching_status():
             "taskState": task_state,
         }
     elif task.state == "SUCCESS":
-        source = pd.read_csv(".source.csv")
-        target = pd.read_csv(".target.csv")
+        source = load_source_df()
+        target = load_target_df()
         matching_task.update_dataframe(source_df=source, target_df=target)
 
         if os.path.exists(".target.json"):
@@ -531,9 +569,9 @@ def get_results():
 
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
-            source = pd.read_csv(".source.csv")
+            source = load_source_df()
             if os.path.exists(".target.csv"):
-                target = pd.read_csv(".target.csv")
+                target = load_target_df()
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -562,9 +600,9 @@ def get_unique_values():
 
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
-            source = pd.read_csv(".source.csv")
+            source = load_source_df()
             if os.path.exists(".target.csv"):
-                target = pd.read_csv(".target.csv")
+                target = load_target_df()
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -580,9 +618,9 @@ def get_value_matches():
 
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
-            source = pd.read_csv(".source.csv")
+            source = load_source_df()
             if os.path.exists(".target.csv"):
-                target = pd.read_csv(".target.csv")
+                target = load_target_df()
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -605,7 +643,7 @@ def get_gdc_ontology():
 
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
-            source = pd.read_csv(".source.csv")
+            source = load_source_df()
             matching_task.update_dataframe(
                 source_df=source, target_df=pd.read_csv(GDC_DATA_PATH)
             )
@@ -628,9 +666,9 @@ def get_target_ontology():
 
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
-            source = pd.read_csv(".source.csv")
+            source = load_source_df()
             if os.path.exists(".target.csv"):
-                target = pd.read_csv(".target.csv")
+                target = load_target_df()
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -654,9 +692,9 @@ def get_source_ontology():
 
     if matching_task.source_df is None or matching_task.target_df is None:
         if os.path.exists(".source.csv"):
-            source = pd.read_csv(".source.csv")
+            source = load_source_df()
             if os.path.exists(".target.csv"):
-                target = pd.read_csv(".target.csv")
+                target = load_target_df()
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -977,6 +1015,55 @@ def user_operation():
         agent.handle_user_operation(operation, candidate, is_match_to_agent)
 
     return {"message": "success"}
+
+
+@app.route("/api/datasets/names", methods=["POST"])
+def get_dataset_names():
+    source_name = None
+    target_name = None
+
+    try:
+        if os.path.exists(".source.csv"):
+            _, meta = read_csv_with_comments(".source.csv")
+            source_name = meta.get("original_filename")
+            source_timestamp = meta.get("timestamp")
+            source_size = meta.get("size")
+    except Exception:
+        pass
+
+    try:
+        if os.path.exists(".target.csv"):
+            _, meta = read_csv_with_comments(".target.csv")
+            target_name = meta.get("original_filename")
+            target_timestamp = meta.get("timestamp")
+            target_size = meta.get("size")
+        else:
+            # Default target dataset when not uploaded
+            target_name = os.path.basename(GDC_DATA_PATH)
+            target_timestamp = None
+            target_size = None
+    except Exception:
+        target_name = os.path.basename(GDC_DATA_PATH)
+        target_timestamp = None
+        target_size = None
+
+    # Fallbacks
+    source_name = source_name or "source.csv"
+    target_name = target_name or os.path.basename(GDC_DATA_PATH)
+
+    return {
+        "message": "success",
+        "sourceMeta": {
+            "name": source_name,
+            "timestamp": source_timestamp,
+            "size": source_size,
+        },
+        "targetMeta": {
+            "name": target_name,
+            "timestamp": target_timestamp,
+            "size": target_size,
+        },
+    }
 
 
 @app.route("/api/user-operation/undo", methods=["POST"])

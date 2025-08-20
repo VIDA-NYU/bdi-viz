@@ -8,7 +8,8 @@ import {
     getUserOperationHistory,
     getTargetOntology,
     getGDCAttribute,
-    getSourceOntology
+    getSourceOntology,
+    getDatasetNames
 } from '@/app/lib/heatmap/heatmap-helper';
 import { getMockData } from '../components/utils/mock';
 
@@ -24,6 +25,7 @@ type DashboardCandidateState = {
     targetOntologies: Ontology[];
     sourceOntologies: Ontology[];
     gdcAttribute: GDCAttribute | undefined;
+    metaData?: { sourceMeta: DatasetMeta, targetMeta: DatasetMeta };
     handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => void;
     handleMatchers: (matchers: Matcher[]) => void;
     handleChatUpdate: (candidates: Candidate[]) => void;
@@ -52,6 +54,7 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
     const [targetOntologies, setTargetOntologies] = useState<Ontology[]>([]);
     const [sourceOntologies, setSourceOntologies] = useState<Ontology[]>([]);
     const [gdcAttribute, setGdcAttribute] = useState<GDCAttribute | undefined>(undefined);
+    const [metaData, setMetaData] = useState<{ sourceMeta: DatasetMeta, targetMeta: DatasetMeta } | undefined>();
 
     // Memoize handlers to prevent unnecessary re-renders
     const handleFileUpload = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => {
@@ -71,6 +74,12 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
         getMatchers({
             callback: handleMatchers,
             signal: controller.signal
+        });
+
+        // Refresh dataset names after a new upload
+        getDatasetNames({
+            callback: (sourceMeta, targetMeta) => setMetaData({ sourceMeta, targetMeta }),
+            signal: controller.signal,
         });
     }, []);
 
@@ -177,6 +186,13 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
                 });
                 resolve();
             }),
+            new Promise<void>(resolve => {
+                getDatasetNames({
+                    callback: (sourceMeta, targetMeta) => setMetaData({ sourceMeta, targetMeta }),
+                    signal: controller.signal,
+                });
+                resolve();
+            }),
         ]).catch(error => {
             if (error.name !== 'AbortError') {
                 console.error('Error loading dashboard data:', error);
@@ -198,6 +214,7 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
         targetOntologies,
         sourceOntologies,
         gdcAttribute,
+        metaData,
         handleFileUpload,
         handleMatchers,
         handleChatUpdate,

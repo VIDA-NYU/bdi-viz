@@ -9,10 +9,11 @@ import {
     Button, 
     Chip, 
     Typography, 
-    Tooltip,
+    
     Divider,
     Badge
 } from '@mui/material';
+import UnifiedTooltip from '@/app/lib/ui/UnifiedTooltip';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -144,7 +145,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
                         endAdornment: (
                             <InputAdornment position="end">
                                 {query && (
-                                    <Tooltip title="Clear search">
+                                    <UnifiedTooltip title="Clear search">
                                         <IconButton
                                             onClick={handleClearSearch}
                                             size="small"
@@ -155,9 +156,9 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
                                         >
                                             <ClearIcon sx={{ fontSize: 16 }} />
                                         </IconButton>
-                                    </Tooltip>
+                                    </UnifiedTooltip>
                                 )}
-                                <Tooltip title={ontologySearchPopupOpen ? 'Deactivate AI agent' : 'Activate AI agent'}>
+                                <UnifiedTooltip title={ontologySearchPopupOpen ? 'Deactivate AI agent' : 'Activate AI agent'}>
                                     <IconButton
                                         onClick={() => setOntologySearchPopupOpen(!ontologySearchPopupOpen)}
                                         size="small"
@@ -175,7 +176,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
                                     >
                                         <SmartToyIcon sx={{ fontSize: 14 }} />
                                     </IconButton>
-                                </Tooltip>
+                                </UnifiedTooltip>
                             </InputAdornment>
                         ),
                     }}

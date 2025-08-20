@@ -27,7 +27,7 @@ const useTooltip = () => {
         const easyMatchBadge = isEasy
             ? `<div style="margin: 6px 0 4px 0; display: inline-flex; align-items: center; gap: 6px;">
                    <span style="background:#E8F5E9;color:#1B5E20;border:1px solid #A5D6A7;border-radius:10px;padding:2px 8px;font-weight:700;font-size:10px;">EASY MATCH</span>
-                   <span style="color:#2E7D32;font-size:11px;">${isExactName ? 'Exact name match' : 'High name/value similarity'}</span>
+                   <span style="color:#A5D6A7;font-size:11px;">${isExactName ? 'Exact name match' : 'High name/value similarity'}</span>
                </div>`
             : '';
 
@@ -45,7 +45,7 @@ const useTooltip = () => {
             x: event.pageX,
             y: event.pageY,
             content: `
-            <div style="font-family: Arial, sans-serif; font-size: 12px;">
+            <div>
                 ${easyMatchBadge}
                 <div><strong>Source:</strong> ${data.sourceColumn}</div>
                 <div><strong>Target:</strong> ${data.targetColumn}</div>

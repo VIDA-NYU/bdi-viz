@@ -23,6 +23,7 @@ interface UpperTabsProps {
   highlightTargetColumns: string[];
   status: string[];
   updateStatus: (status: string[]) => void;
+  metaData?: { sourceMeta: DatasetMeta, targetMeta: DatasetMeta };
 }
 
 const UpperTabs: React.FC<UpperTabsProps> = ({
@@ -41,6 +42,7 @@ const UpperTabs: React.FC<UpperTabsProps> = ({
   highlightTargetColumns,
   status,
   updateStatus,
+  metaData,
 }) => {
   const [value, setValue] = useState("3");
   const { setGlobalCandidateHighlight } = useContext(HighlightGlobalContext);
@@ -123,6 +125,7 @@ const UpperTabs: React.FC<UpperTabsProps> = ({
           }}
           highlightSourceColumns={highlightSourceColumns}
           highlightTargetColumns={highlightTargetColumns}
+          metaData={metaData}
         />
       </Box>
     </Box>

@@ -7,7 +7,8 @@ import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import InfoIcon from '@mui/icons-material/Info';
-import { styled, Tooltip } from '@mui/material';
+import { styled } from '@mui/material';
+import UnifiedTooltip from '@/app/lib/ui/UnifiedTooltip';
 import { useResizedSVG, useResizedSVGRef } from '../hooks/resize-hooks';
 
 
@@ -477,9 +478,9 @@ const ParallelCoordinatesVisualization: React.FC<ParallelCoordinatesProps> = ({
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">
           Value Alignment Visualization
-          <Tooltip title="This visualization shows how individual values map between the source and target columns. The width of each rectangle represents the frequency of that value.">
+          <UnifiedTooltip title="This visualization shows how individual values map between the source and target columns. The width of each rectangle represents the frequency of that value.">
             <InfoIcon fontSize="small" sx={{ ml: 1, verticalAlign: 'middle', color: theme.palette.text.secondary }} />
-          </Tooltip>
+          </UnifiedTooltip>
         </Typography>
         
         <FormControlLabel

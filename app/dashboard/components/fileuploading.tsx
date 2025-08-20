@@ -77,9 +77,22 @@ const FileUploading: React.FC<FileUploadingProps> = ({
                 readFileAsync(targetJsonFile),
             ]);
 
-            if (sourceCsv) uploadData.append("source_csv", sourceCsv);
-            if (targetCsv) uploadData.append("target_csv", targetCsv);
-            if (targetJson) uploadData.append("target_json", targetJson);
+            if (sourceCsv) {
+                uploadData.append("source_csv", sourceCsv);
+                if (sourceFile?.name) uploadData.append("source_csv_name", sourceFile.name);
+                // Filesize in KB
+                if (sourceFile.size) uploadData.append("source_csv_size", `${(sourceFile.size / 1024).toFixed(2)} KB`);
+                // Add a timestamp
+                uploadData.append("source_csv_timestamp", new Date().toISOString());
+            }
+            if (targetCsv) {
+                uploadData.append("target_csv", targetCsv);
+                if (targetCsvFile?.name) uploadData.append("target_csv_name", targetCsvFile.name);
+                // Filesize in KB
+                if (targetCsvFile?.size) uploadData.append("target_csv_size", `${(targetCsvFile.size / 1024).toFixed(2)} KB`);
+                // Add a timestamp
+                uploadData.append("target_csv_timestamp", new Date().toISOString());
+            }
 
             runMatchingTask({
                 uploadData,

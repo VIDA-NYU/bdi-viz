@@ -1353,10 +1353,10 @@ class MatchingTask:
                 )
 
                 # Update weight updater if needed
-                self.cached_candidates[
-                    "matchers"
-                ] = self.weight_updater.update_matchers(
-                    self.cached_candidates["matchers"]
+                self.cached_candidates["matchers"] = (
+                    self.weight_updater.update_matchers(
+                        self.cached_candidates["matchers"]
+                    )
                 )
                 task_state._update_task_state(
                     progress=95,

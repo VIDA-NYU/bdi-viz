@@ -186,3 +186,9 @@ declare interface AgentState {
     task_id?: string;
     matcher_task_id?: string;
 }
+
+interface DatasetMeta {
+    name: string;
+    timestamp?: string;
+    size?: string;
+}
