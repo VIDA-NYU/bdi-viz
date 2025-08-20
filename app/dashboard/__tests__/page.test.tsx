@@ -14,15 +14,8 @@ const mockSettingsContext = {
   setDeveloperMode: jest.fn(),
   hoverMode: false,
   setHoverMode: jest.fn(),
-  taskState: {
-    status: 'idle',
-    progress: 0,
-    current_step: 'Task start...',
-    total_steps: 4,
-    completed_steps: 0,
-    logs: [],
-  },
-  setTaskState: jest.fn(),
+  taskStates: {},
+  setTaskStateFor: jest.fn(),
   ontologySearchPopupOpen: false,
   setOntologySearchPopupOpen: jest.fn(),
 };

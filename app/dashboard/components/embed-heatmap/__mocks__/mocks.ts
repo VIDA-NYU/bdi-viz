@@ -32,3 +32,16 @@ export const mockTargetOntologies: Ontology[] = [
     grandparent: 'clinical',
   },
 ]; 
+
+export const mockMetaData: { sourceMeta: DatasetMeta, targetMeta: DatasetMeta } = {
+  sourceMeta: {
+    name: 'source',
+    timestamp: '2021-01-01',
+    size: '100KB',
+  },
+  targetMeta: {
+    name: 'target',
+    timestamp: undefined,
+    size: undefined,
+  },
+};

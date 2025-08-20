@@ -336,6 +336,19 @@ const mockApiResponses: MockApiResponses = {
         }
     ]
   },
+  '/api/datasets/names': {
+    "message": "success",
+    "sourceMeta": {
+      "name": "mock_source.csv",
+      "size": "12.3 KB",
+      "timestamp": "2024-01-01T00:00:00.000Z"
+    },
+    "targetMeta": {
+      "name": "gdc.csv",
+      "size": "1805.25 KB",
+      "timestamp": "2024-01-01T00:00:00.000Z"
+    }
+  },
   '/api/matchers': {
     "message": "success",
     "matchers": [
