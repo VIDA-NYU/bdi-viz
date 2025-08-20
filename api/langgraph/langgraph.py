@@ -144,8 +144,8 @@ class LangGraphAgent:
                 max_retries=retries,
             )
         elif llm_provider == "openai":
-            self.master_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
-            self.worker_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+            self.master_llm = ChatOpenAI(model="gpt-5-nano")
+            self.worker_llm = ChatOpenAI(model="gpt-5-nano")
         else:
             raise ValueError(f"Invalid LLM provider: {llm_provider}")
 

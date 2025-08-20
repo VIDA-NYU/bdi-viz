@@ -308,7 +308,7 @@ def start_matching():
             with open(".source.json", "r") as f:
                 source_json = json.load(f)
         # If not, or if the source has changed, infer ontology
-        if source_json is None or not source.equals(pd.read_csv(".source.csv")):
+        if source_json is None or not source.equals(load_source_df()):
             infer_source_ontology = True
     else:
         # If no .source.csv, infer and cache
@@ -353,14 +353,14 @@ def start_matching():
         target,
         ".target.csv",
         {
-            "original_filename": tgt_name or "cptac-3.csv",
+            "original_filename": tgt_name or os.path.basename(GDC_DATA_PATH),
             "timestamp": (
                 request.form.get("target_csv_timestamp")
                 if request.form is not None
                 else None
             ),
             "size": (
-                request.form.get("target_csv_size")
+                request.form.get("target_csv_size", "1805.25 KB")
                 if request.form is not None
                 else None
             ),
