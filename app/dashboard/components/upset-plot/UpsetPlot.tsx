@@ -25,6 +25,7 @@ interface DataPerMatcher {
     matchers: string;
     score: number;
     isSelected: boolean;
+    status: string;
 }
 
 interface UpsetPlotProps {
@@ -107,7 +108,8 @@ const UpsetPlot: React.FC<UpsetPlotProps> = ({ aggData, matchers, selectedCandid
                 targetColumn: d.targetColumn,
                 matchers: matcher ?? '',
                 score: d.score,
-                isSelected: d.isSelected
+                isSelected: d.isSelected,
+                status: d.status
             }))
         );
     }, [groupedData]);
@@ -134,9 +136,9 @@ const UpsetPlot: React.FC<UpsetPlotProps> = ({ aggData, matchers, selectedCandid
         }
         if (lowerSetChartRef.current) {
             lowerSetChartRef.current.innerHTML = '';
-            lowerSetChartRef.current.appendChild(lowerSetChart({ dataCrossProduct, dataPerMatcher }, fullWidth));
+            lowerSetChartRef.current.appendChild(lowerSetChart({ dataCrossProduct, dataPerMatcher }, fullWidth, theme));
         }
-    }, [groupedData, weightPerMatcher, dataCrossProduct, dataPerMatcher, fullWidth, developerMode]);
+    }, [groupedData, weightPerMatcher, dataCrossProduct, dataPerMatcher, fullWidth, developerMode, theme]);
 
     return (
         <Box ref={containerRef}>
@@ -165,7 +167,13 @@ function upperColumnChart(groupedData: GroupedData[], fullWidth: number, color: 
         {
             y: d => d.score,
             x: d => d.id,
-            fill: d => d.isSelected ? theme.palette.error.dark : d.status === "accepted" ? theme.palette.success.dark : color(d.score),
+            fill: d => d.isSelected
+                ? theme.palette.secondary.dark
+                : d.status === "rejected"
+                    ? theme.palette.error.dark
+                    : d.status === "accepted"
+                        ? theme.palette.success.dark
+                        : color(d.score),
             insetLeft: 0.5,
             insetRight: 0.5,
             marginLeft: 0,
@@ -249,7 +257,7 @@ interface LowerSetChartProps {
     dataPerMatcher: DataPerMatcher[];
 }
 
-function lowerSetChart({ dataCrossProduct, dataPerMatcher }: LowerSetChartProps, fullWidth: number) {
+function lowerSetChart({ dataCrossProduct, dataPerMatcher }: LowerSetChartProps, fullWidth: number, theme: any) {
     const backgroundStripeChart = Plot.cell(
         dataCrossProduct,
         {
@@ -276,7 +284,11 @@ function lowerSetChart({ dataCrossProduct, dataPerMatcher }: LowerSetChartProps,
         {
             x: d => d.id,
             y: d => d.matchers,
-            fill: d => d.isSelected ? 'red' : '#333333', // Highlight selected candidate
+            fill: d => d.isSelected
+                ? theme.palette.secondary.dark
+                : d.status === 'rejected'
+                    ? theme.palette.error.dark
+                    : '#333333',
             r: 3.5,
         }
     );
@@ -288,7 +300,11 @@ function lowerSetChart({ dataCrossProduct, dataPerMatcher }: LowerSetChartProps,
             y: d => d.matchers,
             z: d => d.id,
             strokeWidth: 2,
-            stroke: d => d.isSelected ? 'red' : '#333333', // Highlight selected candidate
+            stroke: d => d.isSelected
+                ? theme.palette.secondary.dark
+                : d.status === 'rejected'
+                    ? theme.palette.error.dark
+                    : '#333333',
         }
     );
 
