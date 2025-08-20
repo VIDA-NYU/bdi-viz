@@ -55,9 +55,9 @@ export function renderColumns(
     },
     tooltip: {
       padding: { x: 8, y: 6 },
-      cornerRadius: 3,
+      cornerRadius: 6,
       opacity: 0.9,
-      offsetY: 40
+      offsetY: 24
     }
   };
 
@@ -192,27 +192,29 @@ export function renderColumns(
       
       // Background rectangle
       const tooltipBg = tooltip.append('rect')
-        .attr('fill', styles.column.fill)
-        .attr('stroke', theme.palette.divider)
+        .attr('fill', theme.palette.grey[600])
         .attr('rx', styles.tooltip.cornerRadius)
-        .attr('opacity', styles.tooltip.opacity);
+        .attr('opacity', styles.tooltip.opacity)
+        .attr('filter', 'drop-shadow(0 2px 8px rgba(0,0,0,0.25))');
       
       // Text element
       const tooltipText = tooltip.append('text')
         .attr('x', styles.tooltip.padding.x)
-        .attr('y', styles.tooltip.padding.y * 2)
+        .attr('y', styles.tooltip.padding.y + 10)
         .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
         .attr('font-size', `${typography.tooltipFontSize}px`)
-        .attr('fill', theme.palette.text.primary)
+        .attr('fill', theme.palette.common.white)
         .text(d.name);
       
       // Get the text bounding box to size the rectangle
       const textBox = (tooltipText.node() as SVGTextElement).getBBox();
       
       // Position and size the background rectangle
+      const rectW = textBox.width + (styles.tooltip.padding.x * 2);
+      const rectH = textBox.height + (styles.tooltip.padding.y * 2);
       tooltipBg
-        .attr('width', textBox.width + (styles.tooltip.padding.x * 2))
-        .attr('height', textBox.height + (styles.tooltip.padding.y * 2));
+        .attr('width', rectW)
+        .attr('height', rectH);
       
       // Position the tooltip based on orientation
       if (orientation === ColumnOrientation.HORIZONTAL) {

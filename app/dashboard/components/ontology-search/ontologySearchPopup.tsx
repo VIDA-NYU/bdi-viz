@@ -8,8 +8,8 @@ import {
     Paper,
     Divider,
     InputAdornment,
-    Tooltip,
 } from '@mui/material';
+import UnifiedTooltip from '@/app/lib/ui/UnifiedTooltip';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
@@ -386,7 +386,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                         endAdornment: (
                             <InputAdornment position="end">
                                 <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                    <Tooltip title="Attach file">
+                                    <UnifiedTooltip title="Attach file">
                                         <IconButton
                                             size="small"
                                             onClick={() => fileInputRef.current?.click()}
@@ -394,8 +394,8 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                                         >
                                             <AttachFileIcon fontSize="small" />
                                         </IconButton>
-                                    </Tooltip>
-                                    <Tooltip title="Send message">
+                                    </UnifiedTooltip>
+                                    <UnifiedTooltip title="Send message">
                                         <IconButton
                                             size="small"
                                             onClick={handleSearch}
@@ -404,7 +404,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                                         >
                                             <SendIcon fontSize="small" />
                                         </IconButton>
-                                    </Tooltip>
+                                    </UnifiedTooltip>
                                 </Box>
                             </InputAdornment>
                         ),

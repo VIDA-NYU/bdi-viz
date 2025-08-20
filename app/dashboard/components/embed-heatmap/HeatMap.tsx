@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useCallback, useContext } from "react";
-import { Box } from "@mui/material";
+import { Box, Tooltip, IconButton, Chip } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import { useTheme } from "@mui/material/styles";
 
 import { ClusteringOptions } from "./tree/types";
@@ -32,6 +34,7 @@ interface HeatMapProps {
   highlightSourceColumns: Array<string>;
   highlightTargetColumns: Array<string>;
   sx?: Record<string, any>;
+  metaData?: { sourceMeta: DatasetMeta, targetMeta: DatasetMeta };
 }
 
 const MARGIN = { top: 30, right: 78, bottom: 0, left: 220 };
@@ -51,6 +54,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
   highlightSourceColumns,
   highlightTargetColumns,
   sx,
+  metaData,
 }) => {
   const theme = useTheme();
 
@@ -256,27 +260,34 @@ const HeatMap: React.FC<HeatMapProps> = ({
     setGlobalCandidateHighlight
   ]);
 
-  // Memoize tooltip element
+  // Memoize tooltip element (MUI-styled for consistency)
   const tooltipElement = useMemo(() => {
     if (!tooltip.visible) return null;
-    
+
     return (
-      <div
-        style={{
-          position: "absolute",
-          left: tooltip.x + 10,
-          top: tooltip.y - 10,
-          background: "white",
-          padding: "8px",
-          border: "1px solid black",
-          borderRadius: "4px",
-          pointerEvents: "none",
-          zIndex: 1000,
-        }}
-        dangerouslySetInnerHTML={{ __html: tooltip.content }}
-      />
+      <Box
+        sx={{ position: "absolute", left: tooltip.x, top: tooltip.y, pointerEvents: "none", zIndex: 1000 }}
+      >
+        <Tooltip
+          open
+          arrow
+          placement="top"
+          describeChild
+          title={
+            <Box
+              sx={{
+                fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                fontSize: 12,
+              }}
+              dangerouslySetInnerHTML={{ __html: tooltip.content }}
+            />
+          }
+        >
+          <Box sx={{ width: 0, height: 0 }} />
+        </Tooltip>
+      </Box>
     );
-  }, [tooltip.visible, tooltip.x, tooltip.y, tooltip.content]);
+  }, [tooltip.visible, tooltip.x, tooltip.y, tooltip.content, theme.palette.grey, theme.palette.common.white]);
 
   // Determine whether source ontology exists from props
   const hasSourceOntology = useMemo(() => {
@@ -323,6 +334,33 @@ const HeatMap: React.FC<HeatMapProps> = ({
             )}
           </g>
         </svg>
+
+        {/* Task info (merged) - positioned near the legend area */}
+        <Box sx={{ position: "absolute", top: 660, left: 335, display: "flex", gap: 1, alignItems: "center", zIndex: 1000 }}>
+          <Tooltip arrow placement="top" describeChild
+            title={
+              <Box sx={{ p: 0.5 }}>
+                <Box sx={{ mb: 1 }}>
+                  <Chip size="small" label="Source" sx={{ mb: 0.5 }} />
+                  <div><strong>Name:</strong> {metaData?.sourceMeta.name ?? "source.csv"}</div>
+                  {metaData?.sourceMeta.size && <div><strong>Size:</strong> {metaData.sourceMeta.size}</div>}
+                  {metaData?.sourceMeta.timestamp && <div><strong>Uploaded:</strong> {new Date(metaData.sourceMeta.timestamp).toLocaleString()}</div>}
+                </Box>
+                <Box>
+                  <Chip size="small" label="Target" sx={{ mb: 0.5 }} />
+                  <div><strong>Name:</strong> {metaData?.targetMeta.name ?? "GDC (default)"}</div>
+                  {metaData?.targetMeta.size && <div><strong>Size:</strong> {metaData.targetMeta.size}</div>}
+                  {metaData?.targetMeta.timestamp && <div><strong>Uploaded:</strong> {new Date(metaData.targetMeta.timestamp).toLocaleString()}</div>}
+                </Box>
+              </Box>
+            }
+          >
+            <IconButton size="small" aria-label="Task info" sx={{ bgcolor: theme.palette.grey[100], border: `1px solid ${theme.palette.divider}` }}>
+              <InfoOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Chip size="small" label="Task info" variant="outlined" />
+        </Box>
 
         {/* Tooltip */}
         {tooltipElement}

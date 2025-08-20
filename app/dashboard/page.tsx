@@ -61,6 +61,7 @@ export default function Dashboard() {
         targetOntologies,
         sourceOntologies,
         gdcAttribute,
+        metaData,
         handleFileUpload,
         handleMatchers,
         setSelectedCandidate,
@@ -341,6 +342,7 @@ export default function Dashboard() {
                         highlightTargetColumns={highlightedTargetColumns}
                         status={status}
                         updateStatus={updateStatus}
+                        metaData={metaData}
                     />
                     {/* Show Paginator when sourceColumn is "all" */}
                     <Paginator setSelectedCandidate={setSelectedCandidate} isShow={sourceColumn === "all"} />

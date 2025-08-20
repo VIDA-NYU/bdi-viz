@@ -191,6 +191,30 @@ const runMatchingTask = async ({
     }
 };
 
+
+interface getDatasetNamesProps {
+    callback: (sourceMeta: DatasetMeta, targetMeta: DatasetMeta) => void;
+    signal?: AbortSignal;
+}
+
+const getDatasetNames = (prop: getDatasetNamesProps) => {
+    return makeApiRequest<void>(
+        "/api/datasets/names",
+        {},
+        prop.signal,
+        (data) => {
+            const sourceMeta = data?.sourceMeta;
+            const targetMeta = data?.targetMeta;
+            if (sourceMeta && targetMeta) {
+                prop.callback(sourceMeta, targetMeta);
+                return;
+            } else {
+                throw new Error("Invalid dataset meta format");
+            }
+        }
+    );
+};
+
 // Common HTTP configuration
 const getHttpAgents = () => ({
     httpAgent: new http.Agent({ keepAlive: true }),
@@ -718,4 +742,5 @@ export {
     newMatcher,
     pollForMatcherStatus,
     runRematchTask,
+    getDatasetNames,
 };

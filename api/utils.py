@@ -67,6 +67,68 @@ def extract_data_from_request(request):
     return source_df, target_df, target_json
 
 
+# ----------------------
+# CSV with comment metadata helpers
+# ----------------------
+
+
+def write_csv_with_comments(
+    df: pd.DataFrame, path: str, meta: Optional[Dict[str, Any]] = None
+) -> None:
+    """Write a CSV file with leading comment lines encoding metadata.
+
+    Each metadata entry is emitted as: `# key: value` on its own line, followed by
+    a blank line and the CSV content.
+    """
+    lines: List[str] = []
+    if meta:
+        for key, value in meta.items():
+            try:
+                lines.append(f"# {key}: {value}")
+            except Exception:
+                lines.append(f"# {key}: {str(value)}")
+    lines.append("")
+    header = "\n".join(lines)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(header + "\n")
+        df.to_csv(f, index=False)
+
+
+def read_csv_with_comments(path: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """Read a CSV previously written by write_csv_with_comments.
+
+    Returns a tuple of (DataFrame, metadata_dict).
+    """
+    meta: Dict[str, str] = {}
+    with open(path, "r", encoding="utf-8") as f:
+        all_lines = f.readlines()
+
+    i = 0
+    while i < len(all_lines) and all_lines[i].startswith("#"):
+        line = all_lines[i][1:].strip()
+        if ":" in line:
+            k, v = line.split(":", 1)
+            meta[k.strip()] = v.strip()
+        i += 1
+
+    if i < len(all_lines) and all_lines[i].strip() == "":
+        i += 1
+
+    csv_text = "".join(all_lines[i:])
+    df = pd.read_csv(StringIO(csv_text))
+    return df, meta
+
+
+def load_source_df() -> pd.DataFrame:
+    df, _ = read_csv_with_comments(".source.csv")
+    return df
+
+
+def load_target_df() -> pd.DataFrame:
+    df, _ = read_csv_with_comments(".target.csv")
+    return df
+
+
 @check_cache_dir
 def sanitize_filename(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", name)

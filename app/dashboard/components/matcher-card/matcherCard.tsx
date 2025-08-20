@@ -7,10 +7,11 @@ import {
     Stack,
     Typography,
     Chip,
-    Tooltip,
+    
     IconButton,
     Collapse
 } from '@mui/material';
+import UnifiedTooltip from '@/app/lib/ui/UnifiedTooltip';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
@@ -75,7 +76,7 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                                     width: '100%',
                                     height: '100%'
                                 }}>
-                                    <Tooltip title={`MRR: ${matcher.mrr.toFixed(2)}`}>
+                                    <UnifiedTooltip title={`MRR: ${matcher.mrr.toFixed(2)}`}>
                                         <Box sx={{ 
                                             height: '100%', 
                                             width: `${matcher.mrr * 33}%`,
@@ -89,8 +90,8 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                                         }}>
                                             MRR
                                         </Box>
-                                    </Tooltip>
-                                    <Tooltip title={`F1: ${matcher.f1Score.toFixed(2)}`}>
+                                    </UnifiedTooltip>
+                                    <UnifiedTooltip title={`F1: ${matcher.f1Score.toFixed(2)}`}>
                                         <Box sx={{ 
                                             height: '100%', 
                                             width: `${matcher.f1Score * 33}%`,
@@ -104,8 +105,8 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                                         }}>
                                             F1
                                         </Box>
-                                    </Tooltip>
-                                    <Tooltip title={`Recall: ${matcher.recallGt.toFixed(2)}`}>
+                                    </UnifiedTooltip>
+                                    <UnifiedTooltip title={`Recall: ${matcher.recallGt.toFixed(2)}`}>
                                         <Box sx={{ 
                                             height: '100%', 
                                             width: `${matcher.recallGt * 33}%`,
@@ -119,13 +120,13 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                                         }}>
                                             RCL
                                         </Box>
-                                    </Tooltip>
+                                    </UnifiedTooltip>
                                 </Box>
                             </Box>
                         </Stack>
                         
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Tooltip title={expanded ? "Collapse" : "Expand"}>
+                            <UnifiedTooltip title={expanded ? "Collapse" : "Expand"}>
                                 <IconButton 
                                     size="small" 
                                     onClick={(e) => {
@@ -142,7 +143,7 @@ function MatcherCard({ matcher }: MatcherCardProps) {
                                 >
                                     {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                                 </IconButton>
-                            </Tooltip>
+                            </UnifiedTooltip>
                         </Box>
                     </Box>
                 }

@@ -9,9 +9,9 @@ import {
     ListItem, 
     ListItemText,
     Stack,
-    Tooltip,
     Typography
 } from '@mui/material';
+import UnifiedTooltip from '@/app/lib/ui/UnifiedTooltip';
 import { getIcon, getTypeColor, getTypeDescription, getDefaultTitle } from './icons';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
@@ -105,7 +105,7 @@ function ExplanationItem({
                             </Box>
                             
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                <Tooltip title={getTypeDescription(explanation.type)}>
+                                <UnifiedTooltip title={getTypeDescription(explanation.type)}>
                                     <Chip 
                                         size="small" 
                                         label={explanation.type.charAt(0).toUpperCase() + explanation.type.slice(1)} 
@@ -116,7 +116,7 @@ function ExplanationItem({
                                             fontSize: '0.65rem',
                                         }} 
                                     />
-                                </Tooltip>
+                                </UnifiedTooltip>
                                 <Chip
                                     size="small"
                                     label={explanation.isMatch ? "Match" : "Not a Match"}
@@ -131,7 +131,7 @@ function ExplanationItem({
                         </Stack>
                         
                         <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
-                            <Tooltip title={thumbUp ? "Remove upvote" : "Upvote this explanation"}>
+                            <UnifiedTooltip title={thumbUp ? "Remove upvote" : "Upvote this explanation"}>
                                 <IconButton 
                                     size="small"
                                     onClick={(e) => {
@@ -142,9 +142,9 @@ function ExplanationItem({
                                 >
                                     {thumbUp ? <ThumbUpIcon fontSize="small" /> : <ThumbUpOutlinedIcon fontSize="small" />}
                                 </IconButton>
-                            </Tooltip>
+                            </UnifiedTooltip>
                             
-                            <Tooltip title={thumbDown ? "Remove downvote" : "Downvote this explanation"}>
+                            <UnifiedTooltip title={thumbDown ? "Remove downvote" : "Downvote this explanation"}>
                                 <IconButton 
                                     size="small"
                                     onClick={(e) => {
@@ -155,16 +155,16 @@ function ExplanationItem({
                                 >
                                     {thumbDown ? <ThumbDownIcon fontSize="small" /> : <ThumbDownOutlinedIcon fontSize="small" />}
                                 </IconButton>
-                            </Tooltip>
+                            </UnifiedTooltip>
                             
-                            <Tooltip title={expanded ? "Collapse" : "Expand"}>
+                            <UnifiedTooltip title={expanded ? "Collapse" : "Expand"}>
                                 <IconButton 
                                     size="small" 
                                     onClick={handleExpandClick}
                                 >
                                     {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                                 </IconButton>
-                            </Tooltip>
+                            </UnifiedTooltip>
                         </Box>
                     </Box>
                 }

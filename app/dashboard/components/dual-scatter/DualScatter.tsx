@@ -6,7 +6,8 @@ import { ClusterSelector } from './ClusterSelector';
 import { line, curveBasis } from 'd3';
 import { ClusterBackground } from './ClusterBackground';
 import { getClusterColors } from './colors';
-import { Box, Container, Card, Tooltip, Typography } from '@mui/material';
+import { Box, Container, Card, Typography } from '@mui/material';
+import UnifiedTooltip from '@/app/lib/ui/UnifiedTooltip';
 import { useLassoSelection } from './useLassoSelection';
 
 
@@ -279,7 +280,7 @@ const renderLinks = () => {
                                 />
                             ))}
                             {sourceNodes.slice(0, 9).map((node, i) => (
-                                <Tooltip key={i} title={node.name}>
+                                <UnifiedTooltip key={i} title={node.name}>
                                     <g
                                         transform={`translate(${node.coordinates.x},${node.coordinates.y})`}
                                         onMouseEnter={() => setHoveredNode(node.name)}
@@ -293,7 +294,7 @@ const renderLinks = () => {
                                             degree={links.filter(l => l.sourceColumn === node.name).length || 0}
                                         />
                                     </g>
-                                </Tooltip>
+                                </UnifiedTooltip>
                             ))}
                         </g>
 
@@ -311,7 +312,7 @@ const renderLinks = () => {
                         <g transform={`translate(${width/2}, ${height*3/4})`}>
                             
                             {targetNodes.slice(0, 8).map((node, i) => (
-                                <Tooltip key={i} title={node.name}>
+                                <UnifiedTooltip key={i} title={node.name}>
                                     <g
                                         transform={`translate(${node.coordinates.x},${node.coordinates.y})`}
                                         onMouseEnter={() => setHoveredNode(node.name)}
@@ -325,7 +326,7 @@ const renderLinks = () => {
                                             selected={selectedClusters.includes(node.cluster)}
                                         />
                                     </g>
-                                </Tooltip>
+                                </UnifiedTooltip>
                             ))}
                         </g>
                         
