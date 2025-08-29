@@ -567,6 +567,7 @@ const getGDCAttribute = (prop: getGDCAttributeProps) => {
                     enum: property.enum,
                     minimum: property.minimum,
                     maximum: property.maximum,
+                    enumDef: property.enumDef,
                 } as GDCAttribute;
 
                 prop.callback(gdcAttribute);

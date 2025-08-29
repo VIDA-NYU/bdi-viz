@@ -5,9 +5,8 @@ import {
     Typography, 
     List, 
     ListItem,
-    Chip,
     Stack,
-    CircularProgress
+    Tooltip
 } from '@mui/material';
 import { BasicChip, HighlightedChip } from '../../layout/components';
 import { SectionHeader } from '../../layout/components';
@@ -96,27 +95,31 @@ const RelevantKnowledgeView = ({
                     <Typography variant="body2" sx={{ fontSize: '0.7rem' }}>
                     <strong>Enum:</strong>
                     </Typography>
-                    {gdcAttribute.enum.map((enumValue, index) => (
-                    globalQuery && enumValue.toLowerCase().includes(globalQuery.toLowerCase()) ? (
-                        <HighlightedChip
-                        key={index}
-                        label={enumValue}
-                        color="info" 
-                        size='small' 
-                        sx={{ fontSize: "0.65rem" }} 
-                        onClick={() => handleCopy(enumValue)}
-                        />
-                    ) : (
-                        <BasicChip
-                        key={index} 
-                        label={enumValue} 
-                        color="info" 
-                        size='small' 
-                        sx={{ fontSize: "0.65rem" }}
-                        onClick={() => handleCopy(enumValue)}
-                        />
-                    )
-                    ))}
+                    {gdcAttribute.enum.map((enumValue, index) => {
+                    const tooltipText = gdcAttribute.enumDef?.[enumValue] ?? enumValue;
+                    const isHighlighted = !!globalQuery && enumValue.toLowerCase().includes(globalQuery.toLowerCase());
+                    return (
+                        <Tooltip key={index} title={tooltipText} arrow placement="top">
+                        {isHighlighted ? (
+                            <HighlightedChip
+                            label={enumValue}
+                            color="info" 
+                            size='small' 
+                            sx={{ fontSize: "0.65rem" }} 
+                            onClick={() => handleCopy(enumValue)}
+                            />
+                        ) : (
+                            <BasicChip
+                            label={enumValue} 
+                            color="info" 
+                            size='small' 
+                            sx={{ fontSize: "0.65rem" }}
+                            onClick={() => handleCopy(enumValue)}
+                            />
+                        )}
+                        </Tooltip>
+                    );
+                    })}
                 </Box>
                 )}
             </Box>

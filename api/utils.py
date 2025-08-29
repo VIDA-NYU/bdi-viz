@@ -192,7 +192,7 @@ def download_model_pt(url: str, model_name: str) -> str:
 
 
 GDC_ONTOLOGY_FLAT_PATH = os.path.join(
-    os.path.dirname(__file__), "./resources/gdc_ontology_flat.json"
+    os.path.dirname(__file__), "./resources/gdc_ontology.json"
 )
 
 
