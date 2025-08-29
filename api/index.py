@@ -28,9 +28,7 @@ from .utils import (
 )
 
 GDC_DATA_PATH = os.path.join(os.path.dirname(__file__), "./resources/cptac-3.csv")
-GDC_JSON_PATH = os.path.join(
-    os.path.dirname(__file__), "./resources/gdc_ontology_flat.json"
-)
+GDC_JSON_PATH = os.path.join(os.path.dirname(__file__), "./resources/gdc_ontology.json")
 
 
 # Configure Celery

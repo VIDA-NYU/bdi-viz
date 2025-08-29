@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 from langchain.tools.base import StructuredTool
@@ -9,11 +8,6 @@ from pydantic import BaseModel, Field
 from ..session_manager import SESSION_MANAGER
 
 logger = logging.getLogger("bdiviz_flask.sub")
-
-GDC_DATA_PATH = os.path.join(os.path.dirname(__file__), "../resources/cptac-3.csv")
-GDC_JSON_PATH = os.path.join(
-    os.path.dirname(__file__), "../resources/gdc_ontology_flat.json"
-)
 
 
 class TaskTools:
@@ -62,7 +56,8 @@ class TaskTools:
         return StructuredTool.from_function(
             func=_start_matching_task,
             name="start_matching_task",
-            description="Start a new matching task with current source and target data. Optionally filter target by specific nodes. Returns task ID for status checking.",
+            description="""Start a new matching task with current source and target data.
+                Optionally filter target by specific nodes. Returns task ID for status checking.""",
             args_schema=StartMatchingTaskInput,
         )
 
@@ -100,14 +95,16 @@ class TaskTools:
 
             except Exception as e:
                 logger.error(
-                    f"🧰Tool error: create_matcher_task with name: {name}, code: {code[:100]}..., params: {params} with error: {str(e)}"
+                    f"""🧰Tool error: create_matcher_task with name: {name}, code: {code[:100]}...,
+                    params: {params} with error: {str(e)}"""
                 )
                 return f"Error starting matcher creation task: {str(e)}"
 
         return StructuredTool.from_function(
             func=_create_matcher_task,
             name="create_matcher_task",
-            description="Start a celery task to create a new custom matcher with specified code and parameters. Returns task ID for status checking.",
+            description="""Start a celery task to create a new custom matcher with specified code and parameters.
+                Returns task ID for status checking.""",
             args_schema=CreateMatcherTaskInput,
         )
 

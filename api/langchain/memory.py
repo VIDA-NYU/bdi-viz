@@ -730,8 +730,7 @@ Explanations: {formatted_explanations}
         elif explanations_count < limit:
             limit = explanations_count
         logger.info(
-            f"🧰Tool called: search_explanations with query='{query}', "
-            f"limit={limit}"
+            f"🧰Tool called: search_explanations with query='{query}', " f"limit={limit}"
         )
         results = self._search_vector_store(query, limit, namespace="explanations")
         logger.info(

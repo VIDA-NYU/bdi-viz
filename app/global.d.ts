@@ -129,6 +129,9 @@ declare interface GDCAttribute {
     enum?: string[];
     minimum?: number;
     maximum?: number;
+    enumDef?: {
+        [key: string]: string;
+    };
 }
 
 declare interface GDCDescription {
