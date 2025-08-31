@@ -6,6 +6,7 @@ import { runMatchingTask, getCachedResults, getTargetOntology, getValueBins, get
 import { Box, Paper, IconButton, Typography, Divider, Chip, Stack, Table, TableHead, TableRow, TableCell, TableBody, Alert } from "@mui/material";
 import { BasicButton } from "../layout/components";
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import CloseIcon from '@mui/icons-material/Close';
 
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import { Dropzone } from "./file-upload/fileUploadBox";
@@ -172,6 +173,14 @@ const FileUploadForm: React.FC<{
             overflowY: 'auto'
         }}
     >
+        <IconButton
+            aria-label="Close"
+            onClick={onCancel}
+            size="small"
+            sx={{ position: 'absolute', top: 8, right: 8 }}
+        >
+            <CloseIcon fontSize="small" />
+        </IconButton>
         <form encType="multipart/form-data" onSubmit={onSubmit}>
             <Box sx={{ mb: 2 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>Upload files for schema matching</Typography>
