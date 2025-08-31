@@ -264,9 +264,11 @@ class LangGraphAgent:
         workflow = StateGraph(AgentState)
 
         # Define agent nodes with enhanced prompts for conversation awareness
-        supervisor_tools = QueryTools(
-            self.session_id, self.memory_retriever
-        ).get_tools() + self.memory_retriever.get_validation_tools(with_memory=True)
+        supervisor_tools = (
+            QueryTools(self.session_id, self.memory_retriever).get_tools()
+            + CandidateTools(self.session_id).get_tools()
+            + self.memory_retriever.get_validation_tools(with_memory=True)
+        )
         workflow.add_node(
             "supervisor",
             self._create_agent_node(
@@ -301,6 +303,8 @@ class LangGraphAgent:
             ),
         )
 
+        # validation agent merged into supervisor
+
         task_agent_tools = TaskTools(self.session_id).get_tools()
         workflow.add_node(
             "task_agent",
@@ -315,7 +319,22 @@ class LangGraphAgent:
 
         # Define routing
         def route_to_agents(state: AgentState) -> List[Hashable]:
-            return state.next_agents
+            # Normalize next_agents values to AgentType when provided as strings
+            normalized: List[Hashable] = []
+            try:
+                for a in state.next_agents:
+                    if isinstance(a, AgentType):
+                        normalized.append(a)
+                    elif isinstance(a, str):
+                        try:
+                            normalized.append(AgentType(a))
+                        except Exception:
+                            normalized.append(a)
+                    else:
+                        normalized.append(a)
+            except Exception:
+                pass
+            return normalized or []
 
         # Add edges
         workflow.add_conditional_edges(
@@ -325,6 +344,7 @@ class LangGraphAgent:
                 AgentType.ONTOLOGY: "ontology_agent",
                 AgentType.CANDIDATE: "candidate_agent",
                 AgentType.TASK: "task_agent",
+                AgentType.FINAL: "final",
             },
         )
 
@@ -407,6 +427,7 @@ class LangGraphAgent:
            - Candidate operations → route to ["candidate"]
            - Rerank/rescore → route to ["candidate"], pass the candidates list to the candidate agent as well
            - Task operations → route to ["task"] (e.g. new task, new matcher, update node filter)
+           - Validation/classification of a source attribute → perform classification HERE using tools; then either accept/reject or route to ["ontology"], ["candidate"], or ["final"] depending on the case
            - Information requests → handle directly, set next_agents = []
            - Unclear intent → ask clarification, set next_agents = []
 
@@ -424,6 +445,24 @@ class LangGraphAgent:
         Provide thoughtful, context-aware responses that build naturally 
         on the conversation flow. Write a concise, user-facing biomedical explanation in `message`.
         Do NOT include meta-reasoning; do NOT start with "As an AI ...".
+        
+        VALIDATION/CLASSIFICATION MODE:
+        When the user's intent is to validate or confirm a source attribute mapping, classify into exactly one of the four cases and act:
+        1) Easy (auto-accepted)
+        2) Unambiguous strong
+        3) Nuanced hard
+        4) Mismatched hard
+
+        REQUIRED TOOL USE BEFORE CLASSIFICATION:
+        - Always call `read_source_candidates` for the current source attribute (from {source_column} or infer from {query} and {conversation_summary}); if unclear, ask a clarifying question and set next_agents = []
+        - For top 1-3 candidates, call `read_target_description` and `read_target_values`; call `read_source_values` once for {source_column}
+        - Optionally consult `recall_memory`, `search_matches`, `search_mismatches`, `search_false_positives`, `search_false_negatives` to detect known pitfalls
+
+        DECISION HEURISTICS:
+        - Easy: direct normalized name match or overwhelming top score with low risk; ACTION: call `accept_match` and set next_agents=["final"]
+        - Unambiguous: clear score margin (e.g., ≥0.2) and multi-matcher agreement; ACTION: recommend accept (do not auto-accept), set next_agents=["final"]
+        - Nuanced: multiple close high scores with semantic/value differences; ACTION: summarize key differences to review; set next_agents=["candidate"]
+        - Mismatched: likely missing or uniformly low scores; ACTION: propose expanding search; set next_agents=["ontology"]
         """
 
     def _ontology_prompt(self) -> str:
@@ -523,13 +562,6 @@ class LangGraphAgent:
             - Update the rescored candidates calling `update_candidates` tool.
         4. **Update**: Use `update_candidates` with source attribute and re-ranked list.
         5. **Explain**: In `message`, describe changes and reasons.
-
-        RESPONSE PATTERNS:
-                 - "Given your interest in X from earlier, candidate Y might be 
-           ideal"
-        - "Based on your preference for Z, I've prioritized candidates with..."
-        - "I notice you typically prefer A over B, so I recommend..."
-        - "Since you asked about C, here are some related options..."
 
         Focus on building a helpful, context-aware dialogue that guides 
         the user toward effective data matching decisions.
