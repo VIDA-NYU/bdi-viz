@@ -619,11 +619,37 @@ interface updateSourceValueProps {
 const updateSourceValue = ({ column, value, newValue, valueMatchesCallback, signal }: updateSourceValueProps) => {
     return makeApiRequest<void>(
         "/api/value/update",
-        { column, value, newValue },
+        { column, value, newValue, operation: "source" },
         signal,
         (data) => {
             if (data && data.message === "success") {
             console.log("updateSourceValue finished!");
+                getValueMatches({ callback: valueMatchesCallback, signal });
+            } else {
+                throw new Error("Invalid results format");
+            }
+            return;
+        }
+    );
+};
+
+interface updateTargetMatchValueProps {
+    sourceColumn: string;
+    sourceValue: any;
+    targetColumn: string;
+    newTargetValue: any;
+    valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
+    signal?: AbortSignal;
+}
+
+const updateTargetMatchValue = ({ sourceColumn, sourceValue, targetColumn, newTargetValue, valueMatchesCallback, signal }: updateTargetMatchValueProps) => {
+    return makeApiRequest<void>(
+        "/api/value/update",
+        { operation: "target", sourceColumn, sourceValue, targetColumn, newTargetValue },
+        signal,
+        (data) => {
+            if (data && data.message === "success") {
+                console.log("updateTargetMatchValue finished!");
                 getValueMatches({ callback: valueMatchesCallback, signal });
             } else {
                 throw new Error("Invalid results format");
@@ -744,6 +770,7 @@ export {
     getGDCAttribute, 
     getCandidatesResult, 
     updateSourceValue,
+    updateTargetMatchValue,
     newMatcher,
     pollForMatcherStatus,
     runRematchTask,

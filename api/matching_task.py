@@ -1630,6 +1630,60 @@ class MatchingTask:
         self.source_df[column] = self.source_df[column].replace(from_val, to_val)
         self.set_source_mapped_values(column, from_val, to_val)
 
+    def set_target_value_match(
+        self, source_col: str, source_val: str, target_col: str, new_target_val: str
+    ) -> None:
+        """
+        Update the matched target value for a given source unique value within a specific target column.
+
+        - source_col: Source column name
+        - source_val: The original source unique value (not the mapped value)
+        - target_col: Target column whose match list should be updated
+        - new_target_val: The new target value to map to
+        """
+        logger.info(
+            f"Updating target match for source '{source_col}' value '{source_val}' "
+            f"-> target '{target_col}' = '{new_target_val}'"
+        )
+
+        # Ensure value matches exist
+        if source_col not in self.cached_candidates["value_matches"]:
+            logger.warning(
+                f"Source column {source_col} not initialized in value_matches; initializing."
+            )
+            self._initialize_value_matches()
+
+        source_vm = self.cached_candidates["value_matches"][source_col]
+
+        # Ensure target mapping exists for this source/target pair
+        if target_col not in source_vm["targets"]:
+            self._generate_value_matches(source_col, target_col)
+
+        # Locate index via original unique values list
+        try:
+            idx = source_vm["source_unique_values"].index(str(source_val))
+        except ValueError:
+            # If the exact string is not found, try matching without casting
+            try:
+                idx = source_vm["source_unique_values"].index(source_val)
+            except ValueError:
+                logger.error(
+                    f"Source value '{source_val}' not found in source_unique_values for column '{source_col}'."
+                )
+                return
+
+        targets_list = source_vm["targets"][target_col]
+        if idx < 0 or idx >= len(targets_list):
+            logger.error(
+                f"Index {idx} out of range for targets list of length {len(targets_list)}"
+            )
+            return
+
+        targets_list[idx] = str(new_target_val)
+
+        # Persist to cache file so changes survive reloads
+        self._export_cache_to_json(self.cached_candidates)
+
 
 class UserOperationHistory:
     def __init__(self) -> None:
