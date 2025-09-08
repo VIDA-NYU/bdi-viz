@@ -79,6 +79,46 @@ class TestMatchingTask:
 
         assert len(nodes) == 2
 
+    def test_get_candidates_with_groundtruth_pairs(
+        self,
+        session_manager,
+        sample_source_csv,
+        sample_target_csv,
+    ):
+        """When groundtruth_pairs are provided, only those pairs become candidates,
+        marked as accepted with matcher 'groundtruth', and value matches are generated."""
+
+        matching_task = session_manager.get_session("test_session").matching_task
+
+        matching_task.update_dataframe(sample_source_csv, sample_target_csv)
+
+        groundtruth_pairs = [("Gender", "gender"), ("Age", "age")]
+
+        task_state = TaskState(
+            task_type="matching",
+            task_id="test_session",
+            new_task=True,
+        )
+
+        candidates = matching_task.get_candidates(
+            task_state=task_state, groundtruth_pairs=groundtruth_pairs
+        )
+
+        # Assert only the provided pairs are present
+        pair_set = {(c["sourceColumn"], c["targetColumn"]) for c in candidates}
+        assert pair_set == set(groundtruth_pairs)
+
+        # Assert status and matcher
+        for c in candidates:
+            assert c["status"] == "accepted"
+            assert c["matcher"] == "groundtruth"
+
+        # Assert value matches were generated for these pairs
+        value_matches = matching_task.get_value_matches()
+        for src, tgt in groundtruth_pairs:
+            assert src in value_matches
+            assert tgt in value_matches[src]["targets"]
+
     def test_candidate_manipulation(
         self,
         session_manager,
