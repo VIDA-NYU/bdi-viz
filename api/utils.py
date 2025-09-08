@@ -42,6 +42,7 @@ def extract_data_from_request(request):
     source_df = None
     target_df = None
     target_json = None
+    groundtruth_pairs = None
 
     if request.form is None:
         return None
@@ -64,7 +65,13 @@ def extract_data_from_request(request):
             target_json_string_io = StringIO(target_json)
             target_json = parse_llm_generated_ontology(json.load(target_json_string_io))
 
-    return source_df, target_df, target_json
+        if "groundtruth_csv" in form:
+            groundtruth_csv = form["groundtruth_csv"]
+            groundtruth_csv_string_io = StringIO(groundtruth_csv)
+            groundtruth_df = pd.read_csv(groundtruth_csv_string_io, sep=",")
+            groundtruth_pairs = parse_ground_truth_pairs(groundtruth_df)
+
+    return source_df, target_df, target_json, groundtruth_pairs
 
 
 # ----------------------
@@ -127,6 +134,12 @@ def load_source_df() -> pd.DataFrame:
 def load_target_df() -> pd.DataFrame:
     df, _ = read_csv_with_comments(".target.csv")
     return df
+
+
+def parse_ground_truth_pairs(df: pd.DataFrame) -> List[Tuple[str, str]]:
+    if df.shape[1] != 2:
+        raise ValueError("Ground truth CSV must have exactly 2 columns")
+    return [(df.iloc[i, 0], df.iloc[i, 1]) for i in range(df.shape[0])]
 
 
 @check_cache_dir

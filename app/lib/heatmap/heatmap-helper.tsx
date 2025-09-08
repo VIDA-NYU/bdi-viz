@@ -621,9 +621,13 @@ const updateSourceValue = ({ column, value, newValue, valueMatchesCallback, sign
         "/api/value/update",
         { column, value, newValue },
         signal,
-        () => {
+        (data) => {
+            if (data && data.message === "success") {
             console.log("updateSourceValue finished!");
-            getValueMatches({ callback: valueMatchesCallback, signal });
+                getValueMatches({ callback: valueMatchesCallback, signal });
+            } else {
+                throw new Error("Invalid results format");
+            }
             return;
         }
     );

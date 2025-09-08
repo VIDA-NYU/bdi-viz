@@ -13,6 +13,7 @@ import UndoButton from "./control-inputs/undo-button";
 import RedoButton from "./control-inputs/redo-button";
 import ExportMatchingResultsButton from "./control-inputs/export-matching-results";
 import NewMatcherButton from "./control-inputs/new-matcher-button";
+import ValueMatchingUploading from "./value-matching-uploading";
 import { SectionHeader, SectionLabel } from "../layout/components";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 
@@ -88,6 +89,13 @@ const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
 
             {developerMode && (
               <Box sx={{ display: "flex", gap: 0.5 }}>
+                <ValueMatchingUploading
+                  callback={handleFileUpload}
+                  ontologyCallback={handleTargetOntology}
+                  sourceOntologyCallback={handleSourceOntology}
+                  uniqueValuesCallback={handleUniqueValues}
+                  valueMatchesCallback={handleValueMatches}
+                />
                 <NewMatcherButton onClick={() => setOpenNewMatcherDialog(true)} />
               </Box>
             )}

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import threading
+from typing import List, Optional, Tuple
 from uuid import uuid4
 
 import pandas as pd
@@ -22,9 +23,9 @@ from .utils import (
     write_candidate_explanation_json,
     TaskState,
     write_csv_with_comments,
+    read_csv_with_comments,
     load_source_df,
     load_target_df,
-    read_csv_with_comments,
 )
 
 GDC_DATA_PATH = os.path.join(os.path.dirname(__file__), "./resources/cptac-3.csv")
@@ -243,8 +244,9 @@ def infer_target_ontology_task(self, session):
 @celery.task(bind=True, name="api.index.run_matching_task", queue="matching")
 def run_matching_task(
     self,
-    session,
-    nodes=None,
+    session: str,
+    nodes: List[str] = [],
+    groundtruth_pairs: List[Tuple[str, str]] = [],
 ):
     try:
         app.logger.critical(
@@ -273,7 +275,9 @@ def run_matching_task(
 
             # Target ontology is now handled by a dedicated task when needed
 
-            candidates = matching_task.get_candidates(task_state=task_state)
+            candidates = matching_task.get_candidates(
+                task_state=task_state, groundtruth_pairs=groundtruth_pairs
+            )
 
             return {"status": "completed", "candidates_count": len(candidates)}
 
@@ -294,7 +298,7 @@ def run_matching_task(
 def start_matching():
     session = "default"
 
-    source, target, target_json = extract_data_from_request(request)
+    source, target, target_json, groundtruth_pairs = extract_data_from_request(request)
 
     # --- SOURCE ONTOLOGY INFERENCE ---
     source_json = None
@@ -388,8 +392,7 @@ def start_matching():
 
     # Matching task should not wait for ontology tasks
     task = run_matching_task.apply_async(
-        (session,),
-        {"nodes": None},
+        (session, [], groundtruth_pairs),
         queue="matching",
     )
     return {
