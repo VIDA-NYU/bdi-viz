@@ -280,7 +280,10 @@ class MatchingTask:
             logger.info("No columns found for specified nodes, keeping all columns")
 
     def get_candidates(
-        self, is_candidates_cached: bool = True, task_state: Optional[TaskState] = None
+        self,
+        is_candidates_cached: bool = True,
+        task_state: Optional[TaskState] = None,
+        groundtruth_pairs: Optional[List[Tuple[str, str]]] = None,
     ) -> Dict[str, list]:
         with self.lock:
             if self.source_df is None or self.target_df is None:
@@ -330,7 +333,21 @@ class MatchingTask:
             )
 
             # Check if we can use the cached JSON file
-            if self._is_cache_valid(cached_json, source_hash, target_hash):
+            if groundtruth_pairs is not None and len(groundtruth_pairs) > 0:
+                task_state._update_task_state(
+                    progress=40,
+                    current_step="Generating candidates with groundtruth",
+                    completed_steps=3,
+                    log_message="Generating candidates with groundtruth.",
+                )
+                candidates = self._generate_candidates_with_groundtruth(
+                    source_hash,
+                    target_hash,
+                    is_candidates_cached,
+                    task_state,
+                    groundtruth_pairs,
+                )
+            elif self._is_cache_valid(cached_json, source_hash, target_hash):
                 self.cached_candidates = cached_json
                 candidates = cached_json["candidates"]
                 task_state._update_task_state(
@@ -630,6 +647,137 @@ class MatchingTask:
 
         task_state._update_task_state(
             progress=90, log_message="All matchers completed."
+        )
+
+        # Step 5: Generate value matches
+        task_state._update_task_state(
+            current_step=generation_steps[4],
+            log_message="Generating value matches for candidates.",
+        )
+
+        # Generate value matches for each candidate
+        for idx, candidate in enumerate(layered_candidates):
+            self._generate_value_matches(
+                candidate["sourceColumn"], candidate["targetColumn"]
+            )
+            if idx % 10 == 0:
+                task_state._update_task_state(
+                    log_message=f"Generated value matches for {idx+1}/{len(layered_candidates)} candidates.",
+                    replace_last_log=True,
+                )
+
+        task_state._update_task_state(
+            progress=95, log_message="Value matches generated for all candidates."
+        )
+
+        # Update cache if needed
+        if is_candidates_cached:
+            # Cache matcher information
+            matcher_cache = {}
+            matcher_code_cache = self.cached_candidates["matcher_code"].copy()
+
+            for name, matcher_info in self.cached_candidates["matchers"].items():
+                matcher_cache[name] = matcher_info
+
+                # Store matcher code if available
+                if "code" in matcher_info:
+                    matcher_code_cache[name] = matcher_info["code"]
+
+            self.cached_candidates = {
+                "source_hash": source_hash,
+                "target_hash": target_hash,
+                "candidates": layered_candidates,
+                "source_clusters": source_clusters,
+                "value_matches": self.cached_candidates["value_matches"],
+                "matchers": matcher_cache,
+                "matcher_code": matcher_code_cache,
+                "nodes": self.cached_candidates["nodes"],  # Preserve nodes in cache
+            }
+            self._export_cache_to_json(self.cached_candidates)
+            task_state._update_task_state(log_message="Cache exported to JSON.")
+
+        task_state._update_task_state(
+            progress=100, log_message="Candidate generation complete."
+        )
+        return layered_candidates
+
+    def _generate_candidates_with_groundtruth(
+        self,
+        source_hash: int,
+        target_hash: int,
+        is_candidates_cached: bool,
+        task_state: TaskState,
+        groundtruth_pairs: List[Tuple[str, str]],
+    ) -> List[Dict[str, Any]]:
+        # Define generation steps for better logging
+        generation_steps = [
+            "Generating embeddings",
+            "Clustering source columns",
+            "Identifying candidate quadrants",
+            "Running matchers",
+            "Generating value matches",
+        ]
+
+        task_state._update_task_state(
+            current_step=generation_steps[0],
+            log_message="Starting embedding generation.",
+        )
+
+        # Generate embeddings for clustering
+        embedding_clusterer = EmbeddingClusterer(
+            params={
+                "embedding_model": self.clustering_model,
+                "topk": self.top_k,
+                **DEFAULT_PARAMS,
+            }
+        )
+
+        source_embeddings = embedding_clusterer.get_source_embeddings(
+            source_df=self.source_df
+        )
+        task_state._update_task_state(
+            progress=60, log_message="Source embeddings generated."
+        )
+
+        # Step 2: Cluster source columns
+        task_state._update_task_state(
+            current_step=generation_steps[1], log_message="Clustering source columns."
+        )
+
+        # Generate clusters
+        source_clusters = self._generate_source_clusters(source_embeddings)
+        task_state._update_task_state(
+            progress=70, log_message="Source columns clustered."
+        )
+
+        # Step 3: Apply candidate quadrants
+        task_state._update_task_state(
+            current_step=generation_steps[2],
+            log_message="Identifying candidate quadrants.",
+        )
+
+        # Collect candidates from different sources
+        layered_candidates = []
+
+        # Step 4: Run matchers
+        task_state._update_task_state(
+            current_step=generation_steps[3],
+            log_message="Adding groundtruth candidates.",
+        )
+
+        # Add candidates from groundtruth pairs
+        for groundtruth_pair in groundtruth_pairs:
+            layered_candidates.append(
+                {
+                    "sourceColumn": groundtruth_pair[0],
+                    "targetColumn": groundtruth_pair[1],
+                    "score": 1.0,
+                    "matcher": "groundtruth",
+                    "status": "accepted",
+                }
+            )
+        task_state._update_task_state(
+            progress=90, log_message="All groundtruth candidates added."
         )
 
         # Step 5: Generate value matches
@@ -1353,10 +1501,10 @@ class MatchingTask:
                 )
 
                 # Update weight updater if needed
-                self.cached_candidates[
-                    "matchers"
-                ] = self.weight_updater.update_matchers(
-                    self.cached_candidates["matchers"]
+                self.cached_candidates["matchers"] = (
+                    self.weight_updater.update_matchers(
+                        self.cached_candidates["matchers"]
+                    )
                 )
                 task_state._update_task_state(
                     progress=95,
