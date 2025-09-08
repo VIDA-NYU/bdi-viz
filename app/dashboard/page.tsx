@@ -172,7 +172,7 @@ export default function Dashboard() {
         toastify("default", <p><strong>Source: </strong>{candidate.sourceColumn}, <strong>Target: </strong>{candidate.targetColumn}</p>, { autoClose: 200 });
         setSelectedCandidate(candidate);
 
-        if (!(candidate as AggregatedCandidate).matchers.includes("candidate_quadrants")) {
+        if (!(candidate as AggregatedCandidate).matchers.includes("candidate_quadrants") && !(candidate as AggregatedCandidate).matchers.includes("groundtruth")) {
             explain(candidate);
         } else {
             setIsMatch(true);

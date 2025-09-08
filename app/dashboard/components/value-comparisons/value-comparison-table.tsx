@@ -2,10 +2,10 @@ import { useMemo, useContext, useEffect, useState, useCallback, useRef, useLayou
 import { useTheme } from "@mui/material/styles";
 import { Box, Popover, IconButton, Stack, TextField, Tooltip, Typography, Switch, FormControlLabel, Divider } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import ListAltIcon from "@mui/icons-material/ListAlt";
+import EditIcon from "@mui/icons-material/Edit";
 import UndoIcon from "@mui/icons-material/Undo";
 import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
-import { updateSourceValue, getGDCAttribute } from "@/app/lib/heatmap/heatmap-helper";
+import { updateSourceValue, updateTargetMatchValue, getGDCAttribute } from "@/app/lib/heatmap/heatmap-helper";
 import { BasicChip, HighlightedChip } from "../../layout/components";
 
 interface ValueComparisonTableProps {
@@ -54,7 +54,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     const [gdcAttribute, setGdcAttribute] = useState<GDCAttribute | undefined>(undefined);
     const [enumAnchorEl, setEnumAnchorEl] = useState<HTMLElement | null>(null);
     const [searchText, setSearchText] = useState("");
-    const [selectedRowForEnums, setSelectedRowForEnums] = useState<any | null>(null);
+    const [selectedEnumContext, setSelectedEnumContext] = useState<{ row: any; targetColumn: string } | null>(null);
     const sourceCellRefs = useRef<Map<number, HTMLElement | null>>(new Map());
 
     const candidate = useMemo(() => {
@@ -107,31 +107,23 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         return [];
     }, [valueMatches, weightedAggregatedCandidates, candidate, selectedSourceColumn]);
 
-    // Fetch GDC attribute for the selected candidate's target column
-    useEffect(() => {
-        if (!candidate || !candidate.targetColumn) {
-            setGdcAttribute(undefined);
-            return;
-        }
+    // fetch enums lazily when opening the editor for a specific target column
+
+    const openEnumsPopover = useCallback((row: any, targetColumn: string, anchor: HTMLElement) => {
+        setSelectedEnumContext({ row, targetColumn });
+        setEnumAnchorEl(anchor);
         const controller = new AbortController();
         getGDCAttribute({
-            targetColumn: candidate.targetColumn,
+            targetColumn,
             callback: (attr) => setGdcAttribute(attr),
             signal: controller.signal,
         });
-        return () => controller.abort();
-    }, [candidate]);
-
-    const openEnumsPopover = useCallback((row: any) => {
-        setSelectedRowForEnums(row);
-        const anchor = sourceCellRefs.current.get(row.id as number) || null;
-        setEnumAnchorEl(anchor);
     }, []);
 
     const closeEnumsPopover = useCallback(() => {
         setEnumAnchorEl(null);
         setSearchText("");
-        setSelectedRowForEnums(null);
+        setSelectedEnumContext(null);
     }, []);
 
     // Build dynamic column keys in display order
@@ -141,19 +133,16 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         return keys;
     }, [rows]);
 
-    // Sticky column measurements for 3 left-pinned columns: review, source, target
+    // Sticky column measurements for 2 left-pinned columns: source, target
     const tableContainerRef = useRef<HTMLDivElement | null>(null);
-    const thReviewRef = useRef<HTMLTableCellElement | null>(null);
     const thSourceRef = useRef<HTMLTableCellElement | null>(null);
 
     const updateStickyOffsets = useCallback(() => {
         const container = tableContainerRef.current;
         if (!container) return;
-        const reviewWidth = thReviewRef.current?.getBoundingClientRect().width ?? 0;
         const sourceWidth = thSourceRef.current?.getBoundingClientRect().width ?? 0;
-        container.style.setProperty("--sticky-left-0", `0px`);
-        container.style.setProperty("--sticky-left-1", `${reviewWidth}px`);
-        container.style.setProperty("--sticky-left-2", `${reviewWidth + sourceWidth}px`);
+        container.style.setProperty("--sticky-left-source", `0px`);
+        container.style.setProperty("--sticky-left-target", `${sourceWidth}px`);
     }, []);
 
     useLayoutEffect(() => {
@@ -168,6 +157,8 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
 
     const [editingRowId, setEditingRowId] = useState<number | null>(null);
     const [editingValue, setEditingValue] = useState<string>("");
+    const [editingTarget, setEditingTarget] = useState<{ rowId: number; key: string } | null>(null);
+    const [editingTargetValue, setEditingTargetValue] = useState<string>("");
     const [localFilter, setLocalFilter] = useState<string>("");
     const [showOnlyEdited, setShowOnlyEdited] = useState<boolean>(false);
 
@@ -178,14 +169,15 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     }, [gdcAttribute, searchText]);
 
     const applyEnumToRow = useCallback((enumValue: string) => {
-        if (!candidate || !selectedRowForEnums) return;
-        updateSourceValue({
-            column: candidate.sourceColumn,
-            value: selectedRowForEnums[`${candidate?.sourceColumn}(source)`.replace(/\./g, "")],
-            newValue: enumValue,
+        if (!candidate || !selectedEnumContext) return;
+        updateTargetMatchValue({
+            sourceColumn: candidate.sourceColumn,
+            sourceValue: String(selectedEnumContext.row["SourceOriginalValues"] ?? ""),
+            targetColumn: selectedEnumContext.targetColumn,
+            newTargetValue: enumValue,
             valueMatchesCallback: handleValueMatches,
         });
-    }, [candidate, selectedRowForEnums, handleValueMatches]);
+    }, [candidate, selectedEnumContext, handleValueMatches]);
 
     const sourceKey = useMemo(() => {
         if (!candidate) return null as string | null;
@@ -195,7 +187,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     const displayedColumnKeys = useMemo(() => {
         if (!rows.length) return [] as string[];
         const keys = Object.keys(rows[0]).filter((k) => k !== "id" && k !== "SourceOriginalValues");
-        const order: string[] = ["__review__"];
+        const order: string[] = [];
         if (sourceKey && keys.includes(sourceKey)) order.push(sourceKey);
         if (candidate?.targetColumn && keys.includes(candidate.targetColumn)) order.push(candidate.targetColumn);
         const remaining = keys.filter((k) => !order.includes(k));
@@ -249,13 +241,11 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                     th, td { box-sizing: border-box; border-bottom: 1px solid rgba(0,0,0,0.12); border-right: 1px solid rgba(0,0,0,0.12); padding: 8px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                     thead th:last-child, tbody td:last-child { border-right: none; }
                     thead th { position: sticky; top: 0; z-index: 3; }
-                    .sticky-review { position: sticky; left: var(--sticky-left-0); z-index: 4; }
-                    .sticky-source { position: sticky; left: var(--sticky-left-1); z-index: 4; }
-                    .sticky-target { position: sticky; left: var(--sticky-left-2); z-index: 4; }
+                    .sticky-source { position: sticky; left: var(--sticky-left-source); z-index: 4; }
+                    .sticky-target { position: sticky; left: var(--sticky-left-target); z-index: 4; }
                     tbody tr:hover td { background-color: rgba(0,0,0,0.03); }
                     .cell-btn { opacity: 0; transition: opacity 160ms ease; }
                     td:hover .cell-btn { opacity: 1; }
-                    .col-review { width: 44px; min-width: 44px; max-width: 44px; text-align: center; }
                 `}
             </style>
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1, px: 2 }}>
@@ -286,15 +276,14 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                     <thead>
                         <tr>
                             {displayedColumnKeys.map((key) => {
-                                const isReview = key === "__review__";
                                 const isSource = sourceKey && key === sourceKey;
                                 const isTarget = candidate?.targetColumn && key === candidate.targetColumn;
-                                const stickyClass = isReview ? "sticky-review" : isSource ? "sticky-source" : isTarget ? "sticky-target" : "";
-                                const refProp = isReview ? { ref: thReviewRef } : isSource ? { ref: thSourceRef } : {};
+                                const stickyClass = isSource ? "sticky-source" : isTarget ? "sticky-target" : "";
+                                const refProp = isSource ? { ref: thSourceRef } : {};
                                 return (
                                     <th
                                         key={key}
-                                        className={`${stickyClass} ${isReview ? "col-review" : ""}`}
+                                        className={`${stickyClass}`}
                                         {...refProp}
                                         style={{
                                             background: theme.palette.background.paper,
@@ -302,16 +291,12 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                             color: theme.palette.text.primary,
                                         }}
                                     >
-                                        {isReview ? (
-                                            <Tooltip title="Open enums and helpers for the row" arrow>
-                                                <span>Review</span>
-                                            </Tooltip>
-                                        ) : isSource ? (
+                                        {isSource ? (
                                             <Tooltip title="Editable source value (Enter to apply, Esc to cancel)" arrow>
                                                 <span>{key}</span>
                                             </Tooltip>
                                         ) : isTarget ? (
-                                            <Tooltip title="Click a cell below to map the source to this value" arrow>
+                                            <Tooltip title="Click a cell to edit mapping or use the edit icon for enums" arrow>
                                                 <span>{key}</span>
                                             </Tooltip>
                                         ) : (
@@ -326,16 +311,13 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                         {visibleRows.map((row) => (
                             <tr key={row.id}>
                                 {displayedColumnKeys.map((key) => {
-                                    const isReview = key === "__review__";
                                     const isSource = sourceKey && key === sourceKey;
                                     const isTarget = candidate?.targetColumn && key === candidate.targetColumn;
-                                    const stickyClass = isReview ? "sticky-review" : isSource ? "sticky-source" : isTarget ? "sticky-target" : "";
-                                    const cellValue = isReview ? "" : row[key];
+                                    const stickyClass = isSource ? "sticky-source" : isTarget ? "sticky-target" : "";
+                                    const cellValue = row[key];
 
                                     let backgroundColor: string | undefined = undefined;
-                                    if (isReview) {
-                                        backgroundColor = "rgba(230,242,252,0.8)";
-                                    } else if (isSource) {
+                                    if (isSource) {
                                         backgroundColor = "rgb(230,242,252)";
                                     } else if (isTarget) {
                                         backgroundColor = "rgb(184,158,199)";
@@ -346,18 +328,8 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                         backgroundColor,
                                         color: emphasize ? theme.palette.primary.main : undefined,
                                         fontWeight: isSource || isTarget ? "bold" as const : undefined,
-                                        cursor: isSource ? "text" : isReview ? "pointer" : "pointer",
+                                        cursor: isSource ? "text" : "pointer",
                                     };
-
-                                    if (isReview) {
-                                        return (
-                                            <td key={key} className={`${stickyClass} col-review`} style={commonStyle}>
-                                                <IconButton size="small" aria-label="review enums" onClick={() => openEnumsPopover(row)}>
-                                                    <ListAltIcon fontSize="small" />
-                                                </IconButton>
-                                            </td>
-                                        );
-                                    }
 
                                     if (isSource) {
                                         const isEditing = editingRowId === row.id;
@@ -382,6 +354,11 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                                         autoFocus
                                                         size="small"
                                                         value={editingValue}
+                                                        sx={{
+                                                            '& .MuiInputBase-input': {
+                                                                width: `${Math.max(editingValue.length + 1, 3)}ch`,
+                                                            },
+                                                        }}
                                                         onChange={(e) => setEditingValue(e.target.value)}
                                                         onKeyDown={(e) => {
                                                             if (e.key === "Enter") {
@@ -419,6 +396,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                         );
                                     }
 
+                                    const isTargetEditing = editingTarget && editingTarget.rowId === row.id && editingTarget.key === key;
                                     return (
                                         <td
                                             key={key}
@@ -426,15 +404,74 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                             style={commonStyle}
                                             onClick={() => {
                                                 if (!candidate) return;
-                                                updateSourceValue({
-                                                    column: candidate.sourceColumn,
-                                                    value: row[sourceKey as string],
-                                                    newValue: row[key],
-                                                    valueMatchesCallback: handleValueMatches,
-                                                });
+                                                if (!isTargetEditing) {
+                                                    setEditingTarget({ rowId: row.id as number, key });
+                                                    setEditingTargetValue(String(row[key] ?? ""));
+                                                }
                                             }}
                                         >
-                                            {String(cellValue ?? "")}
+                                            {isTargetEditing ? (
+                                                <TextField
+                                                    autoFocus
+                                                    size="small"
+                                                    value={editingTargetValue}
+                                                    sx={{
+                                                        '& .MuiInputBase-input': {
+                                                            width: `${Math.max(editingTargetValue.length + 1, 3)}ch`,
+                                                        },
+                                                    }}
+                                                    onChange={(e) => setEditingTargetValue(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter") {
+                                                            if (candidate) {
+                                                                updateTargetMatchValue({
+                                                                    sourceColumn: candidate.sourceColumn,
+                                                                    sourceValue: String(row["SourceOriginalValues"] ?? ""),
+                                                                    targetColumn: key,
+                                                                    newTargetValue: editingTargetValue,
+                                                                    valueMatchesCallback: handleValueMatches,
+                                                                });
+                                                            }
+                                                            setEditingTarget(null);
+                                                            setEditingTargetValue("");
+                                                        } else if (e.key === "Escape") {
+                                                            setEditingTarget(null);
+                                                            setEditingTargetValue("");
+                                                        }
+                                                    }}
+                                                    onBlur={() => {
+                                                        if (candidate) {
+                                                            updateTargetMatchValue({
+                                                                sourceColumn: candidate.sourceColumn,
+                                                                sourceValue: String(row["SourceOriginalValues"] ?? ""),
+                                                                targetColumn: key,
+                                                                newTargetValue: editingTargetValue,
+                                                                valueMatchesCallback: handleValueMatches,
+                                                            });
+                                                        }
+                                                        setEditingTarget(null);
+                                                        setEditingTargetValue("");
+                                                    }}
+                                                    variant="outlined"
+                                                    inputProps={{ style: { padding: "4px 6px", fontSize: "0.875rem" } }}
+                                                />
+                                            ) : (
+                                                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                                                    <span>{String(cellValue ?? "")}</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        className="cell-btn"
+                                                        aria-label="edit enum"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (!candidate) return;
+                                                            openEnumsPopover(row, key, e.currentTarget as HTMLElement);
+                                                        }}
+                                                    >
+                                                        <EditIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+                                            )}
                                         </td>
                                     );
                                 })}
@@ -454,7 +491,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                     <Stack spacing={1}>
                         <Typography variant="h6" sx={{ fontSize: "0.9rem", fontWeight: 600 }}>GDC Enums</Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.75rem" }}>
-                            {candidate?.targetColumn}
+                            {selectedEnumContext?.targetColumn}
                         </Typography>
                         <TextField
                             value={searchText}
