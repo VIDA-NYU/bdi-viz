@@ -33,6 +33,10 @@ class SessionManager:
             self.sessions[session_name] = Session(session_name)
             self.queue.append(session_name)
 
+    # Convenience alias to match API naming
+    def create_session(self, session_name: str) -> None:
+        self.add_session(session_name)
+
     def get_session(self, session_name: str) -> "Session":
         if session_name not in self.sessions:
             # Return default session if requested session doesn't exist
@@ -49,8 +53,16 @@ class SessionManager:
             if session_name in self.queue:
                 self.queue.remove(session_name)
 
+    # Convenience alias to match API naming
+    def delete_session(self, session_name: str) -> None:
+        self.remove_session(session_name)
+
     def get_active_sessions(self) -> List[str]:
         return list(self.sessions.keys())
+
+    # Convenience alias to match API naming
+    def list_sessions(self) -> List[str]:
+        return self.get_active_sessions()
 
     def get_session_count(self) -> int:
         return len(self.sessions)

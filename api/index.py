@@ -1,7 +1,7 @@
-import sys
 import json
 import logging
 import os
+import sys
 import threading
 from typing import List, Tuple
 from uuid import uuid4
@@ -14,18 +14,19 @@ from flask import Flask, request
 from .langchain.pydantic import AgentResponse
 from .session_manager import SESSION_MANAGER
 from .utils import (
+    TaskState,
     extract_data_from_request,
     extract_session_name,
+    get_session_file,
     load_gdc_property,
     load_property,
-    parse_llm_generated_ontology,
-    read_candidate_explanation_json,
-    write_candidate_explanation_json,
-    TaskState,
-    write_csv_with_comments,
-    read_csv_with_comments,
     load_source_df,
     load_target_df,
+    parse_llm_generated_ontology,
+    read_candidate_explanation_json,
+    read_session_csv_with_comments,
+    write_candidate_explanation_json,
+    write_session_csv_with_comments,
 )
 
 GDC_DATA_PATH = os.path.join(os.path.dirname(__file__), "./resources/cptac-3.csv")
@@ -82,41 +83,23 @@ app = create_app()
 celery = app.extensions["celery"]
 
 
-_MEMORY_RETRIEVER = None
+def get_memory_retriever(session: str = "default"):
+    from .langchain.memory import get_memory_retriever as _get_mem
 
-
-def get_memory_retriever():
-    global _MEMORY_RETRIEVER
-    if _MEMORY_RETRIEVER is None:
-        from .langchain.memory import get_memory_retriever
-
-        _MEMORY_RETRIEVER = get_memory_retriever()
-    return _MEMORY_RETRIEVER
+    return _get_mem(session)
 
 
 # Lazy load the agent only when needed
-_AGENT = None
+def get_agent(session: str = "default"):
+    from .langchain.agent import get_agent as _get_agent
+
+    return _get_agent(get_memory_retriever(session), session_id=session)
 
 
-def get_agent():
-    global _AGENT
-    if _AGENT is None:
-        from .langchain.agent import get_agent
+def get_langgraph_agent(session: str = "default"):
+    from .langgraph.langgraph import get_langgraph_agent as _get_lg
 
-        _AGENT = get_agent(get_memory_retriever())
-    return _AGENT
-
-
-_LANGGRAPH_AGENT = None
-
-
-def get_langgraph_agent():
-    global _LANGGRAPH_AGENT
-    if _LANGGRAPH_AGENT is None:
-        from .langgraph.langgraph import get_langgraph_agent
-
-        _LANGGRAPH_AGENT = get_langgraph_agent(get_memory_retriever())
-    return _LANGGRAPH_AGENT
+    return _get_lg(get_memory_retriever(session), session_id=session)
 
 
 @celery.task(bind=True, name="api.index.infer_source_ontology_task", queue="ontology")
@@ -130,7 +113,10 @@ def infer_source_ontology_task(self, session):
         )
         celery_task_id = getattr(self.request, "id", "unknown")
         task_state = TaskState(
-            task_type="source", task_id=celery_task_id, new_task=True
+            task_type="source",
+            task_id=celery_task_id,
+            new_task=True,
+            session_name=session,
         )
         task_state._update_task_state(
             status="running",
@@ -140,7 +126,9 @@ def infer_source_ontology_task(self, session):
             log_message="Starting source ontology inference.",
         )
 
-        if not os.path.exists(".source.csv"):
+        # Session-aware source CSV
+        source_csv_path = get_session_file(session, "source.csv", create_dir=False)
+        if not os.path.exists(source_csv_path):
             task_state._update_task_state(
                 status="failed",
                 progress=100,
@@ -148,9 +136,9 @@ def infer_source_ontology_task(self, session):
             )
             return {"status": "failed", "message": "Source file not found"}
 
-        source = load_source_df()
+        source = load_source_df(session)
 
-        agent = get_agent()
+        agent = get_agent(session)
         properties = []
         total_batches = len(source.columns) // 5 + 1
         for i, (_slice, ontology) in enumerate(agent.infer_ontology(source)):
@@ -164,7 +152,7 @@ def infer_source_ontology_task(self, session):
             )
 
         parsed_ontology = parse_llm_generated_ontology({"properties": properties})
-        with open(".source.json", "w") as f:
+        with open(get_session_file(session, "source.json", create_dir=True), "w") as f:
             json.dump(parsed_ontology, f)
 
         task_state._update_task_state(
@@ -191,7 +179,10 @@ def infer_target_ontology_task(self, session):
         )
         celery_task_id = getattr(self.request, "id", "unknown")
         task_state = TaskState(
-            task_type="target", task_id=celery_task_id, new_task=True
+            task_type="target",
+            task_id=celery_task_id,
+            new_task=True,
+            session_name=session,
         )
         task_state._update_task_state(
             status="running",
@@ -201,7 +192,8 @@ def infer_target_ontology_task(self, session):
             log_message="Starting target ontology inference.",
         )
 
-        if not os.path.exists(".target.csv"):
+        target_csv_path = get_session_file(session, "target.csv", create_dir=False)
+        if not os.path.exists(target_csv_path):
             task_state._update_task_state(
                 status="failed",
                 progress=100,
@@ -209,9 +201,9 @@ def infer_target_ontology_task(self, session):
             )
             return {"status": "failed", "message": "Target file not found"}
 
-        target = load_target_df()
+        target = load_target_df(session)
 
-        agent = get_agent()
+        agent = get_agent(session)
         properties = []
         total_batches = len(target.columns) // 5 + 1
         for i, (_slice, ontology) in enumerate(agent.infer_ontology(target)):
@@ -225,7 +217,7 @@ def infer_target_ontology_task(self, session):
             )
 
         parsed_ontology = parse_llm_generated_ontology({"properties": properties})
-        with open(".target.json", "w") as f:
+        with open(get_session_file(session, "target.json", create_dir=True), "w") as f:
             json.dump(parsed_ontology, f)
 
         task_state._update_task_state(
@@ -257,7 +249,10 @@ def run_matching_task(
         )
         celery_task_id = getattr(self.request, "id", "unknown")
         task_state = TaskState(
-            task_type="matching", task_id=celery_task_id, new_task=True
+            task_type="matching",
+            task_id=celery_task_id,
+            new_task=True,
+            session_name=session,
         )
 
         # Clear specific namespaces for new task
@@ -266,9 +261,11 @@ def run_matching_task(
 
         matching_task = SESSION_MANAGER.get_session(session).matching_task
 
-        if os.path.exists(".source.csv") and os.path.exists(".target.csv"):
-            source = load_source_df()
-            target = load_target_df()
+        if os.path.exists(
+            get_session_file(session, "source.csv", create_dir=False)
+        ) and os.path.exists(get_session_file(session, "target.csv", create_dir=False)):
+            source = load_source_df(session)
+            target = load_target_df(session)
 
             matching_task.update_dataframe(source_df=source, target_df=target)
             matching_task.set_nodes(nodes)
@@ -296,7 +293,7 @@ def run_matching_task(
 
 @app.route("/api/matching/start", methods=["POST"])
 def start_matching():
-    session = "default"
+    session = extract_session_name(request)
 
     source, target, target_json, groundtruth_pairs = extract_data_from_request(request)
 
@@ -304,10 +301,12 @@ def start_matching():
     source_json = None
     infer_source_ontology = False
     infer_target_ontology = False
-    if os.path.exists(".source.csv"):
+    source_csv_path = get_session_file(session, "source.csv", create_dir=False)
+    if os.path.exists(source_csv_path):
         # If .source.json exists, try to load it
-        if os.path.exists(".source.json"):
-            with open(".source.json", "r") as f:
+        source_json_path = get_session_file(session, "source.json", create_dir=False)
+        if os.path.exists(source_json_path):
+            with open(source_json_path, "r") as f:
                 source_json = json.load(f)
         # If not, or if the source has changed, infer ontology
         if source_json is None or not source.equals(load_source_df()):
@@ -321,7 +320,7 @@ def start_matching():
         app.logger.info("Using default GDC data")
         target = pd.read_csv(GDC_DATA_PATH)
         target_json = json.load(open(GDC_JSON_PATH, "r"))
-        with open(".target.json", "w") as f:
+        with open(get_session_file(session, "target.json", create_dir=True), "w") as f:
             json.dump(target_json, f)
     else:
         app.logger.info("Using uploaded target")
@@ -334,9 +333,10 @@ def start_matching():
     # cache csvs with leading metadata comments
     src_name = request.form.get("source_csv_name") if request.form is not None else None
     tgt_name = request.form.get("target_csv_name") if request.form is not None else None
-    write_csv_with_comments(
+    write_session_csv_with_comments(
         source,
-        ".source.csv",
+        session,
+        "source",
         {
             "original_filename": src_name or "source.csv",
             "timestamp": (
@@ -351,9 +351,10 @@ def start_matching():
             ),
         },
     )
-    write_csv_with_comments(
+    write_session_csv_with_comments(
         target,
-        ".target.csv",
+        session,
+        "target",
         {
             "original_filename": tgt_name or os.path.basename(GDC_DATA_PATH),
             "timestamp": (
@@ -421,7 +422,7 @@ def matching_status():
 
     # Always try to read the task state's JSON for progress/logs
     task_state = TaskState(
-        task_type="matching", task_id=task_id, new_task=False
+        task_type="matching", task_id=task_id, new_task=False, session_name=session
     ).get_task_state()
 
     if task.state == "PENDING":
@@ -437,13 +438,14 @@ def matching_status():
             "taskState": task_state,
         }
     elif task.state == "SUCCESS":
-        source = load_source_df()
-        target = load_target_df()
+        source = load_source_df(session)
+        target = load_target_df(session)
         matching_task.update_dataframe(source_df=source, target_df=target)
 
-        if os.path.exists(".target.json"):
-            target_json = json.load(open(".target.json", "r"))
-            agent = get_agent()
+        target_json_path = get_session_file(session, "target.json", create_dir=False)
+        if os.path.exists(target_json_path):
+            target_json = json.load(open(target_json_path, "r"))
+            agent = get_agent(session)
             threading.Thread(
                 target=agent.remember_ontology, args=(target_json,)
             ).start()
@@ -469,6 +471,7 @@ def matching_status():
 def target_ontology_status():
     data = request.json or {}
     task_id = data.get("taskId")
+    session = data.get("session_name", "default")
 
     if not task_id:
         return {"status": "error", "message": "No task_id provided"}, 400
@@ -483,7 +486,7 @@ def target_ontology_status():
     )
 
     task_state = TaskState(
-        task_type="target", task_id=task_id, new_task=False
+        task_type="target", task_id=task_id, new_task=False, session_name=session
     ).get_task_state()
 
     if task.state == "PENDING":
@@ -518,6 +521,7 @@ def target_ontology_status():
 def source_ontology_status():
     data = request.json or {}
     task_id = data.get("taskId")
+    session = data.get("session_name", "default")
 
     if not task_id:
         return {"status": "error", "message": "No task_id provided"}, 400
@@ -532,7 +536,7 @@ def source_ontology_status():
     )
 
     task_state = TaskState(
-        task_type="source", task_id=task_id, new_task=False
+        task_type="source", task_id=task_id, new_task=False, session_name=session
     ).get_task_state()
 
     if task.state == "PENDING":
@@ -569,10 +573,12 @@ def get_results():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     if matching_task.source_df is None or matching_task.target_df is None:
-        if os.path.exists(".source.csv"):
-            source = load_source_df()
-            if os.path.exists(".target.csv"):
-                target = load_target_df()
+        if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
+            source = load_source_df(session)
+            if os.path.exists(
+                get_session_file(session, "target.csv", create_dir=False)
+            ):
+                target = load_target_df(session)
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -581,10 +587,11 @@ def get_results():
         )
         _ = matching_task.get_candidates()
         # AGENT.remember_candidates(candidates)
-        if os.path.exists(".target.json"):
-            target_json = json.load(open(".target.json", "r"))
+        target_json_path = get_session_file(session, "target.json", create_dir=False)
+        if os.path.exists(target_json_path):
+            target_json = json.load(open(target_json_path, "r"))
             # Start the ontology remembering process asynchronously
-            agent = get_agent()
+            agent = get_agent(session)
             threading.Thread(
                 target=agent.remember_ontology, args=(target_json,)
             ).start()
@@ -600,10 +607,12 @@ def get_unique_values():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     if matching_task.source_df is None or matching_task.target_df is None:
-        if os.path.exists(".source.csv"):
-            source = load_source_df()
-            if os.path.exists(".target.csv"):
-                target = load_target_df()
+        if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
+            source = load_source_df(session)
+            if os.path.exists(
+                get_session_file(session, "target.csv", create_dir=False)
+            ):
+                target = load_target_df(session)
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -618,10 +627,12 @@ def get_value_matches():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     if matching_task.source_df is None or matching_task.target_df is None:
-        if os.path.exists(".source.csv"):
-            source = load_source_df()
-            if os.path.exists(".target.csv"):
-                target = load_target_df()
+        if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
+            source = load_source_df(session)
+            if os.path.exists(
+                get_session_file(session, "target.csv", create_dir=False)
+            ):
+                target = load_target_df(session)
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -643,8 +654,8 @@ def get_gdc_ontology():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     if matching_task.source_df is None or matching_task.target_df is None:
-        if os.path.exists(".source.csv"):
-            source = load_source_df()
+        if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
+            source = load_source_df(session)
             matching_task.update_dataframe(
                 source_df=source, target_df=pd.read_csv(GDC_DATA_PATH)
             )
@@ -666,10 +677,12 @@ def get_target_ontology():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     if matching_task.source_df is None or matching_task.target_df is None:
-        if os.path.exists(".source.csv"):
-            source = load_source_df()
-            if os.path.exists(".target.csv"):
-                target = load_target_df()
+        if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
+            source = load_source_df(session)
+            if os.path.exists(
+                get_session_file(session, "target.csv", create_dir=False)
+            ):
+                target = load_target_df(session)
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -692,10 +705,12 @@ def get_source_ontology():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     if matching_task.source_df is None or matching_task.target_df is None:
-        if os.path.exists(".source.csv"):
-            source = load_source_df()
-            if os.path.exists(".target.csv"):
-                target = load_target_df()
+        if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
+            source = load_source_df(session)
+            if os.path.exists(
+                get_session_file(session, "target.csv", create_dir=False)
+            ):
+                target = load_target_df(session)
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -724,10 +739,10 @@ def get_gdc_property():
 
 @app.route("/api/property", methods=["POST"])
 def get_property():
-    # Unused local variable 'session' removed
+    session = extract_session_name(request)
     target_col = request.json["targetColumn"]
 
-    property = load_property(target_col)
+    property = load_property(target_col, session=session)
 
     return {"message": "success", "property": property}
 
@@ -758,10 +773,12 @@ def get_matchers():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
 
     if matching_task.source_df is None or matching_task.target_df is None:
-        if os.path.exists(".source.csv"):
-            source = pd.read_csv(".source.csv")
-            if os.path.exists(".target.csv"):
-                target = pd.read_csv(".target.csv")
+        if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
+            source = load_source_df(session)
+            if os.path.exists(
+                get_session_file(session, "target.csv", create_dir=False)
+            ):
+                target = load_target_df(session)
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
@@ -784,10 +801,14 @@ def run_new_matcher_task(self, session, name, code, params):
         matching_task = SESSION_MANAGER.get_session(session).matching_task
 
         if matching_task.source_df is None or matching_task.target_df is None:
-            if os.path.exists(".source.csv"):
-                source = pd.read_csv(".source.csv")
-                if os.path.exists(".target.csv"):
-                    target = pd.read_csv(".target.csv")
+            if os.path.exists(
+                get_session_file(session, "source.csv", create_dir=False)
+            ):
+                source = load_source_df(session)
+                if os.path.exists(
+                    get_session_file(session, "target.csv", create_dir=False)
+                ):
+                    target = load_target_df(session)
                 else:
                     target = pd.read_csv(GDC_DATA_PATH)
                 matching_task.update_dataframe(
@@ -877,10 +898,11 @@ def matcher_status():
 
 @app.route("/api/agent", methods=["POST"])
 def ask_agent():
+    session = extract_session_name(request)
     data = request.json
     prompt = data["prompt"]
     app.logger.info(f"Prompt: {prompt}")
-    agent = get_agent()
+    agent = get_agent(session)
     response = agent.invoke(prompt, [], AgentResponse)
     app.logger.info(f"{response}")
 
@@ -908,7 +930,7 @@ def agent_explanation():
         )
         return cached_explanation
 
-    agent = get_agent()
+    agent = get_agent(session)
     response = agent.explain(
         {
             "sourceColumn": source_col,
@@ -955,7 +977,7 @@ def agent_explore():
         "targetValues": target_values,
     }
 
-    agent = get_langgraph_agent()
+    agent = get_langgraph_agent(session)
     response = agent.invoke(query, source_col, target_col)
     app.logger.critical(f"Response: {response}")
 
@@ -974,7 +996,7 @@ def agent_related_source():
     _ = matching_task.get_target_unique_values(target_col)
 
     # Unused variable removed to save memory
-    # agent = get_agent()
+    # agent = get_agent(session)
     # response = agent.search_for_sources(candidate)
     # response = response.model_dump()
     response = {"sources": []}
@@ -984,11 +1006,12 @@ def agent_related_source():
 
 @app.route("/api/agent/thumb", methods=["POST"])
 def agent_thumb():
+    session = extract_session_name(request)
     data = request.json
     explanation = data["explanation"]
     user_operation = data["userOperation"]
 
-    agent = get_agent()
+    agent = get_agent(session)
     agent.remember_explanation([explanation], user_operation)
 
     return {"message": "success"}
@@ -1012,7 +1035,7 @@ def user_operation():
             operation, candidate, references, is_match_to_agent
         )
 
-        agent = get_agent()
+        agent = get_agent(session)
         agent.handle_user_operation(operation, candidate, is_match_to_agent)
 
     return {"message": "success"}
@@ -1020,12 +1043,13 @@ def user_operation():
 
 @app.route("/api/datasets/names", methods=["POST"])
 def get_dataset_names():
+    session = extract_session_name(request)
     source_name = None
     target_name = None
 
     try:
-        if os.path.exists(".source.csv"):
-            _, meta = read_csv_with_comments(".source.csv")
+        if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
+            _, meta = read_session_csv_with_comments(session, "source")
             source_name = meta.get("original_filename")
             source_timestamp = meta.get("timestamp")
             source_size = meta.get("size")
@@ -1033,8 +1057,8 @@ def get_dataset_names():
         pass
 
     try:
-        if os.path.exists(".target.csv"):
-            _, meta = read_csv_with_comments(".target.csv")
+        if os.path.exists(get_session_file(session, "target.csv", create_dir=False)):
+            _, meta = read_session_csv_with_comments(session, "target")
             target_name = meta.get("original_filename")
             target_timestamp = meta.get("timestamp")
             target_size = meta.get("size")
@@ -1080,7 +1104,7 @@ def undo_operation():
     candidate = operation["candidate"]
     is_match_to_agent = operation.get("isMatchToAgent", None)
 
-    agent = get_agent()
+    agent = get_agent(session)
     agent.handle_undo_operation(operation_type, candidate, is_match_to_agent)
 
     return {"message": "success", "userOperation": operation}
@@ -1099,7 +1123,7 @@ def redo_operation():
     candidate = operation["candidate"]
     is_match_to_agent = operation.get("isMatchToAgent", None)
 
-    agent = get_agent()
+    agent = get_agent(session)
     agent.handle_user_operation(operation_type, candidate, is_match_to_agent)
 
     return {"message": "success", "userOperation": operation}

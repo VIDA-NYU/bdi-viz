@@ -4,11 +4,11 @@ import os
 import shutil
 from typing import Any, Dict, List, Optional
 
+import chromadb
 from langchain.tools import StructuredTool
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-import chromadb
 
 # Configure logging to mute verbose Chroma messages
 logging.getLogger("chromadb").setLevel(logging.CRITICAL)
@@ -117,7 +117,8 @@ class MemoryRetriever:
         "user_memory",
     ]
 
-    def __init__(self):
+    def __init__(self, session_id: str = "default"):
+        self.session_id = session_id
         # Initialize embeddings with a model that matches the expected dimensions
         embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-mpnet-base-v2",  # 768d
@@ -182,7 +183,7 @@ class MemoryRetriever:
         self.collections: Dict[str, chromadb.Collection] = {}
         for ns in self.supported_namespaces:
             self.collections[ns] = self.client.get_or_create_collection(
-                name=f"agent_memory_{ns}",
+                name=f"agent_memory_{self.session_id}_{ns}",
                 metadata={
                     "hnsw:space": "cosine",
                     "hnsw:construction_ef": 100,
@@ -331,6 +332,22 @@ class MemoryRetriever:
             "explanations": 0,
             "user_memory": 0,
         }
+
+    def clear_all(self):
+        """Drop all collections for this session and reset counters."""
+        try:
+            for ns in list(self.collections.keys()):
+                name = f"agent_memory_{self.session_id}_{ns}"
+                try:
+                    self.client.delete_collection(name)
+                except Exception:
+                    pass
+            self.collections = {}
+            self.reset_memory()
+        except Exception as e:
+            logger.warning(
+                f"Failed to clear all memory for session {self.session_id}: {e}"
+            )
 
     # puts
     def put_target_schema(self, property: Dict[str, Any]):
@@ -837,12 +854,14 @@ Explanations: {formatted_explanations}
         self.namespace_counts[namespace] = 0
 
 
-MEMORY_RETRIEVER = None
+MEMORY_RETRIEVERS: Dict[str, MemoryRetriever] = {}
 
 
-def get_memory_retriever():
-    global MEMORY_RETRIEVER
-    if MEMORY_RETRIEVER is None:
-        logger.info("🧠Memory: Initializing memory retriever...")
-        MEMORY_RETRIEVER = MemoryRetriever()
-    return MEMORY_RETRIEVER
+def get_memory_retriever(session_id: str = "default"):
+    global MEMORY_RETRIEVERS
+    if session_id not in MEMORY_RETRIEVERS:
+        logger.info(
+            f"🧠Memory: Initializing memory retriever for session '{session_id}'..."
+        )
+        MEMORY_RETRIEVERS[session_id] = MemoryRetriever(session_id=session_id)
+    return MEMORY_RETRIEVERS[session_id]
