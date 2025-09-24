@@ -315,7 +315,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
             {cellElements}
             
             {/* Color Legend */}
-            <Legend color={color} />
+            <Legend color={color} offsetX={dimensions.width - MARGIN.left - MARGIN.right + 28} />
             
             {/* Y Axis shown when no source ontology is available */}
             {!hasSourceOntology && (
@@ -364,23 +364,25 @@ const HeatMap: React.FC<HeatMapProps> = ({
       </Box>
 
       {hasSourceOntology && (
-        <Box sx={{ position: "absolute", top: 160, left: MARGIN.left + 120, zIndex: 1000 }}>
+        <Box sx={{ position: "absolute", top: 160, left: MARGIN.left + 120, zIndex: 999 }}>
           <SourceHierarchyColumnViz
             sourceTreeData={sourceTreeData}
             currentExpanding={currentExpanding as AggregatedCandidate}
             transform={`translate(${0},${0})`}
             hideTooltip={hideTooltip}
             setSourceColumn={setSourceColumn}
+            sourceMeta={metaData?.sourceMeta}
           />
         </Box>
       )}
 
-      <Box sx={{ flexGrow: 1, paddingLeft: 0, flexBasis: "280px" }}>
+      <Box sx={{ flexGrow: 1, paddingLeft: 0, flexBasis: "280px", zIndex: 1000 }}>
         <HierarchicalColumnViz
           targetTreeData={targetTreeData}
           currentExpanding={currentExpanding as AggregatedCandidate}
           transform={`translate(${MARGIN.left},${0})`}
           hideTooltip={hideTooltip}
+          targetMeta={metaData?.targetMeta}
         />
       </Box>
     </>

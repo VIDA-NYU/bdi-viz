@@ -15,6 +15,7 @@ interface HierarchicalColumnVizProps {
   currentExpanding?: any; // Using any to match your existing code
   transform: string;
   hideTooltip: () => void;
+  targetMeta?: DatasetMeta;
 }
 
 const MARGIN = { top: 40, right: 70, bottom: 20, left: 70 };
@@ -24,6 +25,7 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
   currentExpanding,
   transform,
   hideTooltip,
+  targetMeta,
 }) => {
   const theme = useTheme();
   const { globalQuery, selectedTargetNodes, setSelectedTargetNodes } = useContext(HighlightGlobalContext);
@@ -130,9 +132,9 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
       .attr('x', spaceFillingWidth / 2)
       .attr('y', superCategoryY + 50)
       .attr('font-size', '1rem')
-      .attr('font-weight', 'bold')
+      .attr('font-weight', '300')
       .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
-      .text('Database Schema Hierarchy');
+      .text(targetMeta?.name ? `${targetMeta.name} (Target)` : 'Database Schema Hierarchy');
   }, [
     targetTreeData, 
     targetTreeData, 

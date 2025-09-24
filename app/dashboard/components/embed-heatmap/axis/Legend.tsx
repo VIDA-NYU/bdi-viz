@@ -4,16 +4,18 @@ import { StyledText } from "@/app/dashboard/layout/components";
 
 interface LegendProps {
   color: d3.ScaleSequential<string, never>;
+  offsetX: number;
 }
 
 const Legend: React.FC<LegendProps> = ({
   color,
+  offsetX,
 }) => {
   const theme = useTheme();
 
   const legendWidth = 25;
   const legendHeight = 300;
-  const legendOffsetX = -200;
+  const legendOffsetX = offsetX;
   const legendOffsetY = 30;
 
   const colorRamp = color;
