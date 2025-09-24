@@ -39,7 +39,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
 }) => {
     const [query, setQuery] = useState<string>('');
     
-    const { setGlobalQuery, selectedNodes } = useContext(HighlightGlobalContext);
+    const { setGlobalQuery, selectedTargetNodes } = useContext(HighlightGlobalContext);
     const { setIsLoadingGlobal, setTaskStateFor, ontologySearchPopupOpen, setOntologySearchPopupOpen } = useContext(SettingsGlobalContext);
 
     const handleKeyPress = async (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -60,11 +60,11 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
     };
 
     const handleRematch = () => {
-        console.log("Rematch task start with nodes: ", selectedNodes);
+        console.log("Rematch task start with nodes: ", selectedTargetNodes);
         try {
             setIsLoadingGlobal(true);
             runRematchTask({
-                nodes: selectedNodes,
+                nodes: selectedTargetNodes.map(n => n.node),
                 onResult: (result) => {
                     console.log("Matching task completed with result:", result);
                     getCachedResults({ callback: rematchCallback });
@@ -88,7 +88,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
         }
     };
 
-    const selectedNodesCount = selectedNodes?.length || 0;
+    const selectedNodesCount = selectedTargetNodes?.length || 0;
     const hasSelectedNodes = selectedNodesCount > 0;
 
     return (
