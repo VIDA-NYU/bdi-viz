@@ -1,4 +1,3 @@
-import time
 import importlib
 import json
 import logging
@@ -6,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -17,6 +17,8 @@ logger = logging.getLogger("bdiviz_flask.sub")
 
 CACHE_DIR = ".cache"
 EXPLANATION_DIR = os.path.join(CACHE_DIR, "explanations")
+# Root directory for per-session assets under the api package
+SESSIONS_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sessions")
 
 
 def check_cache_dir(func):
@@ -28,14 +30,51 @@ def check_cache_dir(func):
     return wrapper
 
 
-def extract_session_name(request) -> str:
-    if request.json is None:
+def sanitize_session_name(name: Optional[str]) -> str:
+    """Sanitize session name to URL/file-system safe string.
+
+    Allows only [A-Za-z0-9_-], trims length to 64, defaults to 'default'.
+    """
+    if not name or not isinstance(name, str):
         return "default"
+    # Replace invalid chars
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+    # Collapse repeats and trim
+    safe = re.sub(r"_+", "_", safe).strip("_")
+    if not safe:
+        safe = "default"
+    return safe[:64]
 
-    data = request.json
-    session_name = data.get("session_name", "default")
 
-    return session_name
+def get_session_dir(session_name: str, create: bool = True) -> str:
+    """Return absolute path to the per-session directory under api/sessions.
+
+    Creates the directory if create=True.
+    """
+    safe = sanitize_session_name(session_name)
+    path = os.path.join(SESSIONS_ROOT, safe)
+    if create and not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
+    return path
+
+
+def get_session_file(session_name: str, filename: str, create_dir: bool = True) -> str:
+    """Join a file name under the session directory (optionally creating it)."""
+    session_dir = get_session_dir(session_name, create=create_dir)
+    return os.path.join(session_dir, filename)
+
+
+def extract_session_name(request) -> str:
+    """Extract session name from JSON or form; default to 'default'."""
+    try:
+        if getattr(request, "form", None) and request.form is not None:
+            if "session_name" in request.form:
+                return sanitize_session_name(request.form.get("session_name"))
+        if getattr(request, "json", None) and request.json is not None:
+            return sanitize_session_name(request.json.get("session_name", "default"))
+    except Exception:
+        pass
+    return "default"
 
 
 def extract_data_from_request(request):
@@ -101,6 +140,24 @@ def write_csv_with_comments(
         df.to_csv(f, index=False)
 
 
+def write_session_csv_with_comments(
+    df: pd.DataFrame,
+    session_name: str,
+    which: str,
+    meta: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Write a per-session CSV with metadata comments. Returns written path.
+
+    which: 'source' | 'target'
+    """
+    if which not in {"source", "target"}:
+        raise ValueError("which must be 'source' or 'target'")
+    filename = f"{which}.csv"
+    path = get_session_file(session_name, filename, create_dir=True)
+    write_csv_with_comments(df, path, meta)
+    return path
+
+
 def read_csv_with_comments(path: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """Read a CSV previously written by write_csv_with_comments.
 
@@ -126,12 +183,37 @@ def read_csv_with_comments(path: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
     return df, meta
 
 
-def load_source_df() -> pd.DataFrame:
+def read_session_csv_with_comments(
+    session_name: str, which: str
+) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """Read a per-session CSV written by write_session_csv_with_comments.
+
+    which: 'source' | 'target'
+    """
+    if which not in {"source", "target"}:
+        raise ValueError("which must be 'source' or 'target'")
+    path = get_session_file(session_name, f"{which}.csv", create_dir=False)
+    return read_csv_with_comments(path)
+
+
+def load_source_df(session_name: Optional[str] = None) -> pd.DataFrame:
+    """Load source dataframe.
+
+    If session_name provided, load from sessions/{session}/source.csv; else
+    load the legacy top-level .source.csv (backward compatibility).
+    """
+    if session_name:
+        df, _ = read_session_csv_with_comments(session_name, "source")
+        return df
     df, _ = read_csv_with_comments(".source.csv")
     return df
 
 
-def load_target_df() -> pd.DataFrame:
+def load_target_df(session_name: Optional[str] = None) -> pd.DataFrame:
+    """Load target dataframe with session awareness (see load_source_df)."""
+    if session_name:
+        df, _ = read_session_csv_with_comments(session_name, "target")
+        return df
     df, _ = read_csv_with_comments(".target.csv")
     return df
 
@@ -147,16 +229,25 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", name)
 
 
+def _get_explanation_dir() -> str:
+    """Return explanation directory path, session-scoped if provided."""
+    path = EXPLANATION_DIR
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
+    return path
+
+
 def write_candidate_explanation_json(
-    source_col: str, target_col: str, candidate_explanation: Dict[str, Any]
+    source_col: str,
+    target_col: str,
+    candidate_explanation: Dict[str, Any],
 ) -> None:
-    if not os.path.exists(EXPLANATION_DIR):
-        os.makedirs(EXPLANATION_DIR)
+    dir_path = _get_explanation_dir()
 
     sanitized_source_col = sanitize_filename(source_col)
     sanitized_target_col = sanitize_filename(target_col)
     output_path = os.path.join(
-        EXPLANATION_DIR, f"{sanitized_source_col}_{sanitized_target_col}.json"
+        dir_path, f"{sanitized_source_col}_{sanitized_target_col}.json"
     )
     with open(output_path, "w") as f:
         json.dump(candidate_explanation, f, indent=4)
@@ -167,14 +258,15 @@ def read_candidate_explanation_json(
 ) -> Optional[Dict[str, Any]]:
     sanitized_source_col = sanitize_filename(source_col)
     sanitized_target_col = sanitize_filename(target_col)
-    output_path = os.path.join(
+
+    legacy_path = os.path.join(
         EXPLANATION_DIR, f"{sanitized_source_col}_{sanitized_target_col}.json"
     )
-    if os.path.exists(output_path):
-        with open(output_path, "r") as f:
+    if os.path.exists(legacy_path):
+        with open(legacy_path, "r") as f:
             return json.load(f)
 
-    return
+    return None
 
 
 @check_cache_dir
@@ -309,14 +401,20 @@ def parse_llm_generated_ontology(ontology: Dict[str, Any]) -> Dict[str, Any]:
     return json_dict
 
 
-def load_ontology_flat() -> Dict[str, Any]:
+def load_ontology_flat(session_name: Optional[str] = None) -> Dict[str, Any]:
+    """Load flat target ontology, preferring session file when provided."""
+    if session_name:
+        path = get_session_file(session_name, "target.json", create_dir=False)
+        with open(path, "r") as f:
+            return json.load(f)
     with open(".target.json", "r") as f:
-        ontology_flat = json.load(f)
-    return ontology_flat
+        return json.load(f)
 
 
 def load_ontology(
-    dataset: str = "target", columns: Optional[List[str]] = None
+    dataset: str = "target",
+    columns: Optional[List[str]] = None,
+    session: Optional[str] = None,
 ) -> Optional[List[Dict]]:
     """
     Load the ontology from a JSON file.
@@ -325,7 +423,11 @@ def load_ontology(
         List[Dict]: The loaded ontology.
     """
     try:
-        with open(f".{dataset}.json", "r") as f:
+        if session:
+            path = get_session_file(session, f"{dataset}.json", create_dir=False)
+        else:
+            path = f".{dataset}.json"
+        with open(path, "r") as f:
             ontology_flat = json.load(f)
     except Exception as e:
         logger.error(f"Error loading ontology: {e}")
@@ -367,10 +469,17 @@ def load_ontology(
     return ret
 
 
-def load_property(target_column: str) -> Optional[Dict[str, Any]]:
+def load_property(
+    target_column: str, session: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
     try:
-        with open(".target.json", "r") as f:
-            ontology_flat = json.load(f)
+        if session:
+            path = get_session_file(session, "target.json", create_dir=False)
+            with open(path, "r") as f:
+                ontology_flat = json.load(f)
+        else:
+            with open(".target.json", "r") as f:
+                ontology_flat = json.load(f)
 
         property = None
         if target_column in ontology_flat:
@@ -486,9 +595,18 @@ class TaskState:
         }
     """
 
-    def __init__(self, task_type: str, task_id: str, new_task: bool = False) -> None:
+    def __init__(
+        self,
+        task_type: str,
+        task_id: str,
+        new_task: bool = False,
+        session_name: Optional[str] = None,
+    ) -> None:
         self.task_type = task_type
         self.task_id = task_id
+        self.session_name = (
+            sanitize_session_name(session_name) if session_name else "default"
+        )
         if new_task:
             self._initialize_task_state()
         else:
@@ -506,13 +624,18 @@ class TaskState:
         self._save_task_state()
 
     def _task_state_dir(self) -> str:
-        # Always anchor to the api directory regardless of current working directory
-        return os.path.dirname(os.path.abspath(__file__))
+        # Place task state under session directory: api/sessions/{session}/task_state
+        base = get_session_dir(self.session_name, create=True)
+        path = os.path.join(base, "task_state")
+        os.makedirs(path, exist_ok=True)
+        return path
 
     def _task_state_path(self) -> str:
         # New canonical location inside the api directory
+        safe_session = sanitize_session_name(self.session_name)
         return os.path.join(
-            self._task_state_dir(), f"task_state_{self.task_type}_{self.task_id}.json"
+            self._task_state_dir(),
+            f"task_state_{self.task_type}_{safe_session}_{self.task_id}.json",
         )
 
     def _save_task_state(self) -> None:

@@ -54,6 +54,7 @@ class Agent:
         self._llm = None
         self._llm_model = llm_model
 
+        # Thread id can be session-qualified by the caller if desired
         self.agent_config = {"configurable": {"thread_id": "bdiviz-1"}}
 
         # self.memory = MemorySaver()
@@ -475,25 +476,23 @@ Prompt: {prompt}
         return template
 
 
-# Lazy initialization of the global agent
-AGENT = None
+AGENTS: Dict[str, Agent] = {}
 
 
-def get_agent(memory_retriever):
-    global AGENT
-    if AGENT is None:
+def get_agent(memory_retriever: MemoryRetriever, session_id: str = "default") -> Agent:
+    global AGENTS
+    if session_id not in AGENTS:
         llm_provider = os.getenv("LLM_PROVIDER", "portkey")
         docker_env = os.getenv("DOCKER_ENV", "local")
         if llm_provider == "portkey":
             portkey_headers = createHeaders(
-                api_key=os.getenv("PORTKEY_API_KEY"),  # Here is my portkey api key
-                virtual_key=os.getenv("PROVIDER_API_KEY"),  # gemini-vertexai-cabcb6
+                api_key=os.getenv("PORTKEY_API_KEY"),
+                virtual_key=os.getenv("PROVIDER_API_KEY"),
                 metadata={"_user": "yfw215"},
             )
             llm_model = ChatOpenAI(
                 model="gemini-2.5-flash",
                 temperature=0,
-                # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
                 base_url=(
                     "https://portkey-lb.rt.nyu.edu/v1/"
                     if docker_env == "hsrn"
@@ -507,5 +506,5 @@ def get_agent(memory_retriever):
             llm_model = ChatOpenAI(model="gpt-5-nano")
         else:
             raise ValueError(f"Invalid LLM provider: {llm_provider}")
-        AGENT = Agent(memory_retriever, llm_model=llm_model)
-    return AGENT
+        AGENTS[session_id] = Agent(memory_retriever, llm_model=llm_model)
+    return AGENTS[session_id]

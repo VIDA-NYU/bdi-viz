@@ -89,3 +89,5 @@ report.json
 api/task_state_*.json
 .task_state_*.json
 celery.log
+
+api/sessions/

@@ -767,12 +767,16 @@ class RapidFuzzMatcher():
         return self._state.model_dump()
 
 
-# Lazy initialization
-LANGGRAPH_AGENT = None
+# Lazy initialization per session
+LANGGRAPH_AGENTS: Dict[str, LangGraphAgent] = {}
 
 
-def get_langgraph_agent(memory_retriever):
-    global LANGGRAPH_AGENT
-    if LANGGRAPH_AGENT is None:
-        LANGGRAPH_AGENT = LangGraphAgent(memory_retriever)
-    return LANGGRAPH_AGENT
+def get_langgraph_agent(
+    memory_retriever: MemoryRetriever, session_id: str = "default"
+) -> LangGraphAgent:
+    global LANGGRAPH_AGENTS
+    if session_id not in LANGGRAPH_AGENTS:
+        LANGGRAPH_AGENTS[session_id] = LangGraphAgent(
+            memory_retriever, session_id=session_id
+        )
+    return LANGGRAPH_AGENTS[session_id]

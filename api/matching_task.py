@@ -1,4 +1,3 @@
-import time
 import concurrent.futures
 import fcntl
 import hashlib
@@ -6,6 +5,7 @@ import json
 import logging
 import os
 import threading
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -20,13 +20,14 @@ from .matcher.bdikit import BDIKitMatcher
 from .matcher.rapidfuzz_value import RapidFuzzValueMatcher
 from .matcher_weight.weight_updater import WeightUpdater
 from .utils import (
+    TaskState,
+    get_session_file,
     is_candidate_for_category,
     load_gdc_ontology,
     load_ontology,
     load_ontology_flat,
     load_property,
     verify_new_matcher,
-    TaskState,
 )
 
 logger = logging.getLogger("bdiviz_flask.sub")
@@ -248,7 +249,7 @@ class MatchingTask:
 
     def get_all_nodes(self) -> List[str]:
         """Get all nodes from the ontology."""
-        ontology_flat = load_ontology_flat()
+        ontology_flat = load_ontology_flat(self.session_name)
         nodes = set()
         for col in ontology_flat.keys():
             nodes.add(ontology_flat[col]["node"])
@@ -291,7 +292,10 @@ class MatchingTask:
 
             if task_state is None:
                 task_state = TaskState(
-                    task_type="matching", task_id="api_call", new_task=True
+                    task_type="matching",
+                    task_id="api_call",
+                    new_task=True,
+                    session_name=self.session_name,
                 )
 
             task_state._update_task_state(
@@ -412,7 +416,7 @@ class MatchingTask:
                     continue
 
                 target_col = candidate["targetColumn"]
-                property_obj = load_property(target_col)
+                property_obj = load_property(target_col, session=self.session_name)
                 if property_obj is None:
                     continue
 
@@ -856,10 +860,12 @@ class MatchingTask:
         target_columns = set()
         for candidate in candidates:
             target_columns.add(candidate["targetColumn"])
-        return load_ontology(dataset="target", columns=list(target_columns))
+        return load_ontology(
+            dataset="target", columns=list(target_columns), session=self.session_name
+        )
 
     def _generate_source_ontology(self) -> Optional[List[Dict]]:
-        return load_ontology(dataset="source")
+        return load_ontology(dataset="source", session=self.session_name)
 
     def _initialize_value_matches(self) -> None:
         self.cached_candidates["value_matches"] = {}
@@ -1031,8 +1037,9 @@ class MatchingTask:
 
     def _export_cache_to_json(self, json_obj: Dict) -> None:
         """Export cache to JSON file with file locking to ensure atomic operations"""
-        output_path = os.path.join(
-            os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
+        # Store cache under session directory
+        output_path = get_session_file(
+            self.session_name, "matching_results.json", create_dir=True
         )
         with open(output_path, "w") as f:
             # Acquire exclusive lock
@@ -1049,8 +1056,8 @@ class MatchingTask:
     def _import_cache_from_json(self) -> Optional[Dict]:
         """Import cache from JSON file with file locking to ensure atomic operations"""
 
-        output_path = os.path.join(
-            os.path.dirname(__file__), f"matching_results_{self.session_name}.json"
+        output_path = get_session_file(
+            self.session_name, "matching_results.json", create_dir=False
         )
         max_retries = 7  # Exponential backoff: total wait ~6.35s if all retries used
         initial_delay = 0.05  # 50ms
@@ -1297,7 +1304,7 @@ class MatchingTask:
         Retrieve unique values for a target column. If the column is found in the target ontology
         and has enums, return those. Otherwise, return unique values from the dataframe.
         """
-        target_description = load_property(target_col)
+        target_description = load_property(target_col, session=self.session_name)
         if target_description and "enum" in target_description:
             target_values = target_description["enum"] or []
         elif self.target_df is not None and target_col in self.target_df.columns:
