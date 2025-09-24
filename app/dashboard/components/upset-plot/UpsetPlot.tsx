@@ -68,7 +68,6 @@ const UpsetPlot: React.FC<UpsetPlotProps> = ({ aggData, matchers, selectedCandid
     }, [selectedCandidate, globalCandidateHighlight]);
     const { x, y, color, getWidth, getHeight, dataRange } = useHeatmapScales({
         data: aggData,
-        sourceCluster: selectedCandidate ? [selectedCandidate.sourceColumn] : undefined,
         width: dimensions.width,
         height: dimensions.height,
         margin: { top: 30, right: 78, bottom: 0, left: 200 },

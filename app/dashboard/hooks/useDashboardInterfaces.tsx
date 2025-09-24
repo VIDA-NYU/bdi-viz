@@ -4,20 +4,18 @@ import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 
 type DashboardInterfacesState = {
     filteredSourceCluster: string[];
-    filteredCandidateCluster: string[];
     weightedAggregatedCandidates: AggregatedCandidate[];
     filteredSourceColumns: SourceColumn[];
 }
 
 type DashboardInterfacesProps = {
     candidates: Candidate[];
-    sourceClusters: SourceCluster[];
     matchers: Matcher[];
+    sourceClusters: Map<string, string[]>;
     filters: {
         selectedCandidate?: Candidate;
         sourceColumn: string;
         candidateType: string;
-        similarSources: number;
         candidateThreshold: number;
         selectedMatcher?: Matcher;
         status: string[];
@@ -34,16 +32,28 @@ export const {
 } = {
     useDashboardInterfaces: ({
         candidates,
-        sourceClusters,
         matchers,
+        sourceClusters,
         filters,
         pageNumber,
         pageSize,
         setTotalPages,
     }: DashboardInterfacesProps): DashboardInterfacesState => {
-        const [filteredCandidateCluster, setFilteredCandidateCluster] = useState<string[]>([]);
 
         const { selectedTargetNodes, selectedSourceNodes } = useContext(HighlightGlobalContext);
+
+        const columnsBySourceCluster = useMemo(() => {
+            if (selectedSourceNodes.length > 0 && sourceClusters.size > 0) {
+                const columnsBySourceCluster: string[] = [];
+                selectedSourceNodes.forEach(node => {
+                    sourceClusters.get(node.node)?.forEach(column => {
+                        columnsBySourceCluster.push(column);
+                    })
+                });
+                return columnsBySourceCluster;
+            }
+            return [];
+        }, [sourceClusters, selectedSourceNodes]);
 
         // useWhatChanged([filters.sourceColumn, filters.selectedMatchers, filters.similarSources, filters.candidateThreshold, filters.candidateType]);
 
@@ -86,23 +96,16 @@ export const {
                     const pageStart = (pageNumber - 1) * pageSize;
                     const pageEnd = pageStart + pageSize;
 
-                    
                     const pageSources = filteredSourceColumns.map(d => d.name).slice(pageStart, pageEnd);
                     return pageSources;
-                }
-                const sourceCluster = sourceClusters?.find(sc =>
-                    sc.sourceColumn === filters.sourceColumn
-                );
-                let filteredSourceCluster = sourceCluster?.cluster;
-                if (filteredSourceCluster) {
-                    if (filters.similarSources) {
-                        filteredSourceCluster = filteredSourceCluster.slice(0, filters.similarSources);
-                    }
-                    return filteredSourceCluster;
+                } else if (columnsBySourceCluster.length > 0) {
+                    return columnsBySourceCluster;
+                } else {
+                    return [filters.sourceColumn];
                 }
             }
-            return [];
-        }, [sourceClusters, filters.sourceColumn, filters.similarSources, pageNumber, pageSize]);
+            return filteredSourceColumns.map(d => d.name);
+        }, [filters.sourceColumn, pageNumber, pageSize, filteredSourceColumns, selectedSourceNodes, columnsBySourceCluster]);
 
         const weightedAggregatedCandidates = useMemo(() => {
 
@@ -124,17 +127,15 @@ export const {
                 filteredData = filteredData.filter((d) => columns.includes(d.targetColumn));
             }
 
-            if (selectedSourceNodes.length > 0) {
-                const columns = selectedSourceNodes.map(node => node.columns).flat();
-                filteredData = filteredData.filter((d) => columns.includes(d.sourceColumn));
+            if (columnsBySourceCluster.length > 0) {
+                filteredData = filteredData.filter((d) => columnsBySourceCluster.includes(d.sourceColumn));
             }
-
+            
             return filteredData;
         }, [weightedCandidates, filteredSourceCluster, filters.candidateThreshold, filters.status, selectedTargetNodes, selectedSourceNodes]);
 
         return {
             filteredSourceCluster,
-            filteredCandidateCluster,
             weightedAggregatedCandidates,
             filteredSourceColumns,
         };

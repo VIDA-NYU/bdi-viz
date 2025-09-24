@@ -24,7 +24,7 @@ import { runRematchTask, getCachedResults, getTargetOntology, getValueBins, getV
 
 interface SearchMenuProps {
     agentSearchResultCallback: (candidates: Candidate[]) => void;
-    rematchCallback: (candidates: Candidate[], sourceCluster: SourceCluster[]) => void;
+    rematchCallback: (candidates: Candidate[]) => void;
     ontologyCallback: (targetOntology: Ontology[]) => void;
     uniqueValuesCallback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     valueMatchesCallback: (valueMatches: ValueMatch[]) => void;

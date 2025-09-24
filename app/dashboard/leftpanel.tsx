@@ -16,13 +16,11 @@ interface LeftPanelProps {
 
     onSourceColumnSelect: (column: string) => void;
     onCandidateTypeSelect: (dataType: string) => void;
-    onSimilarSourcesSelect: (num: number) => void;
     onCandidateThresholdSelect: (num: number) => void;
     onMatchersSelect: (matchers: Matcher[]) => void;
     state: {
         sourceColumn: string;
         candidateType: string;
-        similarSources: number;
         candidateThreshold: number;
     };
 
@@ -39,7 +37,7 @@ interface LeftPanelProps {
     userOperations: UserOperation[];
 
     // File Uploading Props
-    handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[], newMatchers?: Matcher[]) => void;
+    handleFileUpload: (newCandidates: Candidate[]) => void;
     handleTargetOntology: (targetOntologies: Ontology[]) => void;
     handleSourceOntology: (sourceOntologies: Ontology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
@@ -60,7 +58,6 @@ const LeftPanel = ({
     containerStyle = {},
     onSourceColumnSelect,
     onCandidateTypeSelect,
-    onSimilarSourcesSelect,
     onCandidateThresholdSelect,
     onMatchersSelect,
     state,
@@ -107,7 +104,6 @@ const LeftPanel = ({
                 containerStyle={containerStyle}
                 onSourceColumnSelect={onSourceColumnSelect}
                 onCandidateTypeSelect={onCandidateTypeSelect}
-                onSimilarSourcesSelect={onSimilarSourcesSelect}
                 onCandidateThresholdSelect={onCandidateThresholdSelect}
                 onMatchersSelect={onMatchersSelect}
                 state={state}

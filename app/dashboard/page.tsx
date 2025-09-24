@@ -76,17 +76,15 @@ export default function Dashboard() {
     const {
         sourceColumn,
         candidateType,
-        similarSources,
         candidateThreshold,
         searchResults,
         status,
         updateSourceColumn,
         updateCandidateType,
-        updateSimilarSources,
         updateCandidateThreshold,
         updateSearchResults,
         updateStatus,
-    } = useDashboardFilters({ candidates, sourceClusters, matchers });
+    } = useDashboardFilters();
 
     const {
         isMatch,
@@ -130,18 +128,16 @@ export default function Dashboard() {
 
     const {
         filteredSourceCluster,
-        filteredCandidateCluster,
         weightedAggregatedCandidates,
         filteredSourceColumns,
     } = useDashboardInterfaces({
         candidates,
-        sourceClusters,
         matchers,
+        sourceClusters,
         filters: {
             selectedCandidate,
             sourceColumn,
             candidateType,
-            similarSources,
             candidateThreshold,
             status,
         },
@@ -217,15 +213,14 @@ export default function Dashboard() {
         updateSearchResults(results);
     }, [updateSearchResults]);
 
-    const handleNewMatchingTask = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => {
-        console.log("New Matching Task: ", newCandidates, newSourceClusters);
-        handleFileUpload(newCandidates, newSourceClusters);
+    const handleNewMatchingTask = useCallback((newCandidates: Candidate[]) => {
+        console.log("New Matching Task: ", newCandidates);
+        handleFileUpload(newCandidates);
         setSelectedCandidate(undefined);
         updateSourceColumn("all");
         updateCandidateType("all");
-        updateSimilarSources(1);
         updateCandidateThreshold(0.5);
-    }, [handleFileUpload, setSelectedCandidate, updateSourceColumn, updateCandidateType, updateSimilarSources, updateCandidateThreshold]);
+    }, [handleFileUpload, setSelectedCandidate, updateSourceColumn, updateCandidateType, updateCandidateThreshold]);
     
     const handleNewMatcherSubmit = useCallback((matchers: Matcher[]) => {
         console.log("New Matchers: ", matchers);
@@ -305,7 +300,6 @@ export default function Dashboard() {
                     matchers={matchers}
                     onSourceColumnSelect={handleUpdateSourceColumn}
                     onCandidateTypeSelect={updateCandidateType}
-                    onSimilarSourcesSelect={updateSimilarSources}
                     onCandidateThresholdSelect={updateCandidateThreshold}
                     acceptMatch={acceptMatch}
                     rejectMatch={rejectMatch}
@@ -314,7 +308,7 @@ export default function Dashboard() {
                     redo={redo}
                     exportMatchingResults={exportMatchingResults}
                     onMatchersSelect={matchersSelectHandler}
-                    state={{ sourceColumn, candidateType, similarSources, candidateThreshold }}
+                    state={{ sourceColumn, candidateType, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleNewMatchingTask}
                     handleTargetOntology={handleTargetOntology}
@@ -331,7 +325,6 @@ export default function Dashboard() {
                         sourceColumn={sourceColumn}
                         setSourceColumn={handleUpdateSourceColumn}
                         sourceColumns={filteredSourceColumns}
-                        sourceCluster={filteredSourceCluster}
                         targetOntologies={targetOntologies}
                         sourceOntologies={sourceOntologies}
                         selectedCandidate={selectedCandidate}

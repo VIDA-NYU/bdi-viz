@@ -268,7 +268,7 @@ const parseArray = <T,>(data: any[], typeName: string): T[] => {
 };
 
 interface getCachedResultsProps {
-    callback: (newCandidates: Candidate[], newSourceCluster: SourceCluster[]) => void;
+    callback: (newCandidates: Candidate[]) => void;
     signal?: AbortSignal;
 }
 
@@ -279,14 +279,12 @@ const getCachedResults = (prop: getCachedResultsProps) => {
         prop.signal,
         (data) => {
             const results = data?.results;
-            if (results?.candidates && Array.isArray(results.candidates) && 
-                results.sourceClusters && Array.isArray(results.sourceClusters)) {
+            if (results?.candidates && Array.isArray(results.candidates)) {
                 
                 const candidates = parseArray<Candidate>(results.candidates, "Candidate");
-                const sourceClusters = parseArray<SourceCluster>(results.sourceClusters, "SourceCluster");
 
                 console.log("getCachedResults finished!");
-                prop.callback(candidates, sourceClusters);
+                prop.callback(candidates);
                 return;
             } else {
                 throw new Error("Invalid results format");
@@ -448,7 +446,7 @@ const getSourceOntology = (prop: getSourceOntologyProps) => {
 
 interface userOperationsProps {
     userOperations?: UserOperation[];
-    cachedResultsCallback: (candidates: Candidate[], sourceCluster?: SourceCluster[]) => void;
+    cachedResultsCallback: (candidates: Candidate[]) => void;
     userOperationHistoryCallback: (userOperations: UserOperation[]) => void;
     signal?: AbortSignal;
 }
@@ -482,7 +480,7 @@ const applyUserOperation = ({
 
 interface undoRedoProps {
     userOperationCallback: (userOperation: UserOperation) => void;
-    cachedResultsCallback: (candidates: Candidate[], sourceCluster?: SourceCluster[]) => void;
+    cachedResultsCallback: (candidates: Candidate[]) => void;
     userOperationHistoryCallback: (userOperations: UserOperation[]) => void;
     signal?: AbortSignal;
 }
