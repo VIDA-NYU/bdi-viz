@@ -5,7 +5,6 @@ import { HeatMapConfig } from '../types';
 import { getColorInterpolator } from '../utils/color';
 interface ScaleParams {
     data: Candidate[];
-    sourceCluster?: string[];
     width: number;
     height: number;
     margin: { top: number; right: number; bottom: number; left: number };
@@ -13,12 +12,12 @@ interface ScaleParams {
     selectedCandidate?: Candidate;
 }
   
-const useHeatmapScales = ({ data, sourceCluster, width, height, margin, config, selectedCandidate }: ScaleParams) => {
+const useHeatmapScales = ({ data, width, height, margin, config, selectedCandidate }: ScaleParams) => {
       
   
     return useMemo(() => {
         const xColumns = [...new Set(data.map(d => d.targetColumn))];
-        const yColumns = (sourceCluster ? [...sourceCluster] : [...new Set(data.map(d => d.sourceColumn))]).reverse();
+        const yColumns = [...new Set(data.map(d => d.sourceColumn))].reverse();
         
 
         const numColumnsX = xColumns.length;
@@ -114,7 +113,7 @@ const useHeatmapScales = ({ data, sourceCluster, width, height, margin, config, 
                 getHeight,
                 dataRange: { min: minScore, max: maxScore }
           };
-      }, [data, sourceCluster, width, height, margin, config, selectedCandidate]);
+      }, [data, width, height, margin, config, selectedCandidate]);
   };
   
 

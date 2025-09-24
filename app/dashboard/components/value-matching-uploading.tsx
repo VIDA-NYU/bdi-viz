@@ -13,7 +13,7 @@ import { toastify } from "@/app/lib/toastify/toastify-helper";
 import { runMatchingTask, getCachedResults, getTargetOntology, getValueBins, getValueMatches, applyUserOperation } from "@/app/lib/heatmap/heatmap-helper";
 
 interface ValueMatchingUploadingProps {
-    callback: (candidates: Candidate[], sourceCluster: SourceCluster[]) => void;
+    callback: (candidates: Candidate[]) => void;
     ontologyCallback: (targetOntology: Ontology[]) => void;
     sourceOntologyCallback: (sourceOntology: Ontology[]) => void;
     uniqueValuesCallback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;

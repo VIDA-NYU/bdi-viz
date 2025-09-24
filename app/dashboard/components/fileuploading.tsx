@@ -13,7 +13,7 @@ import { Dropzone } from "./file-upload/fileUploadBox";
 import { toastify } from "@/app/lib/toastify/toastify-helper";
 
 interface FileUploadingProps {
-    callback: (candidates: Candidate[], sourceCluster: SourceCluster[]) => void;
+    callback: (candidates: Candidate[]) => void;
     ontologyCallback: (targetOntology: Ontology[]) => void;
     sourceOntologyCallback: (sourceOntology: Ontology[]) => void;
     uniqueValuesCallback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;

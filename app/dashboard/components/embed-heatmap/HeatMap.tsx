@@ -24,7 +24,6 @@ interface HeatMapProps {
   sourceColumn: string;
   sourceColumns: SourceColumn[];
   setSourceColumn: (sourceColumn: string) => void;
-  sourceCluster?: string[];
   targetOntologies?: Ontology[];
   sourceOntologies?: Ontology[];
   selectedCandidate?: Candidate;
@@ -41,7 +40,6 @@ const MARGIN = { top: 30, right: 78, bottom: 0, left: 220 };
 
 const HeatMap: React.FC<HeatMapProps> = ({
   data,
-  sourceCluster,
   sourceColumns,
   setSourceColumn,
   sourceColumn,
@@ -88,7 +86,6 @@ const HeatMap: React.FC<HeatMapProps> = ({
   // Get scales for the heatmap
   const { x, y, color, getWidth, getHeight } = useHeatmapScales({
     data: candidates,
-    sourceCluster,
     width: dimensions.width,
     height: dimensions.height,
     margin: MARGIN,

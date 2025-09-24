@@ -6,7 +6,7 @@ import { runRematchTask, getCachedResults, getTargetOntology, getValueBins, getV
 import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
 
 interface RematchButtonProps {
-    callback: (candidates: Candidate[], sourceCluster: SourceCluster[]) => void;
+    callback: (candidates: Candidate[]) => void;
     ontologyCallback: (targetOntology: Ontology[]) => void;
     uniqueValuesCallback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     valueMatchesCallback: (valueMatches: ValueMatch[]) => void;

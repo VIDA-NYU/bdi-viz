@@ -15,7 +15,7 @@ import { getMockData } from '../components/utils/mock';
 
 type DashboardCandidateState = {
     candidates: Candidate[];
-    sourceClusters: SourceCluster[];
+    sourceClusters: Map<string, string[]>;
     matchers: Matcher[];
     selectedCandidate: Candidate | undefined;
     sourceUniqueValues: SourceUniqueValues[];
@@ -26,7 +26,7 @@ type DashboardCandidateState = {
     sourceOntologies: Ontology[];
     gdcAttribute: GDCAttribute | undefined;
     metaData?: { sourceMeta: DatasetMeta, targetMeta: DatasetMeta };
-    handleFileUpload: (newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => void;
+    handleFileUpload: (newCandidates: Candidate[]) => void;
     handleMatchers: (matchers: Matcher[]) => void;
     handleChatUpdate: (candidates: Candidate[]) => void;
     setSelectedCandidate: (candidate: Candidate | undefined) => void;
@@ -44,7 +44,7 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
     // Initialize state with memoized mock data to prevent unnecessary re-renders
     const initialMockData = useMemo(() => getMockData(), []);
     const [candidates, setCandidates] = useState<Candidate[]>(initialMockData);
-    const [sourceClusters, setSourceClusters] = useState<SourceCluster[]>([]);
+    const [sourceClusters, setSourceClusters] = useState<Map<string, string[]>>(new Map());
     const [matchers, setMatchers] = useState<Matcher[]>([]);
     const [selectedCandidate, setSelectedCandidate] = useState<Candidate | undefined>(undefined);
     const [sourceUniqueValues, setSourceUniqueValues] = useState<SourceUniqueValues[]>([]);
@@ -57,7 +57,7 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
     const [metaData, setMetaData] = useState<{ sourceMeta: DatasetMeta, targetMeta: DatasetMeta } | undefined>();
 
     // Memoize handlers to prevent unnecessary re-renders
-    const handleFileUpload = useCallback((newCandidates: Candidate[], newSourceClusters?: SourceCluster[]) => {
+    const handleFileUpload = useCallback((newCandidates: Candidate[]) => {
         const controller = new AbortController();
 
         setCandidates(prevCandidates => {
@@ -65,12 +65,6 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
             return JSON.stringify(prevCandidates) !== JSON.stringify(sortedCandidates) ? sortedCandidates : prevCandidates;
         });
         
-        if (newSourceClusters) {
-            setSourceClusters(prevClusters => 
-                JSON.stringify(prevClusters) !== JSON.stringify(newSourceClusters) ? newSourceClusters : prevClusters
-            );
-        }
-
         getMatchers({
             callback: handleMatchers,
             signal: controller.signal
@@ -119,6 +113,17 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
 
     const handleSourceOntology = useCallback((sourceOntologies: Ontology[]) => {
         setSourceOntologies(sourceOntologies);
+        // Group source ontologies by parent to form clusters
+        const clustersMap = new Map<string, string[]>();
+        sourceOntologies.forEach(ontology => {
+            if (!clustersMap.has(ontology.parent)) {
+                clustersMap.set(
+                    ontology.parent,
+                    sourceOntologies.filter(o => o.parent === ontology.parent).map(o => o.name)
+                );
+            }
+        });
+        setSourceClusters(clustersMap);
     }, []);
 
     // Fetch GDC attribute when selected candidate changes

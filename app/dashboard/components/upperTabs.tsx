@@ -12,7 +12,6 @@ interface UpperTabsProps {
   sourceColumn: string;
   sourceColumns: SourceColumn[];
   setSourceColumn: (sourceColumn: string) => void;
-  sourceCluster: string[];
   targetOntologies: Ontology[];
   sourceOntologies: Ontology[];
   selectedCandidate: Candidate | undefined;
@@ -31,7 +30,6 @@ const UpperTabs: React.FC<UpperTabsProps> = ({
   sourceColumn,
   setSourceColumn,
   sourceColumns,
-  sourceCluster,
   targetOntologies,
   sourceOntologies,
   selectedCandidate,
@@ -113,7 +111,6 @@ const UpperTabs: React.FC<UpperTabsProps> = ({
           sourceColumn={sourceColumn}
           setSourceColumn={setSourceColumn}
           sourceColumns={sourceColumns}
-          sourceCluster={sourceCluster}
           targetOntologies={targetOntologies}
           sourceOntologies={sourceOntologies}
           selectedCandidate={selectedCandidate}

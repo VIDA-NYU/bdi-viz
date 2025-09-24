@@ -11,7 +11,7 @@ type DashboardOperationProps = {
     selectedCandidate: Candidate | undefined;
     isMatch: boolean | undefined;
     selectedExplanations?: Explanation[];
-    onCandidateUpdate: (candidates: Candidate[], sourceCluster?: SourceCluster[]) => void;
+    onCandidateUpdate: (candidates: Candidate[]) => void;
     onCandidateSelect: (candidate: Candidate | undefined) => void;
     onExplanation?: (candidate: Candidate, explanation: CandidateExplanation | undefined) => void;
     onUserOperationsUpdate: (userOperations: UserOperation[]) => void;
