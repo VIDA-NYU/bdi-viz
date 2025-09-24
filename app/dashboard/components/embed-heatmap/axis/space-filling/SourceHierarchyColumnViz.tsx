@@ -15,6 +15,7 @@ interface SourceHierarchyColumnVizProps {
   transform: string;
   hideTooltip: () => void;
   setSourceColumn: (column: string) => void;
+  sourceMeta?: DatasetMeta;
 }
 
 const MARGIN = { top: 40, right: 20, bottom: 20, left: 70 };
@@ -25,6 +26,7 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
   transform,
   hideTooltip,
   setSourceColumn,
+  sourceMeta,
 }) => {
   const theme = useTheme();
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -109,6 +111,17 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
       setSourceColumn,
       globalQuery,
     );
+
+    // Add title
+    g.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -layoutConfig.innerHeight / 2 + 120)
+      .attr('y', layoutConfig.innerWidth / 2 - 70)
+      .attr('font-size', '1rem')
+      .attr('font-weight', '300')
+      .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
+      .text(sourceMeta?.name ? `${sourceMeta.name} (Source)` : 'Database Schema Hierarchy');
   }, [sourceTreeData, layoutConfig, columnData, superCategoryData, categoryData, categoryColorScale, selectedSourceNodes, setSelectedSourceNodes, globalQuery, currentExpanding]);
 
   // Use ref callback to get access to the g element and render when it's available
