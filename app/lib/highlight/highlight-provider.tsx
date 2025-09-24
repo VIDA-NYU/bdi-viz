@@ -8,7 +8,8 @@ const HighlightGlobalProvider: React.FC<{ children: ReactNode }> = ({ children }
     const [globalValueConnections, setGlobalValueConnections] = useState<[number, number][]>([]);
     const [globalCandidateHighlight, setGlobalCandidateHighlight] = useState<AggregatedCandidate | undefined>(undefined);
     const [globalQuery, setGlobalQuery] = useState<string | undefined>();
-    const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
+    const [selectedTargetNodes, setSelectedTargetNodes] = useState<SelectedNode[]>([]);
+    const [selectedSourceNodes, setSelectedSourceNodes] = useState<SelectedNode[]>([]);
 
     const value = {
         globalValueSelection,
@@ -19,8 +20,10 @@ const HighlightGlobalProvider: React.FC<{ children: ReactNode }> = ({ children }
         setGlobalCandidateHighlight,
         globalQuery,
         setGlobalQuery,
-        selectedNodes,
-        setSelectedNodes,
+        selectedTargetNodes,
+        setSelectedTargetNodes,
+        selectedSourceNodes,
+        setSelectedSourceNodes,
     }
 
     return (

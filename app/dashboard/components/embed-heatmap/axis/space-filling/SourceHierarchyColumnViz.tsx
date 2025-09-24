@@ -29,7 +29,7 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
   const theme = useTheme();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const gRef = useRef<SVGGElement | null>(null);
-  const { globalQuery, selectedNodes, setSelectedNodes } = useContext(HighlightGlobalContext);
+  const { globalQuery, selectedSourceNodes, setSelectedSourceNodes } = useContext(HighlightGlobalContext);
 
   // Layout config for vertical orientation
   const layoutConfig = {
@@ -82,8 +82,8 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
       superCategoryX,
       categoryX,
       categoryColorScale,
-      selectedNodes,
-      setSelectedNodes
+      selectedSourceNodes,
+      setSelectedSourceNodes
     );
 
     renderEdgeBundlingHorizontal(
@@ -109,7 +109,7 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
       setSourceColumn,
       globalQuery,
     );
-  }, [sourceTreeData, layoutConfig, columnData, superCategoryData, categoryData, categoryColorScale, selectedNodes, setSelectedNodes, globalQuery, currentExpanding]);
+  }, [sourceTreeData, layoutConfig, columnData, superCategoryData, categoryData, categoryColorScale, selectedSourceNodes, setSelectedSourceNodes, globalQuery, currentExpanding]);
 
   // Use ref callback to get access to the g element and render when it's available
   const setGRef = useCallback((node: SVGGElement | null) => {

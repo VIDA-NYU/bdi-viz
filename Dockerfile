@@ -1,5 +1,5 @@
 # ---- Production Stage ----
-FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.9-nodejs20 as prod
+FROM nikolaik/python-nodejs:python3.9-nodejs20 as prod
 
 WORKDIR /home/bdi-viz-react/
 

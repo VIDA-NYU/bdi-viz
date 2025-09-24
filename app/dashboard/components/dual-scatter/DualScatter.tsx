@@ -70,7 +70,7 @@ export const DualScatter: React.FC<SchemaVizProps> = ({
     const createClusterFromSelection = useCallback(() => {
         if (selectedArea.length < 3) return;
 
-        const selectedNodes = sourceNodes
+        const selectedTargetNodes = sourceNodes
             .concat(targetNodes)
             .filter(node => {
                 const transformedPoint = {
@@ -83,19 +83,19 @@ export const DualScatter: React.FC<SchemaVizProps> = ({
             })
             .map(node => node.name);
         
-        if (selectedNodes.length > 0) {
+        if (selectedTargetNodes.length > 0) {
             setManualClusters(prev => [
                 ...prev,
                 {
                     id: `manual-cluster-${prev.length + 1}`,
-                    nodes: selectedNodes
+                    nodes: selectedTargetNodes
                 }
             ]);
         }
 
         clearSelection();
     }, [selectedArea, sourceNodes, targetNodes, width, height, isPointInSelection]);
-    const selectedNodes = sourceNodes
+    const selectedTargetNodes = sourceNodes
             .concat(targetNodes)
             .filter(node => {
                 const transformedPoint = {
@@ -110,9 +110,9 @@ export const DualScatter: React.FC<SchemaVizProps> = ({
 
     useEffect(() => {
         updateHighlightTargetColumns(
-            selectedNodes
+            selectedTargetNodes
         )
-            }, [selectedNodes])
+            }, [selectedTargetNodes])
 
     const createPath = line()
         .x(d => d[0])

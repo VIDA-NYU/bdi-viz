@@ -195,3 +195,9 @@ interface DatasetMeta {
     timestamp?: string;
     size?: string;
 }
+
+interface SelectedNode {
+    node: string; // name of the node
+    columns: string[]; // children of the node
+    category: string; // parent of the node
+}

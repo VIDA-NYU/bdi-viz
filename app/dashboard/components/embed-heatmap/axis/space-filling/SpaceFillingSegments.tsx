@@ -204,8 +204,8 @@ export function renderSpaceFillingSegments(
   superCategoryPosition: number,
   categoryPosition: number,
   categoryColorScale: (id: string) => string,
-  selectedNodes: string[],
-  setSelectedNodes: (nodes: string[]) => void,
+  selectedNodes: SelectedNode[],
+  setSelectedNodes: (nodes: SelectedNode[]) => void,
   orientation: SpaceFillingOrientation = SpaceFillingOrientation.HORIZONTAL
 ) {
   const { theme, globalQuery, hierarchyHeight } = layoutConfig;
@@ -220,13 +220,19 @@ export function renderSpaceFillingSegments(
 
   // Create maps for faster lookups during interactions
   const columnsByCategory = new Map<string, string[]>();
+  const columnNamesByCategory = new Map<string, string[]>();
   const columnsBySuperCategory = new Map<string, string[]>();
   const categoriesBySuper = new Map<string, string[]>();
+
+  // Convert SelectedNodes to string list for faster lookups
+  const selectedNodesStringList = selectedNodes.map(node => node.node);
   
   // Build lookup maps
   for (const cat of categoryData) {
     const columnIds = cat.columns.map(col => col.id);
     columnsByCategory.set(cat.id, columnIds);
+    const columnNames = cat.columns.map(col => col.name);
+    columnNamesByCategory.set(cat.id, columnNames);
     
     if (cat.superCategory) {
       if (!categoriesBySuper.has(cat.superCategory)) {
@@ -306,14 +312,18 @@ export function renderSpaceFillingSegments(
       const childCategories = categoriesBySuper.get(d.id) || [];
       
       // Toggle selection of child categories
-      const allChildrenSelected = childCategories.every(catId => selectedNodes.includes(catId));
+      const allChildrenSelected = childCategories.every(catId => selectedNodesStringList.includes(catId));
       
       if (allChildrenSelected) {
         // Remove all child categories from selection
-        setSelectedNodes(selectedNodes.filter(node => !childCategories.includes(node)));
+        setSelectedNodes(selectedNodes.filter(node => !childCategories.includes(node.node)));
       } else {
         // Add all child categories to selection
-        setSelectedNodes([...selectedNodes, ...childCategories]);
+        setSelectedNodes([...selectedNodes, ...childCategories.map(catId => ({
+          node: catId,
+          columns: columnNamesByCategory.get(catId) || [],
+          category: catId
+        }))]);
       }
     });
 
@@ -344,10 +354,10 @@ export function renderSpaceFillingSegments(
         .attr('rx', 2)
         .attr('fill', (() => {
           const color = d3.color(categoryColorScale(d.id));
-          return color ? color.darker(selectedNodes.includes(d.id) ? 0.4 : 0).toString() : categoryColorScale(d.id);
+          return color ? color.darker(selectedNodesStringList.includes(d.id) ? 0.4 : 0).toString() : categoryColorScale(d.id);
         })())
-        .attr('stroke', selectedNodes.includes(d.id) ? theme.palette.primary.main : theme.palette.text.primary)
-        .attr('stroke-width', selectedNodes.includes(d.id) ? 3 : 1)
+        .attr('stroke', selectedNodesStringList.includes(d.id) ? theme.palette.primary.main : theme.palette.text.primary)
+        .attr('stroke-width', selectedNodesStringList.includes(d.id) ? 3 : 1)
         .style('cursor', 'pointer');
       
       // Label text
@@ -356,8 +366,8 @@ export function renderSpaceFillingSegments(
         .attr('fill', theme.palette.common.white)
         .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
         .attr('font-size', orientation === SpaceFillingOrientation.HORIZONTAL ? '0.8rem' : '0.7rem')
-        .attr('font-weight', selectedNodes.includes(d.id) ? '700' : '400')
-        .attr('letter-spacing', selectedNodes.includes(d.id) ? '0.3px' : '0')
+        .attr('font-weight', selectedNodesStringList.includes(d.id) ? '700' : '400')
+        .attr('letter-spacing', selectedNodesStringList.includes(d.id) ? '0.3px' : '0')
         .html(highlightText(d.id, globalQuery, theme));
       
       if (orientation === SpaceFillingOrientation.HORIZONTAL) {
@@ -375,12 +385,16 @@ export function renderSpaceFillingSegments(
     })
     .on('click', function(event, d: CategoryData) {
       // Toggle selection of this category
-      const isSelected = selectedNodes.includes(d.id);
+      const isSelected = selectedNodesStringList.includes(d.id);
       
       if (isSelected) {
-        setSelectedNodes(selectedNodes.filter(node => node !== d.id));
+        setSelectedNodes(selectedNodes.filter(node => node.node !== d.id));
       } else {
-        setSelectedNodes([...selectedNodes, d.id]);
+        setSelectedNodes([...selectedNodes, {
+          node: d.id,
+          columns: columnNamesByCategory.get(d.id) || [],
+          category: d.id
+        }]);
       }
       
       // Update visual state
@@ -390,7 +404,7 @@ export function renderSpaceFillingSegments(
         .attr('stroke', isSelected ? theme.palette.text.primary : theme.palette.primary.main);
     })
     .on('mouseover', function(event, d: CategoryData) {
-      const isSelected = selectedNodes.includes(d.id);
+      const isSelected = selectedNodesStringList.includes(d.id);
       
       // Only apply hover effects if not selected
       if (!isSelected) {
@@ -431,7 +445,7 @@ export function renderSpaceFillingSegments(
     })
     .on('mouseout', function(event, d: CategoryData) {
       // Only reset if not selected
-      if (!selectedNodes.includes(d.id)) {
+      if (!selectedNodesStringList.includes(d.id)) {
         d3.select(this)
           .select('rect')
           .attr('fill', (() => {
@@ -505,8 +519,8 @@ export function renderSpaceFillingSegmentsHorizontal(
   superCategoryY: number,
   categoryY: number,
   categoryColorScale: (id: string) => string,
-  selectedNodes: string[],
-  setSelectedNodes: (nodes: string[]) => void
+  selectedTargetNodes: SelectedNode[],
+  setSelectedTargetNodes: (nodes: SelectedNode[]) => void
 ) {
   return renderSpaceFillingSegments(
     g,
@@ -517,8 +531,8 @@ export function renderSpaceFillingSegmentsHorizontal(
     superCategoryY,
     categoryY,
     categoryColorScale,
-    selectedNodes,
-    setSelectedNodes,
+    selectedTargetNodes,
+    setSelectedTargetNodes,
     SpaceFillingOrientation.HORIZONTAL
   );
 }
@@ -533,8 +547,8 @@ export function renderSpaceFillingSegmentsVertical(
   superCategoryX: number,
   categoryX: number,
   categoryColorScale: (id: string) => string,
-  selectedNodes: string[],
-  setSelectedNodes: (nodes: string[]) => void
+  selectedSourceNodes: SelectedNode[],
+  setSelectedSourceNodes: (nodes: SelectedNode[]) => void
 ) {
   return renderSpaceFillingSegments(
     g,
@@ -545,8 +559,8 @@ export function renderSpaceFillingSegmentsVertical(
     superCategoryX,
     categoryX,
     categoryColorScale,
-    selectedNodes,
-    setSelectedNodes,
+    selectedSourceNodes,
+    setSelectedSourceNodes,
     SpaceFillingOrientation.VERTICAL
   );
 }

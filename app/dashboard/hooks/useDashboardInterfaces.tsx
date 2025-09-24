@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useContext } from 'react';
 import * as d3 from "d3";
+import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 
 type DashboardInterfacesState = {
     filteredSourceCluster: string[];
@@ -41,6 +42,8 @@ export const {
         setTotalPages,
     }: DashboardInterfacesProps): DashboardInterfacesState => {
         const [filteredCandidateCluster, setFilteredCandidateCluster] = useState<string[]>([]);
+
+        const { selectedTargetNodes, selectedSourceNodes } = useContext(HighlightGlobalContext);
 
         // useWhatChanged([filters.sourceColumn, filters.selectedMatchers, filters.similarSources, filters.candidateThreshold, filters.candidateType]);
 
@@ -116,8 +119,18 @@ export const {
                 filteredData = filteredData.filter((d) => filters.status.includes(d.status));
             }
 
+            if (selectedTargetNodes.length > 0) {
+                const columns = selectedTargetNodes.map(node => node.columns).flat();
+                filteredData = filteredData.filter((d) => columns.includes(d.targetColumn));
+            }
+
+            if (selectedSourceNodes.length > 0) {
+                const columns = selectedSourceNodes.map(node => node.columns).flat();
+                filteredData = filteredData.filter((d) => columns.includes(d.sourceColumn));
+            }
+
             return filteredData;
-        }, [weightedCandidates, filteredSourceCluster, filters.candidateThreshold, filters.status]);
+        }, [weightedCandidates, filteredSourceCluster, filters.candidateThreshold, filters.status, selectedTargetNodes, selectedSourceNodes]);
 
         return {
             filteredSourceCluster,

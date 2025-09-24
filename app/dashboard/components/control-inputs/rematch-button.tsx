@@ -14,14 +14,14 @@ interface RematchButtonProps {
 
 export default function RematchButton({ callback, ontologyCallback, uniqueValuesCallback, valueMatchesCallback }: RematchButtonProps) {
     const { setIsLoadingGlobal, setTaskStateFor } = useContext(SettingsGlobalContext);
-    const { selectedNodes } = useContext(HighlightGlobalContext);
+    const { selectedTargetNodes } = useContext(HighlightGlobalContext);
 
     const handleRematch = () => {
-        console.log("Rematch task start with nodes: ", selectedNodes);
+        console.log("Rematch task start with nodes: ", selectedTargetNodes);
         try {
             setIsLoadingGlobal(true);
             runRematchTask({
-                nodes: selectedNodes,
+                nodes: selectedTargetNodes.map(n => n.node),
                 onResult: (result) => {
                     console.log("Matching task completed with result:", result);
                     getCachedResults({ callback });

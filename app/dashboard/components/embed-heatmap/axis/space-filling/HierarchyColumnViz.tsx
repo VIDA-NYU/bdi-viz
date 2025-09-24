@@ -26,7 +26,7 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
   hideTooltip,
 }) => {
   const theme = useTheme();
-  const { globalQuery, selectedNodes, setSelectedNodes } = useContext(HighlightGlobalContext);
+  const { globalQuery, selectedTargetNodes, setSelectedTargetNodes } = useContext(HighlightGlobalContext);
   const { svgHeight, svgWidth, ref: svgRef } = useResizedSVGRef();
   const gRef = useRef<SVGGElement | null>(null);
 
@@ -97,8 +97,8 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
       superCategoryY, 
       categoryY,
       categoryColorScale,
-      selectedNodes,
-      setSelectedNodes
+      selectedTargetNodes,
+      setSelectedTargetNodes
     );
 
     renderEdgeBundlingVertical(
@@ -152,8 +152,8 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     currentExpanding,
     categoryColorScale,
     globalQuery,
-    selectedNodes,
-    setSelectedNodes
+    selectedTargetNodes,
+    setSelectedTargetNodes
   ]);
 
   // Use ref callback to get access to the g element and render when it's available

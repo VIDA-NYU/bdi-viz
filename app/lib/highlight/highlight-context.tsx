@@ -9,8 +9,10 @@ type HighlightGlobalState = {
     setGlobalCandidateHighlight: (value: AggregatedCandidate | undefined) => void;
     globalQuery?: string;
     setGlobalQuery: (value: string | undefined) => void;
-    selectedNodes: string[];
-    setSelectedNodes: (nodes: string[]) => void;
+    selectedTargetNodes: SelectedNode[];
+    setSelectedTargetNodes: (nodes: SelectedNode[]) => void;
+    selectedSourceNodes: SelectedNode[];
+    setSelectedSourceNodes: (nodes: SelectedNode[]) => void;
 }
 
 const HighlightGlobalContext = createContext<HighlightGlobalState>({
@@ -22,8 +24,10 @@ const HighlightGlobalContext = createContext<HighlightGlobalState>({
     setGlobalCandidateHighlight: () => {},
     globalQuery: "",
     setGlobalQuery: () => {},
-    selectedNodes: [],
-    setSelectedNodes: () => {},
+    selectedTargetNodes: [],
+    setSelectedTargetNodes: () => {},
+    selectedSourceNodes: [],
+    setSelectedSourceNodes: () => {},
 });
 
 
