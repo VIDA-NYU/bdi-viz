@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback, useContext } from "react";
 import { Box, Tooltip, IconButton, Chip } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import { useTheme } from "@mui/material/styles";
 
 import { ClusteringOptions } from "./tree/types";
@@ -34,6 +33,8 @@ interface HeatMapProps {
   highlightTargetColumns: Array<string>;
   sx?: Record<string, any>;
   metaData?: { sourceMeta: DatasetMeta, targetMeta: DatasetMeta };
+  createCandidate: (candidate: Candidate) => void;
+  deleteCandidate: (candidate: Candidate) => void;
 }
 
 const MARGIN = { top: 30, right: 78, bottom: 0, left: 220 };
@@ -53,6 +54,8 @@ const HeatMap: React.FC<HeatMapProps> = ({
   highlightTargetColumns,
   sx,
   metaData,
+  createCandidate,
+  deleteCandidate,
 }) => {
   const theme = useTheme();
 
@@ -84,7 +87,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
   }), [svgWidth, svgHeight]);
 
   // Get scales for the heatmap
-  const { x, y, color, getWidth, getHeight } = useHeatmapScales({
+  const { x, y, color, getWidth, getHeight, getXColumn, getYColumn } = useHeatmapScales({
     data: candidates,
     width: dimensions.width,
     height: dimensions.height,
@@ -164,6 +167,17 @@ const HeatMap: React.FC<HeatMapProps> = ({
           onMouseMove={() => {
             hideTooltip();
             setGlobalCandidateHighlight(undefined);
+          }}
+          onClick={(e) => {
+            const mousePositionX = e.clientX;
+            const mousePositionY = e.clientY;
+            console.log("mousePositionX, mousePositionY", mousePositionX, mousePositionY);
+            const xColumn = getXColumn(mousePositionX);
+            const yColumn = getYColumn(mousePositionY);
+            console.log("xColumn, yColumn", xColumn, yColumn);
+            if (xColumn && yColumn) {
+              createCandidate({ sourceColumn: yColumn, targetColumn: xColumn, score: 1 });
+            }
           }}
         />
       );

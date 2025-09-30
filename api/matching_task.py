@@ -408,7 +408,7 @@ class MatchingTask:
             return candidates
 
     def append_candidates_from_agent(
-        self, source_col: str, candidates: List[Dict[str, Any]]
+        self, source_col: str, candidates: List[Dict[str, Any]], matcher: str = "agent"
     ) -> None:
         for candidate in candidates:
             try:
@@ -424,7 +424,7 @@ class MatchingTask:
                     "sourceColumn": source_col,
                     "targetColumn": property_obj["column_name"],
                     "score": candidate["score"],
-                    "matcher": "agent",
+                    "matcher": matcher,
                     "status": "idle",
                 }
                 self.append_cached_candidate(new_candidate)
@@ -1220,6 +1220,10 @@ class MatchingTask:
             self.append_candidates_from_agent(candidate["sourceColumn"], references)
         elif operation == "prune":
             self.prune_candidates_from_agent(candidate["sourceColumn"], references)
+        elif operation == "create":
+            self.append_candidates_from_agent(candidate["sourceColumn"], [candidate])
+        elif operation == "delete":
+            self.prune_candidates_from_agent(candidate["sourceColumn"], [candidate])
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1244,6 +1248,10 @@ class MatchingTask:
         elif operation == "prune":
             for candidate in references:
                 self.append_cached_candidate(candidate)
+        elif operation == "create":
+            self.prune_cached_candidate(candidate)
+        elif operation == "delete":
+            self.append_cached_candidate(candidate)
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1267,6 +1275,10 @@ class MatchingTask:
         elif operation == "prune":
             for candidate in references:
                 self.prune_cached_candidate(candidate)
+        elif operation == "create":
+            self.append_cached_candidate(candidate)
+        elif operation == "delete":
+            self.prune_cached_candidate(candidate)
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1731,7 +1743,7 @@ class UserOperation:
         is_match_to_agent: Optional[bool] = None,
     ) -> None:
         """
-        operation: str - the operation to be applied: accept, reject, discard, append, prune
+        operation: str - the operation to be applied: accept, reject, discard, append, prune, create, delete
         candidate: Dict[str, Any] - the candidate to be operated on
         references: List[Dict[str, Any]] - the references to the candidates to be operated on (append, prune)
         """

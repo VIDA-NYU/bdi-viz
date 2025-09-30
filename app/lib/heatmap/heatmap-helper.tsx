@@ -828,6 +828,66 @@ const deleteSession = async (sessionName: string, opts: SyncSessionOptions = {})
     return response.data.sessions as string[];
 };
 
+interface CreateCandidateProps {
+    candidate: Candidate;
+    callback: (candidates: Candidate[]) => void;
+    valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
+    userOperationHistoryCallback: (userOperations: UserOperation[]) => void;
+    signal?: AbortSignal;
+}
+
+const createCandidate = (prop: CreateCandidateProps) => {
+    return makeApiRequest<void>(
+        "/api/candidate/create",
+        {
+            candidate: prop.candidate,
+            valueMatchesCallback: prop.valueMatchesCallback,
+            userOperationHistoryCallback: prop.userOperationHistoryCallback,
+            session_name: getSessionName()
+        },
+        prop.signal,
+        (data) => {
+            if (data && data.message === "success") {
+                getCachedResults({ callback: prop.callback, signal: prop.signal });
+                getValueMatches({ callback: prop.valueMatchesCallback, signal: prop.signal });
+                getUserOperationHistory({ callback: prop.userOperationHistoryCallback, signal: prop.signal });
+            } else {
+                throw new Error("Invalid results format");
+            }
+        }
+    );
+};
+
+interface DeleteCandidateProps {
+    candidate: Candidate;
+    callback: (candidates: Candidate[]) => void;
+    valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
+    userOperationHistoryCallback: (userOperations: UserOperation[]) => void;
+    signal?: AbortSignal;
+}
+
+const deleteCandidate = (prop: DeleteCandidateProps) => {
+    return makeApiRequest<void>(
+        "/api/candidate/delete",
+        { 
+            candidate: prop.candidate,
+            valueMatchesCallback: prop.valueMatchesCallback,
+            userOperationHistoryCallback: prop.userOperationHistoryCallback,
+            session_name: getSessionName()
+        },
+        prop.signal,
+        (data) => {
+            if (data && data.message === "success") {
+                getCachedResults({ callback: prop.callback, signal: prop.signal });
+                getValueMatches({ callback: prop.valueMatchesCallback, signal: prop.signal });
+                getUserOperationHistory({ callback: prop.userOperationHistoryCallback, signal: prop.signal });
+            } else {
+                throw new Error("Invalid results format");
+            }
+        }
+    );
+};
+
 export { 
     runMatchingTask,
     pollForMatchingStatus,
@@ -853,4 +913,6 @@ export {
     listSessions,
     deleteSession,
     syncSessionData,
+    createCandidate,
+    deleteCandidate,
 };

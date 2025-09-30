@@ -49,6 +49,8 @@ const getNodeContent = (d: TimelineNode, isExpanded: boolean, theme: any): strin
         operation === 'discard' ? theme.palette.warning.main :
         operation === 'append' ? theme.palette.info.main :
         operation === 'prune' ? theme.palette.secondary.main :
+        operation === 'create' ? theme.palette.primary.main :
+        operation === 'delete' ? theme.palette.error.main :
         theme.palette.text.primary;
     const truncate = (str: string, n: number) => (str.length > n ? str.slice(0, n-1) + '…' : str);
     let title = '';
