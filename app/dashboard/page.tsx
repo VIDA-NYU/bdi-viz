@@ -244,9 +244,21 @@ export default function Dashboard() {
         toastify("success", <p>Candidate created successfully!</p>);
     }, [createCandidate]);
 
-    const handleDeleteCandidate = useCallback((candidate: Candidate) => {
+    const handleDeleteCandidate = useCallback((candidate: Candidate | AggregatedCandidate) => {
+        let aggregatedCandidate: AggregatedCandidate;
+        if ('matcher' in candidate) {
+            aggregatedCandidate = {
+                sourceColumn: candidate.sourceColumn,
+                targetColumn: candidate.targetColumn,
+                matchers: candidate.matcher ? [candidate.matcher] : [],
+                score: candidate.score,
+                status: candidate.status || "idle",
+            }
+        } else {
+            aggregatedCandidate = candidate as AggregatedCandidate;
+        }
         deleteCandidate({
-            candidate,
+            candidate: aggregatedCandidate,
             callback: handleFileUpload,
             valueMatchesCallback: handleValueMatches,
             userOperationHistoryCallback: handleUserOperationsUpdate,
