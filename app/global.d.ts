@@ -1,3 +1,6 @@
+declare interface Session {
+    name: string;
+}
 
 declare interface Candidate {
     sourceColumn: string;

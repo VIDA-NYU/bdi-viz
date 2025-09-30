@@ -1,6 +1,7 @@
 "use client";
 
 import axios from "axios";
+import { getSessionName, setSessionName } from "@/app/lib/settings/session";
 import http from 'http';
 import https from 'https';
 
@@ -15,6 +16,7 @@ interface StartMatchingIds {
 
 const startMatchingTask = async (uploadData: FormData): Promise<StartMatchingIds> => {
     console.log("startMatchingTask", uploadData.get("type"));
+    uploadData.append("session_name", getSessionName());
     const response = await axios.post("/api/matching/start", uploadData);
     return {
         taskId: response.data.task_id,
@@ -38,7 +40,7 @@ const pollForMatchingStatus = async ({
 }: MatchingStatusProps) => {
     const interval = setInterval(async () => {
         try {
-            const response = await axios.post("/api/matching/status", { taskId });
+            const response = await axios.post("/api/matching/status", { taskId, session_name: getSessionName() });
             const status = response.data.status;
             const taskState = response.data.taskState as TaskState;
             console.log("taskState", taskState);
@@ -78,7 +80,7 @@ const pollForSourceOntologyStatus = async ({
 }: SourceOntologyStatusProps) => {
     const interval = setInterval(async () => {
         try {
-            const response = await axios.post("/api/ontology/source/status", { taskId });
+            const response = await axios.post("/api/ontology/source/status", { taskId, session_name: getSessionName() });
             const status = response.data.status;
             const taskState = response.data.taskState as TaskState;
             if (taskStateCallback) taskStateCallback(taskState);
@@ -118,7 +120,7 @@ const pollForTargetOntologyStatus = async ({
 }: TargetOntologyStatusProps) => {
     const interval = setInterval(async () => {
         try {
-            const response = await axios.post("/api/ontology/target/status", { taskId });
+            const response = await axios.post("/api/ontology/target/status", { taskId, session_name: getSessionName() });
             const status = response.data.status;
             const taskState = response.data.taskState as TaskState;
             if (taskStateCallback) taskStateCallback(taskState);
@@ -275,7 +277,7 @@ interface getCachedResultsProps {
 const getCachedResults = (prop: getCachedResultsProps) => {
     return makeApiRequest<void>(
         "/api/results",
-        {},
+        { session_name: getSessionName() },
         prop.signal,
         (data) => {
             const results = data?.results;
@@ -301,7 +303,7 @@ interface getMatchersProps {
 const getMatchers = (prop: getMatchersProps) => {
     return makeApiRequest<void>(
         "/api/matchers",
-        {},
+        { session_name: getSessionName() },
         prop.signal,
         (data) => {
             const matchers = parseArray<Matcher>(data?.matchers, "Matcher");
@@ -320,7 +322,7 @@ interface getUniqueValuesProps {
 const getValueBins = (prop: getUniqueValuesProps) => {
     return makeApiRequest<void>(
         "/api/value/bins",
-        {},
+        { session_name: getSessionName() },
         prop.signal,
         (data) => {
             const results = data?.results;
@@ -355,7 +357,7 @@ interface getValueMatchesProps {
 const getValueMatches = (prop: getValueMatchesProps) => {
     return makeApiRequest<void>(
         "/api/value/matches",
-        {},
+        { session_name: getSessionName() },
         prop.signal,
         (data) => {
             const results = data?.results;
@@ -379,7 +381,7 @@ interface userOperationHistoryProps {
 const getUserOperationHistory = (prop: userOperationHistoryProps) => {
     return makeApiRequest<void>(
         "/api/history",
-        {},
+        { session_name: getSessionName() },
         prop.signal,
         (data) => {
             const history = data?.history;
@@ -403,7 +405,7 @@ interface targetOntologyProps {
 const getTargetOntology = (prop: targetOntologyProps) => {
     return makeApiRequest<void>(
         "/api/ontology/target",
-        {},
+        { session_name: getSessionName() },
         prop.signal,
         (data) => {
             const results = data?.results;
@@ -427,7 +429,7 @@ interface getSourceOntologyProps {
 const getSourceOntology = (prop: getSourceOntologyProps) => {
     return makeApiRequest<void>(
         "/api/ontology/source",
-        {},
+        { session_name: getSessionName() },
         prop.signal,
         (data) => {
             const results = data?.results;
@@ -458,7 +460,7 @@ const applyUserOperation = ({
     signal
 }: userOperationsProps) => {
     try {
-        axios.post("/api/user-operation/apply", { userOperations }, { signal })
+        axios.post("/api/user-operation/apply", { userOperations, session_name: getSessionName() }, { signal })
             .then((response) => {
                 console.log("applyUserOperations response: ", response);
                 if (response.data && response.data.message === "success") {
@@ -492,7 +494,7 @@ const undoUserOperation = ({
     signal
 }: undoRedoProps) => {
     try {
-        axios.post("/api/user-operation/undo", {}, { signal })
+        axios.post("/api/user-operation/undo", { session_name: getSessionName() }, { signal })
             .then((response) => {
                 console.log("undoUserOperations response: ", response);
                 if (response.data && response.data.message === "success" && response.data.userOperation) {
@@ -520,7 +522,7 @@ const redoUserOperation = ({
     signal
 }: undoRedoProps) => {
     try {
-        axios.post("/api/user-operation/redo", {}, { signal })
+        axios.post("/api/user-operation/redo", { session_name: getSessionName() }, { signal })
             .then((response) => {
                 console.log("redoUserOperations response: ", response);
                 if (response.data && response.data.message === "success") {
@@ -551,7 +553,7 @@ interface getGDCAttributeProps {
 const getGDCAttribute = (prop: getGDCAttributeProps) => {
     return makeApiRequest<void>(
         "/api/property",
-        { targetColumn: prop.targetColumn },
+        { targetColumn: prop.targetColumn, session_name: getSessionName() },
         prop.signal,
         (data) => {
             const property = data?.property;
@@ -587,7 +589,7 @@ interface getCandidatesResultProps {
 const getCandidatesResult = (prop: getCandidatesResultProps) => {
     return makeApiRequest<void>(
         "/api/candidates/results",
-        { format: prop.format },
+        { format: prop.format, session_name: getSessionName() },
         prop.signal,
         (data) => {
             const results = data?.results;
@@ -617,7 +619,7 @@ interface updateSourceValueProps {
 const updateSourceValue = ({ column, value, newValue, valueMatchesCallback, signal }: updateSourceValueProps) => {
     return makeApiRequest<void>(
         "/api/value/update",
-        { column, value, newValue, operation: "source" },
+        { column, value, newValue, operation: "source", session_name: getSessionName() },
         signal,
         (data) => {
             if (data && data.message === "success") {
@@ -643,7 +645,7 @@ interface updateTargetMatchValueProps {
 const updateTargetMatchValue = ({ sourceColumn, sourceValue, targetColumn, newTargetValue, valueMatchesCallback, signal }: updateTargetMatchValueProps) => {
     return makeApiRequest<void>(
         "/api/value/update",
-        { operation: "target", sourceColumn, sourceValue, targetColumn, newTargetValue },
+        { operation: "target", sourceColumn, sourceValue, targetColumn, newTargetValue, session_name: getSessionName() },
         signal,
         (data) => {
             if (data && data.message === "success") {
@@ -669,7 +671,7 @@ interface newMatcherProps {
 
 const startNewMatcher = async (name: string, code: string, params: object) => {
     console.log("startNewMatcher", name);
-    const response = await axios.post("/api/matcher/new", { name, code, params });
+    const response = await axios.post("/api/matcher/new", { name, code, params, session_name: getSessionName() });
     return response.data.task_id;
 };
 
@@ -690,7 +692,7 @@ const pollForMatcherStatus = async ({
 }: MatcherStatusProps) => {
     const interval = setInterval(async () => {
         try {
-            const response = await axios.post("/api/matcher/status", { taskId }, { signal });
+            const response = await axios.post("/api/matcher/status", { taskId, session_name: getSessionName() }, { signal });
             const status = response.data.status;
             const taskState = response.data.taskState as TaskState;
             taskStateCallback(taskState);
@@ -737,7 +739,7 @@ interface RematchTaskProps {
 
 const startRematchTask = async (nodes: string[]) => {
     console.log("startRematchTask", nodes);
-    const response = await axios.post("/api/matching/rematch", { nodes });
+    const response = await axios.post("/api/matching/rematch", { nodes, session_name: getSessionName() });
     return response.data.task_id;
 };
 
@@ -750,6 +752,80 @@ const runRematchTask = async ({ nodes, onResult, onError, taskStateCallback }: R
         console.error("Error running rematch task:", error);
         onError(error);
     }
+};
+
+// Session sync helpers
+
+interface SyncSessionOptions {
+    onSession?: (session: Session[]) => void;
+    onDatasetMeta?: (sourceMeta: DatasetMeta, targetMeta: DatasetMeta) => void;
+    onCandidates?: (candidates: Candidate[]) => void;
+    onMatchers?: (matchers: Matcher[]) => void;
+    signal?: AbortSignal;
+}
+
+const syncSessionData = async ({ onSession, onDatasetMeta, onCandidates, onMatchers, signal }: SyncSessionOptions = {}) => {
+    const tasks: Promise<any>[] = [];
+
+    if (onSession) {
+        tasks.push(
+            listSessions({ onSession, signal }),
+        );
+    }
+    if (onDatasetMeta) {
+        tasks.push(
+            getDatasetNames({
+                callback: (sourceMeta, targetMeta) => onDatasetMeta(sourceMeta, targetMeta),
+                signal,
+            })
+        );
+    }
+    if (onCandidates) {
+        tasks.push(
+            getCachedResults({
+                callback: (candidates) => onCandidates(candidates),
+                signal,
+            })
+        );
+    }
+    if (onMatchers) {
+        tasks.push(
+            getMatchers({
+                callback: (matchers) => onMatchers(matchers),
+                signal,
+            })
+        );
+    }
+    await Promise.all(tasks);
+};
+
+const createSession = async (sessionName: string, opts: SyncSessionOptions = {}) => {
+    const sessions = await axios.post('/api/session/create', { session_name: sessionName });
+    // Switch current session to the newly created one
+    setSessionName(sessionName);
+    await syncSessionData(opts);
+    return sessions;
+};
+
+const listSessions = async ({ onSession }: SyncSessionOptions = {}): Promise<Session[]> => {
+    const response = await axios.post('/api/session/list', {});
+    let sessions: Session[] = [];
+    if (onSession) {
+        if (response.data.sessions) {
+            sessions = response.data.sessions.map(
+                (session: string) => ({ 
+                    name: session
+                } as Session));
+            onSession(sessions);
+        }
+    }
+    return sessions;
+};
+
+const deleteSession = async (sessionName: string, opts: SyncSessionOptions = {}) => {
+    const response = await axios.post('/api/session/delete', { session_name: sessionName });
+    await syncSessionData(opts);
+    return response.data.sessions as string[];
 };
 
 export { 
@@ -773,4 +849,8 @@ export {
     pollForMatcherStatus,
     runRematchTask,
     getDatasetNames,
+    createSession,
+    listSessions,
+    deleteSession,
+    syncSessionData,
 };

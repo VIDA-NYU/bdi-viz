@@ -4,6 +4,7 @@ import { Box, Typography, Switch } from "@mui/material";
 import { toastify } from "@/app/lib/toastify/toastify-helper";
 
 import SearchMenu from "./components/search/searchMenu";
+import SessionMenu from "./components/session-menu/sessionMenu";
 import LeftPanel from "./leftpanel";
 import UpperTabs from "./components/upperTabs";
 import LowerTabs from "./components/lowerTabs";
@@ -236,7 +237,14 @@ export default function Dashboard() {
     const headerContent = useMemo(() => (
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
             <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
-                <Typography sx={{ fontSize: "1.2rem", fontWeight: "200" }}>BDIViz</Typography>
+                <SessionMenu 
+                    callback={handleFileUpload}
+                    sourceOntologyCallback={handleSourceOntology}
+                    targetOntologyCallback={handleTargetOntology}
+                    uniqueValuesCallback={handleUniqueValues}
+                    valueMatchesCallback={handleValueMatches}
+                    userOperationHistoryCallback={handleUserOperationsUpdate}
+                />
                 <Box display="flex" alignItems="center">
                     <SearchMenu
                         agentSearchResultCallback={handleSearchResults}
