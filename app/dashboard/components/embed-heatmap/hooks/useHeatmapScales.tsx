@@ -53,7 +53,6 @@ const useHeatmapScales = ({ data, width, height, margin, config, selectedCandida
                 if (cell.sourceColumn === selectedCandidate.sourceColumn) return expandedHeight;
                 return shrunkHeight;
           };
-          
 
           // Modified scales with expansion
         
@@ -87,6 +86,34 @@ const useHeatmapScales = ({ data, width, height, margin, config, selectedCandida
         y.domain = () => yColumns;
         y.range = () => [0, height - margin.top - margin.bottom];
 
+        // Reverse lookup: given an x pixel position (inside inner chart group), return target column name
+        const getXColumn = (xPixel: number) => {
+            if (xPixel == null || Number.isNaN(xPixel)) return undefined;
+            const x = xPixel - margin.left - 316;
+            for (let i = 0; i < xColumns.length; i += 1) {
+                const col = xColumns[i];
+                const start = getXPosition(col) ?? 0;
+                const width = getWidth({ targetColumn: col } as Candidate);
+                const end = start + width;
+                if (x >= start && x <= end) return col;
+            }
+            return undefined;
+        };
+
+        // Reverse lookup: given a y pixel position (inside inner chart group), return source column name
+        const getYColumn = (yPixel: number) => {
+            if (yPixel == null || Number.isNaN(yPixel)) return undefined;
+            const y = yPixel - margin.top - 140;
+            for (let i = 0; i < yColumns.length; i += 1) {
+                const col = yColumns[i];
+                const start = getYPosition(col) ?? 0;
+                const height = getHeight({ sourceColumn: col } as Candidate);
+                const end = start + height;
+                if (y >= start && y <= end) return col;
+            }
+            return undefined;
+        };
+
         //   const y = d3.scalePoint()
         //       .range([0, height - margin.top - margin.bottom])
         //       .domain(data.map(d => d.sourceColumn))
@@ -111,6 +138,8 @@ const useHeatmapScales = ({ data, width, height, margin, config, selectedCandida
                 color,
                 getWidth,
                 getHeight,
+                getXColumn,
+                getYColumn,
                 dataRange: { min: minScore, max: maxScore }
           };
       }, [data, width, height, margin, config, selectedCandidate]);

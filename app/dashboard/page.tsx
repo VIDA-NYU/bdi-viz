@@ -15,7 +15,7 @@ import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
 import NewMatcherDialog from "./components/matcher-card/newMatcher";
 import OntologySearchPopup from "./components/ontology-search/ontologySearchPopup";
-import { getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
+import { createCandidate, deleteCandidate, getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
 import { useDashboardCandidates } from "./hooks/useDashboardCandidates";
@@ -234,6 +234,26 @@ export default function Dashboard() {
         handleMatchers(matchers);
     }, [handleMatchers]);
 
+    const handleCreateCandidate = useCallback((candidate: Candidate) => {
+        createCandidate({
+            candidate,
+            callback: handleFileUpload,
+            valueMatchesCallback: handleValueMatches,
+            userOperationHistoryCallback: handleUserOperationsUpdate,
+        });
+        toastify("success", <p>Candidate created successfully!</p>);
+    }, [createCandidate]);
+
+    const handleDeleteCandidate = useCallback((candidate: Candidate) => {
+        deleteCandidate({
+            candidate,
+            callback: handleFileUpload,
+            valueMatchesCallback: handleValueMatches,
+            userOperationHistoryCallback: handleUserOperationsUpdate,
+        });
+        toastify("success", <p>Candidate deleted successfully!</p>);
+    }, [deleteCandidate]);
+
     const headerContent = useMemo(() => (
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
             <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
@@ -344,6 +364,8 @@ export default function Dashboard() {
                         status={status}
                         updateStatus={updateStatus}
                         metaData={metaData}
+                        createCandidate={handleCreateCandidate}
+                        deleteCandidate={handleDeleteCandidate}
                     />
                     {/* Show Paginator when sourceColumn is "all" */}
                     <Paginator setSelectedCandidate={setSelectedCandidate} isShow={sourceColumn === "all"} />

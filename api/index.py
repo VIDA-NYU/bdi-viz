@@ -1299,6 +1299,36 @@ def update_value():
         return {"message": "failure", "error": "Invalid operation"}, 400
 
 
+@app.route("/api/candidate/create", methods=["POST"])
+def create_candidate():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+    data = request.json
+    candidate = data["candidate"]
+    candidate["matcher"] = "user"
+    candidate["status"] = "idle"
+    candidate["score"] = 0.8
+    matching_task.append_candidates_from_agent(
+        candidate["sourceColumn"], [candidate], matcher="user"
+    )
+    matching_task.apply_operation("create", candidate, [])
+    return {"message": "success"}
+
+
+@app.route("/api/candidate/delete", methods=["POST"])
+def delete_candidate():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+    data = request.json
+    candidate = data["candidate"]
+    candidate["matcher"] = "user"
+    candidate["status"] = "idle"
+    candidate["score"] = 0.8
+    matching_task.prune_candidates_from_agent(candidate["sourceColumn"], [candidate])
+    matching_task.apply_operation("delete", candidate, [])
+    return {"message": "success"}
+
+
 @app.route("/api/matching/rematch", methods=["POST"])
 def rematch():
     session = extract_session_name(request)
