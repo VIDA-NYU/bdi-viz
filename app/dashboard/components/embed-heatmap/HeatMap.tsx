@@ -148,11 +148,16 @@ const HeatMap: React.FC<HeatMapProps> = ({
     [setSelectedCandidate, selectedCandidate, toggleTargetNode]
   );
 
+  // Hovered row/column for empty grid highlighting
+  const [hoveredTargetColumn, setHoveredTargetColumn] = useState<string | undefined>(undefined);
+  const [hoveredSourceColumn, setHoveredSourceColumn] = useState<string | undefined>(undefined);
+
   // Memoize background rectangles for highlighted rows
   const backgroundRects = useMemo(() => {
     return y.domain().map((value) => {
       const status = sourceColumns.find(col => col.name === value)?.status;
       const isLastRow = value === sourceColumn;
+      const isHoveredRow = value === hoveredSourceColumn;
       return (
         <rect
           key={`row-${value}`}
@@ -161,12 +166,20 @@ const HeatMap: React.FC<HeatMapProps> = ({
           width={dimensions.width - MARGIN.left - MARGIN.right + 8}
           height={getHeight({ sourceColumn: value } as Candidate) - 6}
           fill={status === "complete" ? "#bbdcae" : theme.palette.grey[300]}
-          opacity={0.3}
-          stroke={theme.palette.grey[600]}
-          strokeWidth={isLastRow ? 2 : 0}
-          onMouseMove={() => {
+          opacity={isHoveredRow ? 0.4 : 0.3}
+          stroke={isHoveredRow ? theme.palette.info.main : theme.palette.grey[600]}
+          strokeWidth={isLastRow || isHoveredRow ? 2 : 0}
+          onMouseMove={(e) => {
             hideTooltip();
             setGlobalCandidateHighlight(undefined);
+            const xCol = getXColumn(e.clientX);
+            const yCol = getYColumn(e.clientY);
+            setHoveredTargetColumn(xCol);
+            setHoveredSourceColumn(yCol);
+          }}
+          onMouseLeave={() => {
+            setHoveredTargetColumn(undefined);
+            setHoveredSourceColumn(undefined);
           }}
           onClick={(e) => {
             const mousePositionX = e.clientX;
@@ -180,7 +193,29 @@ const HeatMap: React.FC<HeatMapProps> = ({
         />
       );
     });
-  }, [y, sourceColumns, sourceColumn, dimensions.width, getHeight, hideTooltip, setGlobalCandidateHighlight, theme.palette.grey]);
+  }, [y, sourceColumns, sourceColumn, hoveredSourceColumn, dimensions.width, getHeight, hideTooltip, setGlobalCandidateHighlight, theme.palette.grey, theme.palette.info]);
+
+  // Column highlight overlay for hovered target column
+  const columnHighlight = useMemo(() => {
+    if (!hoveredTargetColumn) return null;
+    const xPos = x(hoveredTargetColumn) ?? 0;
+    const w = getWidth({ targetColumn: hoveredTargetColumn } as Candidate);
+    const h = dimensions.height - MARGIN.top - MARGIN.bottom;
+    return (
+      <rect
+        key={`col-highlight-${hoveredTargetColumn}`}
+        x={xPos}
+        y={0}
+        width={w}
+        height={h}
+        fill={theme.palette.info.light}
+        opacity={0.15}
+        stroke={theme.palette.info.main}
+        strokeWidth={1}
+        style={{ pointerEvents: 'none' }}
+      />
+    );
+  }, [hoveredTargetColumn, x, getWidth, dimensions.height, theme.palette.info]);
 
   // Memoize cell rendering
   const cellElements = useMemo(() => {
@@ -323,6 +358,8 @@ const HeatMap: React.FC<HeatMapProps> = ({
           <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
             {/* Background rectangles for highlighted rows */}
             {backgroundRects}
+            {/* Column highlight overlay */}
+            {columnHighlight}
             
             {/* Cell elements */}
             {cellElements}
