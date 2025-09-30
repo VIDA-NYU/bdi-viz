@@ -1352,6 +1352,12 @@ class MatchingTask:
         cached_candidates = self.get_cached_candidates()
         source_col = candidate["sourceColumn"]
         target_col = candidate["targetColumn"]
+        if "matchers" in candidate:
+            matchers = candidate["matchers"]
+        else:
+            matchers = [candidate["matcher"]]
+        status = candidate.get("status", "idle")
+        score = candidate.get("score", 0.8)
 
         # Check if candidate already exists
         for index, c in enumerate(cached_candidates):
@@ -1364,7 +1370,15 @@ class MatchingTask:
                 break
 
         # Add the new candidate
-        cached_candidates.append(candidate)
+        for matcher in matchers:
+            new_candidate = {
+                "sourceColumn": source_col,
+                "targetColumn": target_col,
+                "score": score,
+                "matcher": matcher,
+                "status": status,
+            }
+            cached_candidates.append(new_candidate)
         self.set_cached_candidates(cached_candidates)
 
     def prune_cached_candidate(self, candidate: Dict[str, Any]) -> None:

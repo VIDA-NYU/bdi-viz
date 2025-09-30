@@ -171,10 +171,8 @@ const HeatMap: React.FC<HeatMapProps> = ({
           onClick={(e) => {
             const mousePositionX = e.clientX;
             const mousePositionY = e.clientY;
-            console.log("mousePositionX, mousePositionY", mousePositionX, mousePositionY);
             const xColumn = getXColumn(mousePositionX);
             const yColumn = getYColumn(mousePositionY);
-            console.log("xColumn, yColumn", xColumn, yColumn);
             if (xColumn && yColumn) {
               createCandidate({ sourceColumn: yColumn, targetColumn: xColumn, score: 1 });
             }
@@ -215,6 +213,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
             onClick={() => handleCellClick(d)}
             onMouseMove={(event: React.MouseEvent) => showTooltip(event, d)}
             onMouseLeave={hideTooltip}
+            deleteCandidate={() => deleteCandidate(d)}
           />
         );
       }

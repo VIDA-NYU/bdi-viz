@@ -2,7 +2,8 @@ import { BaseExpandedCellProps, ExpandedCellProps, ExpandedCellType } from "./ty
 import {HistogramCell} from './HistogramCell';
 import { FC, useContext } from "react";
 import { ScatterCell } from "./ScatterCell";
-import { useTheme } from "@mui/material";
+import { useTheme, IconButton } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 
 const expandedCellComponents: Record<ExpandedCellType, FC<ExpandedCellProps>> = {
@@ -39,7 +40,30 @@ const BaseExpandedCell: FC<BaseExpandedCellProps & {
           onMouseLeave={props.onMouseLeave}
         />
         <ChartComponent {...props}/>
-        <button onClick={props.onClose}/>
+        <foreignObject x={Math.max(props.width - 28, 0)} y={4} width={24} height={24}
+          style={{ overflow: 'visible' }}
+        >
+          <div>
+            <IconButton
+              size="small"
+              aria-label="Delete mapping"
+              onClick={(e) => {
+                e.stopPropagation();
+                props.deleteCandidate();
+              }}
+              sx={{
+                width: 22,
+                height: 22,
+                backgroundColor: theme.palette.common.white,
+                border: `1px solid ${theme.palette.divider}`,
+                boxShadow: theme.shadows[1],
+                '&:hover': { backgroundColor: theme.palette.grey[50] }
+              }}
+            >
+              <CloseIcon fontSize="inherit"/>
+            </IconButton>
+          </div>
+        </foreignObject>
       </g>
     );
    };

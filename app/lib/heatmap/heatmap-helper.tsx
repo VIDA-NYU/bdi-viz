@@ -859,7 +859,7 @@ const createCandidate = (prop: CreateCandidateProps) => {
 };
 
 interface DeleteCandidateProps {
-    candidate: Candidate;
+    candidate: AggregatedCandidate;
     callback: (candidates: Candidate[]) => void;
     valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
     userOperationHistoryCallback: (userOperations: UserOperation[]) => void;

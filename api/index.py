@@ -1305,11 +1305,11 @@ def create_candidate():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
     data = request.json
     candidate = data["candidate"]
-    candidate["matcher"] = "user"
-    candidate["status"] = "idle"
-    candidate["score"] = 0.8
+    candidate["matcher"] = candidate.get("matcher", "user")
+    candidate["status"] = candidate.get("status", "idle")
+    candidate["score"] = candidate.get("score", 0.8)
     matching_task.append_candidates_from_agent(
-        candidate["sourceColumn"], [candidate], matcher="user"
+        candidate["sourceColumn"], [candidate], matcher=candidate["matcher"]
     )
     matching_task.apply_operation("create", candidate, [])
     return {"message": "success"}
@@ -1321,10 +1321,9 @@ def delete_candidate():
     matching_task = SESSION_MANAGER.get_session(session).matching_task
     data = request.json
     candidate = data["candidate"]
-    candidate["matcher"] = "user"
-    candidate["status"] = "idle"
-    candidate["score"] = 0.8
-    matching_task.prune_candidates_from_agent(candidate["sourceColumn"], [candidate])
+    candidate["matchers"] = candidate.get("matchers", ["user"])
+    candidate["status"] = candidate.get("status", "idle")
+    candidate["score"] = candidate.get("score", 0.8)
     matching_task.apply_operation("delete", candidate, [])
     return {"message": "success"}
 

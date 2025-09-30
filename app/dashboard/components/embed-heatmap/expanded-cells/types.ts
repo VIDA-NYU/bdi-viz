@@ -10,6 +10,7 @@ interface ExpandedCellProps {
     onClick: () => void;
     onMouseMove: (event: React.MouseEvent) => void;
     onMouseLeave: () => void;
+    deleteCandidate: () => void;
    }
    
    interface BaseExpandedCellProps extends ExpandedCellProps {
