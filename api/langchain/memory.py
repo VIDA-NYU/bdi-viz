@@ -865,3 +865,9 @@ def get_memory_retriever(session_id: str = "default"):
         )
         MEMORY_RETRIEVERS[session_id] = MemoryRetriever(session_id=session_id)
     return MEMORY_RETRIEVERS[session_id]
+
+
+def delete_memory_retriever(session_id: str = "default"):
+    global MEMORY_RETRIEVERS
+    if session_id in MEMORY_RETRIEVERS:
+        del MEMORY_RETRIEVERS[session_id]

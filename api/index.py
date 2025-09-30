@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 import sys
 import threading
 from typing import List, Tuple
@@ -76,6 +77,17 @@ def create_app() -> Flask:
     celery_init_app(app)
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
     app.logger.setLevel(logging.INFO)
+    # On startup, scan sessions directory and register existing sessions
+    try:
+        from .utils import SESSIONS_ROOT
+
+        if os.path.exists(SESSIONS_ROOT):
+            for name in os.listdir(SESSIONS_ROOT):
+                candidate = os.path.join(SESSIONS_ROOT, name)
+                if os.path.isdir(candidate) and name != "default":
+                    SESSION_MANAGER.create_session(name)
+    except Exception:
+        pass
     return app
 
 
@@ -89,6 +101,12 @@ def get_memory_retriever(session: str = "default"):
     return _get_mem(session)
 
 
+def delete_memory_retriever(session: str = "default"):
+    from .langchain.memory import delete_memory_retriever as _delete_mem
+
+    return _delete_mem(session)
+
+
 # Lazy load the agent only when needed
 def get_agent(session: str = "default"):
     from .langchain.agent import get_agent as _get_agent
@@ -100,6 +118,121 @@ def get_langgraph_agent(session: str = "default"):
     from .langgraph.langgraph import get_langgraph_agent as _get_lg
 
     return _get_lg(get_memory_retriever(session), session_id=session)
+
+
+@app.route("/api/session/create", methods=["POST"])
+def session_create():
+    data = request.json or {}
+    session = data.get("session_name", "default")
+    SESSION_MANAGER.create_session(session)
+    # ensure session dir exists
+    _ = get_session_file(session, "placeholder", create_dir=True)
+    try:
+        os.remove(get_session_file(session, "placeholder", create_dir=True))
+    except Exception:
+        pass
+    # Seed baseline files into the new session directory if available
+    try:
+
+        def _copy_if_exists(src_path: str, dest_name: str) -> None:
+            try:
+                dest_path = get_session_file(session, dest_name, create_dir=True)
+                if os.path.exists(dest_path):
+                    return
+                if src_path and os.path.exists(src_path):
+                    shutil.copyfile(src_path, dest_path)
+            except Exception:
+                pass
+
+        api_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(api_dir)
+        default_session_dir = os.path.join(api_dir, "sessions", "default")
+
+        # Priority order per file:
+        # 1) api/sessions/default/<file>
+        # 2) project root dotfiles where applicable
+        # 3) built-in resources fallback
+
+        # source.csv
+        for candidate in [
+            os.path.join(default_session_dir, "source.csv"),
+            os.path.join(project_root, ".source.csv"),
+            os.path.join(os.getcwd(), ".source.csv"),
+        ]:
+            if os.path.exists(candidate):
+                _copy_if_exists(candidate, "source.csv")
+                break
+
+        # source.json
+        for candidate in [
+            os.path.join(default_session_dir, "source.json"),
+            os.path.join(project_root, ".source.json"),
+            os.path.join(os.getcwd(), ".source.json"),
+        ]:
+            if os.path.exists(candidate):
+                _copy_if_exists(candidate, "source.json")
+                break
+
+        # target.csv
+        for candidate in [
+            os.path.join(default_session_dir, "target.csv"),
+            GDC_DATA_PATH,
+        ]:
+            if os.path.exists(candidate):
+                _copy_if_exists(candidate, "target.csv")
+                break
+
+        # target.json
+        for candidate in [
+            os.path.join(default_session_dir, "target.json"),
+            GDC_JSON_PATH,
+        ]:
+            if os.path.exists(candidate):
+                _copy_if_exists(candidate, "target.json")
+                break
+
+        # matching_results.json
+        default_results_template = os.path.join(
+            api_dir, "matching_results_default.json"
+        )
+        for candidate in [
+            os.path.join(default_session_dir, "matching_results.json"),
+            default_results_template,
+        ]:
+            if os.path.exists(candidate):
+                _copy_if_exists(candidate, "matching_results.json")
+                break
+    except Exception:
+        pass
+    return {"message": "success", "sessions": SESSION_MANAGER.get_active_sessions()}
+
+
+@app.route("/api/session/list", methods=["POST"])
+def session_list():
+    return {"message": "success", "sessions": SESSION_MANAGER.get_active_sessions()}
+
+
+@app.route("/api/session/delete", methods=["POST"])
+def session_delete():
+    data = request.json or {}
+    session = data.get("session_name", "default")
+    if session == "default":
+        return {"message": "error", "error": "Cannot delete default session"}, 400
+    # clear memory
+    try:
+        delete_memory_retriever(session)
+    except Exception:
+        pass
+    # delete filesystem directory
+    try:
+        session_dir = os.path.dirname(get_session_file(session, "_", create_dir=True))
+        if os.path.exists(session_dir):
+            shutil.rmtree(session_dir, ignore_errors=True)
+    except Exception:
+        pass
+    # remove session from manager
+    SESSION_MANAGER.delete_session(session)
+    return {"message": "success", "sessions": SESSION_MANAGER.get_active_sessions()}
 
 
 @celery.task(bind=True, name="api.index.infer_source_ontology_task", queue="ontology")

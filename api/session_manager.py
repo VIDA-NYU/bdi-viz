@@ -1,7 +1,9 @@
+import os
 from collections import deque
 from typing import List
 
 from .matching_task import MatchingTask
+from .utils import SESSIONS_ROOT
 
 
 class SessionManager:
@@ -39,8 +41,8 @@ class SessionManager:
 
     def get_session(self, session_name: str) -> "Session":
         if session_name not in self.sessions:
-            # Return default session if requested session doesn't exist
-            return self.sessions.get("default")
+            # Lazily create session to support disk-present or newly referenced sessions
+            self.add_session(session_name)
         # Move accessed session to end of queue (most recently used)
         if session_name in self.queue:
             self.queue.remove(session_name)
@@ -58,7 +60,19 @@ class SessionManager:
         self.remove_session(session_name)
 
     def get_active_sessions(self) -> List[str]:
-        return list(self.sessions.keys())
+        # Merge in any sessions found on disk under api/sessions
+        disk_sessions: List[str] = []
+        try:
+            if os.path.exists(SESSIONS_ROOT):
+                disk_sessions = [
+                    d
+                    for d in os.listdir(SESSIONS_ROOT)
+                    if os.path.isdir(os.path.join(SESSIONS_ROOT, d))
+                ]
+        except Exception:
+            pass
+        names = set(list(self.sessions.keys()) + disk_sessions + ["default"])
+        return sorted(names)
 
     # Convenience alias to match API naming
     def list_sessions(self) -> List[str]:
