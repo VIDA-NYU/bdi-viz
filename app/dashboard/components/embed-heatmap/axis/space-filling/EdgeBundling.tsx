@@ -43,7 +43,7 @@ function createBundledPaths(
   // Pre-calculate paths in a single pass
   return positionedColumns
     .map(column => {
-      const node = nodeMap.get(column.category.id);
+      const node = nodeMap.get(column.node.id);
       if (!node) return null;
       
       let startX: number, startY: number, endX: number, endY: number, path: string;

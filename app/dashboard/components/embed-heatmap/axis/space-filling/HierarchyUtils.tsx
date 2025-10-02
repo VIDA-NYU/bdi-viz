@@ -3,8 +3,8 @@ import { TreeNode } from '../../tree/types';
 export interface ColumnData {
   id: string;
   name: string;
+  node: LabeledNode;
   category: LabeledNode;
-  superCategory: LabeledNode;
   x?: number;
   y?: number;
   width?: number;
@@ -27,11 +27,11 @@ export interface NodeData {
   centerY?: number;
 }
 
-// Define the super category data structure
-export interface SuperCategoryData {
+// Define the category data structure
+export interface CategoryData {
   id: string;
   name: string;
-  categories: LabeledNode[];
+  nodes: LabeledNode[];
   x?: number;
   y?: number;
   width?: number;
@@ -65,39 +65,39 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
     return {
       columnData: [],
       nodeData: [],
-      superCategoryData: []
+      categoryData: []
     };
   }
   // Step 1: Extract column data from tree nodes
   const columnData: ColumnData[] = [];
   const nodeMap: Record<string, string[]> = {};
-  const superCategoryMap: Record<string, string[]> = {};
+  const categoryMap: Record<string, string[]> = {};
   const nodeData: NodeData[] = [];
-  const superCategoryData: SuperCategoryData[] = [];
+  const categoryData: CategoryData[] = [];
 
-  // Process depth 0 nodes as super categories
-  treeData.forEach((superCategoryTreeNode, superCategoryIndex) => {
-    const superCategoryName = superCategoryTreeNode.label.text;
-    const superCategoryId = superCategoryTreeNode.id;
-    superCategoryMap[superCategoryId] = [];
-    const superCategory: SuperCategoryData = {
-      id: superCategoryId,
-      name: superCategoryName,
-      categories: [],
+  // Process depth 0 nodes as categories
+  treeData.forEach((categoryTreeNode, categoryIndex) => {
+    const categoryName = categoryTreeNode.label.text;
+    const categoryId = categoryTreeNode.id;
+    categoryMap[categoryId] = [];
+    const category: CategoryData = {
+      id: categoryId,
+      name: categoryName,
+      nodes: [],
     };
 
-    // Process depth 1 nodes as categories
-    if (superCategoryTreeNode.children) {
-      superCategoryTreeNode.children.forEach((nodeTreeNode, categoryIndex) => {
+    // Process depth 1 nodes as nodes
+    if (categoryTreeNode.children) {
+      categoryTreeNode.children.forEach((nodeTreeNode, nodeIndex) => {
         const nodeName = nodeTreeNode.label.text;
         const nodeId = nodeTreeNode.id;
         nodeMap[nodeId] = [];
-        superCategoryMap[superCategoryId].push(nodeId);
+        categoryMap[categoryId].push(nodeId);
         const node: NodeData = {
           id: nodeId,
           name: nodeName,
           columns: [],
-          category: superCategory,
+          category: category,
         };
         // Process depth 2 nodes as columns
         if (nodeTreeNode.children) {
@@ -106,13 +106,13 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
             const column: ColumnData = {
               id: columnId,
               name: columnNode.label.text,
-              category: {
+              node: {
                 id: nodeId,
                 name: nodeName,
               },
-              superCategory: {
-                id: superCategoryId,
-                name: superCategoryName,
+              category: {
+                id: categoryId,
+                name: categoryName,
               },
               isExpanded: columnNode.isExpanded,
               originalNode: columnNode,
@@ -127,9 +127,9 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
           });
           nodeData.push(node);
         }
-        superCategory.categories.push(node);
+        category.nodes.push(node);
       });
-      superCategoryData.push(superCategory);
+      categoryData.push(category);
     }
   });
   if (isSource) {
@@ -147,7 +147,7 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
   return {
     columnData: columnDataWithWidth,
     nodeData,
-    superCategoryData
+    categoryData
   };
 }
 

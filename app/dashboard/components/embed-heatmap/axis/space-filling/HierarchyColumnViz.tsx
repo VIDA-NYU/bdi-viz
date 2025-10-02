@@ -62,13 +62,13 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
   const { 
     columnData, 
     nodeData, 
-    superCategoryData 
+    categoryData 
   } = useMemo(() => getHierarchyData(targetTreeData, layoutConfig), [targetTreeData, layoutConfig]);
 
   // Calculate spacing and positions
   const columnsY = useMemo(() => 0, []);
   const nodeY = useMemo(() => columnsY + layoutConfig.columnHeight + layoutConfig.columnSpacing, [columnsY, layoutConfig.columnHeight, layoutConfig.columnSpacing]);
-  const superCategoryY = useMemo(() => nodeY + layoutConfig.hierarchyHeight + layoutConfig.hierarchySpacing, [nodeY, layoutConfig.hierarchyHeight, layoutConfig.hierarchySpacing]);
+  const categoryY = useMemo(() => nodeY + layoutConfig.hierarchyHeight + layoutConfig.hierarchySpacing, [nodeY, layoutConfig.hierarchyHeight, layoutConfig.hierarchySpacing]);
 
   const spaceFillingWidth = useMemo(() => columnData.reduce(
     (acc, column) => Math.max(acc, column.x! + column.width!),
@@ -90,13 +90,13 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     renderSpaceFillingSegmentsHorizontal(
       g, 
       columnData,
-      superCategoryData, 
+      categoryData,
       nodeData, 
       {
         ...layoutConfig,
         innerWidth: spaceFillingWidth
       }, 
-      superCategoryY, 
+      categoryY, 
       nodeY,
       nodeColorScale,
       selectedTargetNodes,
@@ -130,7 +130,7 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     g.append('text')
       .attr('text-anchor', 'middle')
       .attr('x', spaceFillingWidth / 2)
-      .attr('y', superCategoryY + 50)
+      .attr('y', categoryY + 50)
       .attr('font-size', '1rem')
       .attr('font-weight', '300')
       .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
@@ -145,10 +145,10 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     innerHeight, 
     columnData, 
     nodeData, 
-    superCategoryData,
+    categoryData,
     layoutConfig,
     spaceFillingWidth,
-    superCategoryY,
+    categoryY,
     nodeY,
     columnsY,
     currentExpanding,

@@ -110,7 +110,7 @@ export function renderColumns(
         .attr('height', columnHeight)
         .attr('rx', styles.column.cornerRadius)
         .attr('fill', styles.column.fill)
-        .attr('stroke', nodeColorScale(d.category.id))
+        .attr('stroke', nodeColorScale(d.node.id))
         .attr('stroke-width', styles.column.strokeWidth);
       
       // Category indicator bar
@@ -120,7 +120,7 @@ export function renderColumns(
         .attr('width', styles.categoryIndicator.width)
         .attr('height', columnHeight - (styles.categoryIndicator.margin * 2))
         .attr('rx', styles.categoryIndicator.cornerRadius)
-        .attr('fill', nodeColorScale(d.category.id))
+        .attr('fill', nodeColorScale(d.node.id))
         .attr('opacity', styles.categoryIndicator.opacity);
       
       // Calculate available text width
@@ -173,7 +173,7 @@ export function renderColumns(
         .attr('stroke-dasharray', '0');
       
       // Highlight the node
-      g.select(`#node-${d.category.id}`)
+      g.select(`#node-${d.node.id}`)
         .select('rect')
         .attr('stroke-width', styles.column.hoverStrokeWidth);
       

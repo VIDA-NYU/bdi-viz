@@ -50,11 +50,11 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
   };
 
   // Process tree data
-  const { columnData, nodeData, superCategoryData } = getHierarchyData(sourceTreeData, layoutConfig);
+  const { columnData, nodeData, categoryData } = getHierarchyData(sourceTreeData, layoutConfig);
 
   const columnsX = 100;
   const nodeX = 70;
-  const superCategoryX = 45;
+  const categoryX = 45;
 
   const spaceFillingHeight = useMemo(() => columnData.reduce(
     (acc, column) => Math.max(acc, column.y! + column.height!),
@@ -75,13 +75,13 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
     renderSpaceFillingSegmentsVertical(
       g, 
       columnData,
-      superCategoryData, 
+      categoryData, 
       nodeData,
       {
         ...layoutConfig,
         innerHeight: spaceFillingHeight
       },
-      superCategoryX,
+      categoryX,
       nodeX,
       nodeColorScale,
       selectedSourceNodes,
@@ -122,7 +122,7 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
       .attr('font-weight', '300')
       .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
       .text(sourceMeta?.name ? `${sourceMeta.name} (Source)` : 'Database Schema Hierarchy');
-  }, [sourceTreeData, layoutConfig, columnData, superCategoryData, nodeData, nodeColorScale, selectedSourceNodes, setSelectedSourceNodes, globalQuery, currentExpanding]);
+  }, [sourceTreeData, layoutConfig, columnData, categoryData, nodeData, nodeColorScale, selectedSourceNodes, setSelectedSourceNodes, globalQuery, currentExpanding]);
 
   // Use ref callback to get access to the g element and render when it's available
   const setGRef = useCallback((node: SVGGElement | null) => {
