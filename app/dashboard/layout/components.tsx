@@ -105,9 +105,8 @@ export const LeftColumn = styled(Box)(({ theme }) => ({
   flexWrap: "wrap",
   flex: "1 1 auto",
   alignItems: "center",
-  minWidth: "min-content",
   paddingLeft: theme.spacing(0.5),
-  paddingRight: theme.spacing(0.5),
+  paddingRight: 0,
 }));
 
 // Middle Column - Main Visualizations

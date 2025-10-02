@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react';
 
 type DashboardFilterState = {
-    sourceColumn: string;
+    sourceColumns: string[];
     candidateType: string;
     candidateThreshold: number;
     searchResults: Candidate[];
     status: string[];
-    updateSourceColumn: (column: string) => void;
+    updateSourceColumns: (columns: string[]) => void;
     updateCandidateType: (type: string) => void;
     updateCandidateThreshold: (threshold: number) => void;
     updateSearchResults: (results: Candidate[]) => void;
@@ -19,14 +19,14 @@ export const {
     useDashboardFilters
 } = {
     useDashboardFilters: (): DashboardFilterState => {
-        const [sourceColumn, setSourceColumn] = useState<string>('all');
+        const [sourceColumns, setSourceColumns] = useState<string[]>([]);
         const [candidateType, setCandidateType] = useState<string>('all');
         const [candidateThreshold, setCandidateThreshold] = useState<number>(0.7);
         const [searchResults, setSearchResults] = useState<Candidate[]>([]);
         const [status, setStatus] = useState<string[]>(['accepted', 'rejected', 'discarded', 'idle']); // 'accepted', 'rejected', 'discarded', 'idle'
 
-        const updateSourceColumn = useCallback((column: string) => {
-            setSourceColumn(column);
+        const updateSourceColumns = useCallback((columns: string[]) => {
+            setSourceColumns(columns);
         }, []);
 
         const updateCandidateType = useCallback((type: string) => {
@@ -46,12 +46,12 @@ export const {
         }, []);
 
         return {
-            sourceColumn,
+            sourceColumns,
             candidateType,
             candidateThreshold,
             searchResults,
             status,
-            updateSourceColumn,
+            updateSourceColumns,
             updateCandidateType,
             updateCandidateThreshold,
             updateSearchResults,

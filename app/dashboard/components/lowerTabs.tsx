@@ -13,7 +13,6 @@ interface LowerTabsProps {
   matchers: Matcher[];
   selectedCandidate?: Candidate;
   setSelectedCandidate: (sourceColumn: string, targetColumn: string) => void;
-  selectedSourceColumn: string;
   handleValueMatches: (valueMatches: ValueMatch[]) => void;
   valueMatches: ValueMatch[];
 }
@@ -23,7 +22,6 @@ const LowerTabs: React.FC<LowerTabsProps> = ({
   matchers,
   selectedCandidate,
   setSelectedCandidate,
-  selectedSourceColumn,
   handleValueMatches,
   valueMatches,
 }) => {
@@ -47,7 +45,7 @@ const LowerTabs: React.FC<LowerTabsProps> = ({
             <UpsetPlot
               aggData={weightedAggregatedCandidates}
               matchers={matchers}
-              selectedCandidate={selectedCandidate ? selectedCandidate : { sourceColumn: selectedSourceColumn, targetColumn: "" } as Candidate}
+              selectedCandidate={selectedCandidate}
               setSelectedCandidate={setSelectedCandidate}
             />
           </TabPanel>
@@ -55,20 +53,19 @@ const LowerTabs: React.FC<LowerTabsProps> = ({
             <ValueComparisonTable
               valueMatches={valueMatches}
               weightedAggregatedCandidates={weightedAggregatedCandidates}
-              selectedCandidate={selectedCandidate ? selectedCandidate : { sourceColumn: selectedSourceColumn, targetColumn: "" } as Candidate}
+              selectedCandidate={selectedCandidate}
               setSelectedCandidate={setSelectedCandidate}
               handleValueMatches={handleValueMatches}
-              selectedSourceColumn={selectedSourceColumn}
             />
           </TabPanel>
-          <TabPanel  sx={{ padding: 0, maxHeight: 400, overflowY: "scroll", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }} value="3">
+          {/* <TabPanel  sx={{ padding: 0, maxHeight: 400, overflowY: "scroll", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }} value="3">
             <ParallelCoordinatesVisualization
                   valueMatches={valueMatches}
                           weightedAggregatedCandidates={weightedAggregatedCandidates}
                           selectedCandidate={selectedCandidate ? selectedCandidate : { sourceColumn: selectedSourceColumn, targetColumn: "" } as Candidate}
                           selectedSourceColumn={selectedSourceColumn}
             />
-      </TabPanel>
+      </TabPanel> */}
       </TabContext>
     </Box>
   );

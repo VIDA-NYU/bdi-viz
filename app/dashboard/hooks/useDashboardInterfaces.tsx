@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, useContext } from 'react';
+import { useMemo, useContext } from 'react';
 import * as d3 from "d3";
 import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 
 type DashboardInterfacesState = {
-    filteredSourceCluster: string[];
+    groupedSourceColumns: SourceColumn[];
     weightedAggregatedCandidates: AggregatedCandidate[];
     filteredSourceColumns: SourceColumn[];
 }
@@ -14,7 +14,7 @@ type DashboardInterfacesProps = {
     sourceClusters: Map<string, string[]>;
     filters: {
         selectedCandidate?: Candidate;
-        sourceColumn: string;
+        sourceColumns: string[];
         candidateType: string;
         candidateThreshold: number;
         selectedMatcher?: Matcher;
@@ -23,6 +23,7 @@ type DashboardInterfacesProps = {
     pageNumber: number;
     pageSize: number;
     setTotalPages: (totalPages: number) => void;
+    setSourceColumns: (sourceColumns: string[]) => void;
 }
 
 export type { DashboardInterfacesState };
@@ -38,21 +39,22 @@ export const {
         pageNumber,
         pageSize,
         setTotalPages,
+        setSourceColumns,
     }: DashboardInterfacesProps): DashboardInterfacesState => {
 
         const { selectedTargetNodes, selectedSourceNodes } = useContext(HighlightGlobalContext);
 
         const columnsBySourceCluster = useMemo(() => {
+            const columnsBySourceCluster: string[] = [];
             if (selectedSourceNodes.length > 0 && sourceClusters.size > 0) {
-                const columnsBySourceCluster: string[] = [];
                 selectedSourceNodes.forEach(node => {
                     sourceClusters.get(node.node)?.forEach(column => {
                         columnsBySourceCluster.push(column);
                     })
                 });
-                return columnsBySourceCluster;
             }
-            return [];
+            setSourceColumns(columnsBySourceCluster);
+            return columnsBySourceCluster;
         }, [sourceClusters, selectedSourceNodes]);
 
         // useWhatChanged([filters.sourceColumn, filters.selectedMatchers, filters.similarSources, filters.candidateThreshold, filters.candidateType]);
@@ -72,46 +74,49 @@ export const {
             return aggregatedCandidates;
         }, [candidates, matchers]);
 
-        const filteredSourceColumns = useMemo(() => {
-            const groupedSourceColumns = Array.from(d3.group(weightedCandidates, d => d.sourceColumn), ([name, items]: [string, Candidate[]]) => {
-                return {
-                    name,
-                    status: items.some(item => item.status === 'accepted') ? 'complete' : (items.every(item => item.status === 'discarded') ? 'ignored' : 'incomplete'),
-                    maxScore: Math.floor(((d3.max(items, d => d.score) ?? 0) / 0.1)) * 0.1,
-                } as SourceColumn;
-            });
-
-            return groupedSourceColumns;
+        const groupedSourceColumns = useMemo(() => {
+            return Array.from(
+                d3.group(weightedCandidates, d => d.sourceColumn),
+                ([name, items]: [string, Candidate[]]) => {
+                    return { name, status: items.some(item => item.status === 'accepted') ? 'complete' : (items.every(item => item.status === 'discarded') ? 'ignored' : 'incomplete'), maxScore: Math.floor(((d3.max(items, d => d.score) ?? 0) / 0.1)) * 0.1 } as SourceColumn;
+                }
+            );
         }, [weightedCandidates]);
 
+        const filteredSourceColumns = useMemo(() => {
+            let filteredGroupedSourceColumns = groupedSourceColumns;
 
-        useEffect(() => {
-            setTotalPages(Math.ceil(filteredSourceColumns.length / pageSize));
-        }, [filteredSourceColumns, pageSize, setTotalPages]);
-
-
-        const filteredSourceCluster = useMemo(() => {
-            if (filters?.sourceColumn) {
-                if (filters.sourceColumn === 'all') {
-                    const pageStart = (pageNumber - 1) * pageSize;
-                    const pageEnd = pageStart + pageSize;
-
-                    const pageSources = filteredSourceColumns.map(d => d.name).slice(pageStart, pageEnd);
-                    return pageSources;
-                } else if (columnsBySourceCluster.length > 0) {
-                    return columnsBySourceCluster;
-                } else {
-                    return [filters.sourceColumn];
+            // Determine the list of source column names to display, adapting previous filteredSourceCluster logic
+            if (filters?.sourceColumns) {
+                if (columnsBySourceCluster.length > 0) {
+                    filteredGroupedSourceColumns = filteredGroupedSourceColumns.filter(col => columnsBySourceCluster.includes(col.name));
+                } else if (filters.sourceColumns.length > 0) {
+                    // Source cluster selection overrides manual list
+                    filteredGroupedSourceColumns = filteredGroupedSourceColumns.filter(col => filters.sourceColumns.includes(col.name));
                 }
             }
-            return filteredSourceColumns.map(d => d.name);
-        }, [filters.sourceColumn, pageNumber, pageSize, filteredSourceColumns, selectedSourceNodes, columnsBySourceCluster]);
+
+            // Total pages should reflect the total number of selected names
+            const totalCount = filteredGroupedSourceColumns.length;
+            setTotalPages(Math.ceil(totalCount / pageSize));
+
+            if (totalCount > pageSize) {
+                const pageStart = (pageNumber - 1) * pageSize;
+                const pageEnd = pageStart + pageSize;
+                filteredGroupedSourceColumns = filteredGroupedSourceColumns.slice(pageStart, pageEnd);
+            }
+
+            // Filter grouped columns by the paged selection
+            return filteredGroupedSourceColumns;
+        }, [groupedSourceColumns, filters?.sourceColumns, columnsBySourceCluster, pageNumber, pageSize, setTotalPages]);
+
 
         const weightedAggregatedCandidates = useMemo(() => {
 
             let filteredData = [...weightedCandidates];
-            if (filteredSourceCluster && filteredSourceCluster.length > 0) {
-                filteredData = filteredData.filter((d) => filteredSourceCluster.includes(d.sourceColumn));
+            if (filteredSourceColumns && filteredSourceColumns.length > 0) {
+                const allowed = new Set(filteredSourceColumns.map(c => c.name));
+                filteredData = filteredData.filter((d) => allowed.has(d.sourceColumn));
             }
 
             if (filters?.candidateThreshold) {
@@ -127,15 +132,13 @@ export const {
                 filteredData = filteredData.filter((d) => columns.includes(d.targetColumn));
             }
 
-            if (columnsBySourceCluster.length > 0) {
-                filteredData = filteredData.filter((d) => columnsBySourceCluster.includes(d.sourceColumn));
-            }
+            // columnsBySourceCluster effect is already reflected in filteredSourceColumns
             
             return filteredData;
-        }, [weightedCandidates, filteredSourceCluster, filters.candidateThreshold, filters.status, selectedTargetNodes, selectedSourceNodes]);
+        }, [weightedCandidates, filteredSourceColumns, filters.candidateThreshold, filters.status, selectedTargetNodes, selectedSourceNodes]);
 
         return {
-            filteredSourceCluster,
+            groupedSourceColumns,
             weightedAggregatedCandidates,
             filteredSourceColumns,
         };

@@ -14,7 +14,6 @@ interface ValueComparisonTableProps {
     selectedCandidate?: Candidate;
     setSelectedCandidate: (sourceColumn: string, targetColumn: string) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
-    selectedSourceColumn: string;
 }
 
 // A helper component that displays both the original source value and the edited value
@@ -47,7 +46,6 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     selectedCandidate,
     setSelectedCandidate,
     handleValueMatches,
-    selectedSourceColumn,
 }) => {
     const theme = useTheme();
     const { globalCandidateHighlight, globalQuery } = useContext(HighlightGlobalContext);
@@ -59,7 +57,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
 
     const candidate = useMemo(() => {
         let candidate = selectedCandidate;
-        if (selectedCandidate?.targetColumn === "") {
+        if (!selectedCandidate || selectedCandidate?.targetColumn === "") {
             if (globalCandidateHighlight) {
                 candidate = globalCandidateHighlight as Candidate;
             }
@@ -105,7 +103,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
             });
         }
         return [];
-    }, [valueMatches, weightedAggregatedCandidates, candidate, selectedSourceColumn]);
+    }, [valueMatches, weightedAggregatedCandidates, candidate]);
 
     // fetch enums lazily when opening the editor for a specific target column
 

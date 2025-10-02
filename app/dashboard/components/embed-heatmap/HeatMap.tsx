@@ -20,9 +20,8 @@ import SourceHierarchyColumnViz from "./axis/space-filling/SourceHierarchyColumn
 
 interface HeatMapProps {
   data: AggregatedCandidate[];
-  sourceColumn: string;
   sourceColumns: SourceColumn[];
-  setSourceColumn: (sourceColumn: string) => void;
+  setSourceColumns: (sourceColumns: string[]) => void;
   targetOntologies?: Ontology[];
   sourceOntologies?: Ontology[];
   selectedCandidate?: Candidate;
@@ -42,8 +41,7 @@ const MARGIN = { top: 30, right: 78, bottom: 0, left: 220 };
 const HeatMap: React.FC<HeatMapProps> = ({
   data,
   sourceColumns,
-  setSourceColumn,
-  sourceColumn,
+  setSourceColumns,
   targetOntologies,
   sourceOntologies,
   selectedCandidate,
@@ -89,6 +87,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
   // Get scales for the heatmap
   const { x, y, color, getWidth, getHeight, getXColumn, getYColumn } = useHeatmapScales({
     data: candidates,
+    sourceColumns,
     width: dimensions.width,
     height: dimensions.height,
     margin: MARGIN,
@@ -156,7 +155,6 @@ const HeatMap: React.FC<HeatMapProps> = ({
   const backgroundRects = useMemo(() => {
     return y.domain().map((value) => {
       const status = sourceColumns.find(col => col.name === value)?.status;
-      const isLastRow = value === sourceColumn;
       const isHoveredRow = value === hoveredSourceColumn;
       return (
         <rect
@@ -168,7 +166,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
           fill={status === "complete" ? "#bbdcae" : theme.palette.grey[300]}
           opacity={isHoveredRow ? 0.4 : 0.3}
           stroke={isHoveredRow ? theme.palette.info.main : theme.palette.grey[600]}
-          strokeWidth={isLastRow || isHoveredRow ? 2 : 0}
+          strokeWidth={isHoveredRow ? 2 : 0}
           onMouseMove={(e) => {
             hideTooltip();
             setGlobalCandidateHighlight(undefined);
@@ -193,7 +191,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
         />
       );
     });
-  }, [y, sourceColumns, sourceColumn, hoveredSourceColumn, dimensions.width, getHeight, hideTooltip, setGlobalCandidateHighlight, theme.palette.grey, theme.palette.info]);
+  }, [y, sourceColumns, hoveredSourceColumn, dimensions.width, getHeight, hideTooltip, setGlobalCandidateHighlight, theme.palette.grey, theme.palette.info]);
 
   // Column highlight overlay for hovered target column
   const columnHighlight = useMemo(() => {
@@ -372,9 +370,8 @@ const HeatMap: React.FC<HeatMapProps> = ({
               <YAxis
                 y={y}
                 getHeight={getHeight}
-                sourceColumn={sourceColumn}
-                setSourceColumn={setSourceColumn}
                 sourceColumns={sourceColumns}
+                setSourceColumns={setSourceColumns}
                 hideTooltip={hideTooltip}
                 sourceTreeData={sourceTreeData}
               />
@@ -420,7 +417,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
             currentExpanding={currentExpanding as AggregatedCandidate}
             transform={`translate(${0},${0})`}
             hideTooltip={hideTooltip}
-            setSourceColumn={setSourceColumn}
+            setSourceColumns={setSourceColumns}
             sourceMeta={metaData?.sourceMeta}
           />
         </Box>

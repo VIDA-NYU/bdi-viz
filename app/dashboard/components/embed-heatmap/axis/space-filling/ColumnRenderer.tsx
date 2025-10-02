@@ -19,7 +19,7 @@ export function renderColumns(
   categoryColorScale: (id: string) => string,
   globalQuery?: string,
   orientation: ColumnOrientation = ColumnOrientation.HORIZONTAL,
-  setSourceColumn?: (column: string) => void
+  setSourceColumns?: (columns: string[]) => void
 ) {
   const { theme, columnHeight, columnWidth } = layoutConfig;
 
@@ -110,7 +110,7 @@ export function renderColumns(
         .attr('height', columnHeight)
         .attr('rx', styles.column.cornerRadius)
         .attr('fill', styles.column.fill)
-        .attr('stroke', categoryColorScale(d.category))
+        .attr('stroke', categoryColorScale(d.category.id))
         .attr('stroke-width', styles.column.strokeWidth);
       
       // Category indicator bar
@@ -120,7 +120,7 @@ export function renderColumns(
         .attr('width', styles.categoryIndicator.width)
         .attr('height', columnHeight - (styles.categoryIndicator.margin * 2))
         .attr('rx', styles.categoryIndicator.cornerRadius)
-        .attr('fill', categoryColorScale(d.category))
+        .attr('fill', categoryColorScale(d.category.id))
         .attr('opacity', styles.categoryIndicator.opacity);
       
       // Calculate available text width
@@ -173,7 +173,7 @@ export function renderColumns(
         .attr('stroke-dasharray', '0');
       
       // Highlight the category
-      g.select(`#category-${d.category}`)
+      g.select(`#category-${d.category.id}`)
         .select('rect')
         .attr('stroke-width', styles.column.hoverStrokeWidth);
       
@@ -245,9 +245,9 @@ export function renderColumns(
       if (d.originalNode && typeof d.originalNode.isExpanded !== 'undefined') {
         console.log('Column clicked:', d.name);
         
-        // Call setSourceColumn if provided (for vertical orientation)
-        if (setSourceColumn) {
-          setSourceColumn(d.name);
+        // Call setSourceColumns if provided (for vertical orientation)
+        if (setSourceColumns) {
+          setSourceColumns([d.name]);
         }
       }
     });
@@ -287,7 +287,7 @@ export function renderColumnsVertical(
   columnsX: number,
   currentExpanding: any,
   categoryColorScale: (id: string) => string,
-  setSourceColumn: (column: string) => void,
+  setSourceColumns: (columns: string[]) => void,
   globalQuery?: string
 ) {
   return renderColumns(
@@ -299,6 +299,6 @@ export function renderColumnsVertical(
     categoryColorScale,
     globalQuery,
     ColumnOrientation.VERTICAL,
-    setSourceColumn
+    setSourceColumns
   );
 }

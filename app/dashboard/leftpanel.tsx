@@ -14,12 +14,12 @@ interface LeftPanelProps {
     width?: string | number;
     containerStyle?: React.CSSProperties;
 
-    onSourceColumnSelect: (column: string) => void;
+    onSourceColumnSelect: (columns: string[]) => void;
     onCandidateTypeSelect: (dataType: string) => void;
     onCandidateThresholdSelect: (num: number) => void;
     onMatchersSelect: (matchers: Matcher[]) => void;
     state: {
-        sourceColumn: string;
+        sourceColumns: string[];
         candidateType: string;
         candidateThreshold: number;
     };

@@ -14,7 +14,7 @@ interface SourceHierarchyColumnVizProps {
   currentExpanding?: any;
   transform: string;
   hideTooltip: () => void;
-  setSourceColumn: (column: string) => void;
+  setSourceColumns: (columns: string[]) => void;
   sourceMeta?: DatasetMeta;
 }
 
@@ -25,7 +25,7 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
   currentExpanding,
   transform,
   hideTooltip,
-  setSourceColumn,
+  setSourceColumns,
   sourceMeta,
 }) => {
   const theme = useTheme();
@@ -108,7 +108,7 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
       columnsX, 
       currentExpanding,
       categoryColorScale,
-      setSourceColumn,
+      setSourceColumns,
       globalQuery,
     );
 
