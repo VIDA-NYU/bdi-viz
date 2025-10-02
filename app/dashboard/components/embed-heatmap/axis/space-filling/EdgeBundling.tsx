@@ -1,15 +1,14 @@
 import { Selection } from 'd3';
-import { CategoryData, ColumnData, LayoutConfig } from './HierarchyUtils';
+import { NodeData, ColumnData, LayoutConfig } from './HierarchyUtils';
 import * as d3 from 'd3';
-import { calculateCategorySegments, SpaceFillingOrientation } from './SpaceFillingSegments';
-import { getOptimalCategoryColorScale } from './ColorUtils';
+import { calculateNodeSegments, SpaceFillingOrientation } from './SpaceFillingSegments';
 
 // Interface for bundled path data
 interface BundledPath {
   id: string;
   path: string;
   column: ColumnData;
-  category: CategoryData;
+  node: NodeData;
 }
 
 // Enum for orientation types
@@ -21,62 +20,62 @@ export enum EdgeBundlingOrientation {
 // Interface for position parameters
 interface EdgeBundlingPosition {
   columnsPosition: number; // X position for horizontal, Y position for vertical
-  categoryPosition: number; // X position for horizontal, Y position for vertical
+  nodePosition: number; // X position for horizontal, Y position for vertical
   orientation: EdgeBundlingOrientation;
 }
 
 // Create the bundled paths from columns to categories
 function createBundledPaths(
   positionedColumns: ColumnData[],
-  positionedCategories: CategoryData[],
+  positionedNodes: NodeData[],
   position: EdgeBundlingPosition,
   layoutConfig: LayoutConfig
 ): BundledPath[] {
   const { columnHeight, columnWidth } = layoutConfig;
-  const { columnsPosition, categoryPosition, orientation } = position;
+  const { columnsPosition, nodePosition, orientation } = position;
   
   // Calculate control point offset based on orientation
-  const controlPointOffset = (columnsPosition - categoryPosition) * 0.5;
+  const controlPointOffset = (columnsPosition - nodePosition) * 0.5;
   
-  // Create a lookup map for faster category access
-  const categoryMap = new Map(positionedCategories.map(cat => [cat.id, cat]));
+  // Create a lookup map for faster node access
+  const nodeMap = new Map(positionedNodes.map(cat => [cat.id, cat]));
   
   // Pre-calculate paths in a single pass
   return positionedColumns
     .map(column => {
-      const category = categoryMap.get(column.category.id);
-      if (!category) return null;
+      const node = nodeMap.get(column.category.id);
+      if (!node) return null;
       
       let startX: number, startY: number, endX: number, endY: number, path: string;
       
       if (orientation === EdgeBundlingOrientation.VERTICAL) {
         // Vertical orientation: columns above, categories below
-        if (!category.centerX) return null;
+        if (!node.centerX) return null;
         
         startX = column.x! + column.width! / 2;
         startY = column.y! + columnHeight;
-        endX = category.centerX;
-        endY = categoryPosition;
+        endX = node.centerX;
+        endY = nodePosition;
         
         // Create bundled path with S-curve for vertical layout
         path = `M ${startX} ${startY} C ${startX} ${startY - controlPointOffset * 0.3}, ${endX} ${endY + controlPointOffset * 0.7}, ${endX} ${endY}`;
       } else {
         // Horizontal orientation: columns on left, categories on right
-        if (!category.centerY) return null;
+        if (!node.centerY) return null;
 
         startX = column.x!;
         startY = column.y! + column.height! / 2;
-        endX = categoryPosition + 20; // Add offset for horizontal layout
-        endY = category.centerY;
+        endX = nodePosition + 20; // Add offset for horizontal layout
+        endY = node.centerY;
         
         // Create bundled path with S-curve for horizontal layout
         path = `M ${startX} ${startY} C ${startX + controlPointOffset * 0.3} ${startY}, ${endX - controlPointOffset * 0.7} ${endY}, ${endX} ${endY}`;
       }
       
       return {
-        id: `edge-${column.id}-${category.id}`,
+        id: `edge-${column.id}-${node.id}`,
         column,
-        category,
+        node,
         path
       };
     })
@@ -87,11 +86,11 @@ function createBundledPaths(
 export function renderEdgeBundling(
   g: Selection<SVGGElement, unknown, null, undefined>,
   columnData: ColumnData[],
-  categoryData: CategoryData[],
+  nodeData: NodeData[],
   layoutConfig: LayoutConfig,
   columnsPosition: number,
-  categoryPosition: number,
-  categoryColorScale: (id: string) => string,
+  nodePosition: number,
+  nodeColorScale: (id: string) => string,
   orientation: EdgeBundlingOrientation = EdgeBundlingOrientation.VERTICAL
 ) {
   // Position columns and categories based on orientation
@@ -115,8 +114,8 @@ export function renderEdgeBundling(
     }
   });
   
-  const positionedCategories = calculateCategorySegments(
-    categoryData,
+  const positionedNodes = calculateNodeSegments(
+    nodeData,
     layoutConfig,
     false,
     undefined,
@@ -126,10 +125,10 @@ export function renderEdgeBundling(
   // Create paths - do this once and cache the result
   const bundledPaths = createBundledPaths(
     positionedColumns,
-    positionedCategories,
+    positionedNodes,
     {
       columnsPosition,
-      categoryPosition,
+      nodePosition,
       orientation
     },
     layoutConfig
@@ -155,15 +154,15 @@ export function renderEdgeBundling(
     .attr('class', 'bundled-paths');
   
   // Add all paths at once
-  const paths = pathGroup.selectAll('.column-category-path')
+  const paths = pathGroup.selectAll('.column-node-path')
     .data(bundledPaths)
     .enter()
     .append('path')
-    .attr('class', 'column-category-path')
+    .attr('class', 'column-node-path')
     .attr('id', d => d.id)
     .attr('d', d => d.path)
     .attr('fill', 'none')
-    .attr('stroke', d => categoryColorScale(d.category.id))
+    .attr('stroke', d => nodeColorScale(d.node.id))
     .attr('stroke-width', styles.path.normalWidth)
     .attr('stroke-opacity', styles.path.normalOpacity)
     .attr('stroke-dasharray', styles.path.dashArray);
@@ -171,7 +170,7 @@ export function renderEdgeBundling(
   // Use event delegation for better performance
   pathGroup.on('mouseover.paths', function(event) {
     const target = event.target;
-    if (!target.classList.contains('column-category-path')) return;
+    if (!target.classList.contains('column-node-path')) return;
     
     const d = d3.select(target).datum() as BundledPath;
     
@@ -181,19 +180,19 @@ export function renderEdgeBundling(
       .attr('stroke-opacity', 1)
       .attr('stroke-dasharray', '0');
     
-    // Highlight the connected column and category
+    // Highlight the connected column and node
     g.select(`#column-${d.column.id}`)
       .attr('opacity', 1)
       .select('rect')
       .attr('stroke-width', styles.element.highlightStrokeWidth);
     
-    g.select(`#category-${d.category.id}`)
+    g.select(`#node-${d.node.id}`)
       .attr('opacity', 1)
       .select('rect')
       .attr('stroke-width', styles.element.highlightStrokeWidth);
 
     // Fade other paths
-    pathGroup.selectAll('.column-category-path')
+    pathGroup.selectAll('.column-node-path')
       .filter(function() { return this !== target; })
       .attr('stroke-opacity', styles.path.fadedOpacity);
   });
@@ -201,7 +200,7 @@ export function renderEdgeBundling(
   // Use a single mouseout handler for the entire group
   pathGroup.on('mouseout.paths', function() {
     // Reset all elements
-    pathGroup.selectAll('.column-category-path')
+    pathGroup.selectAll('.column-node-path')
       .attr('stroke-width', styles.path.normalWidth)
       .attr('stroke-opacity', styles.path.normalOpacity)
       .attr('stroke-dasharray', styles.path.dashArray);
@@ -211,7 +210,7 @@ export function renderEdgeBundling(
       .select('rect')
       .attr('stroke-width', styles.element.normalStrokeWidth);
     
-    g.selectAll('.category')
+    g.selectAll('.node')
       .attr('opacity', 1)
       .select('rect')
       .attr('stroke-width', styles.element.normalStrokeWidth);
@@ -219,7 +218,7 @@ export function renderEdgeBundling(
 
   return {
     positionedColumns,
-    positionedCategories,
+    positionedNodes,
     bundledPaths
   };
 }
@@ -228,20 +227,20 @@ export function renderEdgeBundling(
 export function renderEdgeBundlingVertical(
   g: Selection<SVGGElement, unknown, null, undefined>,
   columnData: ColumnData[],
-  categoryData: CategoryData[],
+  nodeData: NodeData[],
   layoutConfig: LayoutConfig,
   columnsY: number,
-  categoryY: number,
-  categoryColorScale: (id: string) => string
+  nodeY: number,
+  nodeColorScale: (id: string) => string
 ) {
   return renderEdgeBundling(
     g,
     columnData,
-    categoryData,
+    nodeData,
     layoutConfig,
     columnsY,
-    categoryY,
-    categoryColorScale,
+    nodeY,
+    nodeColorScale,
     EdgeBundlingOrientation.VERTICAL
   );
 }
@@ -250,20 +249,20 @@ export function renderEdgeBundlingVertical(
 export function renderEdgeBundlingHorizontal(
   g: Selection<SVGGElement, unknown, null, undefined>,
   columnData: ColumnData[],
-  categoryData: CategoryData[],
+  nodeData: NodeData[],
   layoutConfig: LayoutConfig,
   columnsX: number,
-  categoryX: number,
-  categoryColorScale: (id: string) => string
+  nodeX: number,
+  nodeColorScale: (id: string) => string
 ) {
   return renderEdgeBundling(
     g,
     columnData,
-    categoryData,
+    nodeData,
     layoutConfig,
     columnsX,
-    categoryX,
-    categoryColorScale,
+    nodeX,
+    nodeColorScale,
     EdgeBundlingOrientation.HORIZONTAL
   );
 }
