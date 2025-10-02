@@ -8,8 +8,7 @@ import { TreeNode } from "../tree/types";
 interface YAxisProps {
   y: any; // (scale) function with domain() and range() methods
   getHeight: (d: Candidate) => number;
-  sourceColumn: string;
-  setSourceColumn: (sourceColumn: string) => void;
+  setSourceColumns: (sourceColumns: string[]) => void;
   sourceColumns: SourceColumn[];
   hideTooltip: () => void;
   sourceTreeData: TreeNode[];
@@ -146,7 +145,7 @@ const AxisLabel = ({
   );
 };
 
-const YAxis = ({ y, getHeight, sourceColumn, setSourceColumn, sourceColumns, hideTooltip, sourceTreeData }: YAxisProps) => {
+const YAxis = ({ y, getHeight, sourceColumns, setSourceColumns, hideTooltip, sourceTreeData }: YAxisProps) => {
   const theme = useTheme();
   const { globalQuery } = useContext(HighlightGlobalContext);
 
@@ -211,19 +210,25 @@ const YAxis = ({ y, getHeight, sourceColumn, setSourceColumn, sourceColumns, hid
           (col) => col.name === value
         )?.status;
 
-        const isSelected = value === sourceColumn;
         const yPos = (y(value) as number) + getHeight({ sourceColumn: value } as Candidate) / 2;
+        const selectedSourceColumns = sourceColumns.map(col => col.name);
         return (
           <AxisLabel
             key={value}
             value={value}
             yPos={yPos}
-            isSelected={isSelected}
+            isSelected={true}
             getHeight={getHeight}
             globalQuery={globalQuery || ""}
             theme={theme}
             status={status}
-            onClick={() => setSourceColumn(value)}
+            onClick={() => {
+              if (selectedSourceColumns.includes(value)) {
+                setSourceColumns(selectedSourceColumns.filter(col => col !== value));
+              } else {
+                setSourceColumns([...selectedSourceColumns, value]);
+              }
+            }}
           />
         );
       })}

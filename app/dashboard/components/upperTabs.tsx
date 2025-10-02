@@ -9,9 +9,8 @@ import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
 
 interface UpperTabsProps {
   weightedAggregatedCandidates: AggregatedCandidate[];
-  sourceColumn: string;
   sourceColumns: SourceColumn[];
-  setSourceColumn: (sourceColumn: string) => void;
+  setSourceColumns: (sourceColumns: string[]) => void;
   targetOntologies: Ontology[];
   sourceOntologies: Ontology[];
   selectedCandidate: Candidate | undefined;
@@ -29,8 +28,7 @@ interface UpperTabsProps {
 
 const UpperTabs: React.FC<UpperTabsProps> = ({
   weightedAggregatedCandidates,
-  sourceColumn,
-  setSourceColumn,
+  setSourceColumns,
   sourceColumns,
   targetOntologies,
   sourceOntologies,
@@ -62,16 +60,20 @@ const UpperTabs: React.FC<UpperTabsProps> = ({
     }
   };
 
-  const sourceColumnStatus = useMemo(() => {
-    const sourceColumnStatus = sourceColumns.find(
-      (column) => column.name === sourceColumn
-    );
-    if (sourceColumnStatus) {
-      return sourceColumnStatus.status;
-    } else {
-      return "complete";
-    }
-  }, [sourceColumns, sourceColumn, selectedCandidate]);
+  // const sourceColumnStatus = useMemo(() => {
+  //   let columnStatus = "complete";
+  //   selectedSourceColumns.forEach(column => {
+  //     if (columnStatus !== "complete") {
+  //       columnStatus = sourceColumns.find(
+  //         (sc) => sc.name === column
+  //       )?.status ?? "incomplete";
+  //       if (columnStatus === "incomplete") {
+  //         columnStatus = "incomplete";
+  //       }
+  //     }
+  //   });
+  //   return columnStatus;
+  // }, [sourceColumns, selectedSourceColumns, selectedCandidate]);
 
   useEffect(() => {
     if (status.length === 1 && status[0] === "accepted") {
@@ -96,7 +98,7 @@ const UpperTabs: React.FC<UpperTabsProps> = ({
       <TabContext value={value}>
         <Box sx={{ borderTop: 1, borderColor: "divider" }}>
             <TabList onChange={handleChange} aria-label="basic tabs example">
-            <Tab label="Accepted" value="1" disabled={sourceColumnStatus !== "complete"} />
+            <Tab label="Accepted" value="1" disabled={false} />
             <Tab label="Unmatched" value="2" />
             <Tab label="All" value="3" />
             </TabList>
@@ -112,8 +114,7 @@ const UpperTabs: React.FC<UpperTabsProps> = ({
       >
         <HeatMap
           data={weightedAggregatedCandidates}
-          sourceColumn={sourceColumn}
-          setSourceColumn={setSourceColumn}
+          setSourceColumns={setSourceColumns}
           sourceColumns={sourceColumns}
           targetOntologies={targetOntologies}
           sourceOntologies={sourceOntologies}

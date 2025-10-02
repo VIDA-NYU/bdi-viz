@@ -75,12 +75,12 @@ export default function Dashboard() {
     } = useDashboardCandidates();
 
     const {
-        sourceColumn,
+        sourceColumns,
         candidateType,
         candidateThreshold,
         searchResults,
         status,
-        updateSourceColumn,
+        updateSourceColumns,
         updateCandidateType,
         updateCandidateThreshold,
         updateSearchResults,
@@ -128,7 +128,7 @@ export default function Dashboard() {
     const { matcherMetrics } = useMatcherAnalysis({ candidates, matchers, enabled: developerMode });
 
     const {
-        filteredSourceCluster,
+        groupedSourceColumns,
         weightedAggregatedCandidates,
         filteredSourceColumns,
     } = useDashboardInterfaces({
@@ -137,7 +137,7 @@ export default function Dashboard() {
         sourceClusters,
         filters: {
             selectedCandidate,
-            sourceColumn,
+            sourceColumns,
             candidateType,
             candidateThreshold,
             status,
@@ -145,6 +145,7 @@ export default function Dashboard() {
         pageNumber,
         pageSize,
         setTotalPages,
+        setSourceColumns: updateSourceColumns,
     });
 
     const {
@@ -192,22 +193,26 @@ export default function Dashboard() {
     }, [selectedCandidate, explain]);
 
 
-    const handleUpdateSourceColumn = useCallback((column: string) => {
+    const handleUpdateSourceColumns = useCallback((columns: string[]) => {
         setSelectedCandidate(undefined);
 
-        const filteredSourceColumn = filteredSourceColumns.find((sc) => sc.name === column);
-        if (filteredSourceColumn) {
-            if (filteredSourceColumn.status !== "complete") {
-                updateStatus(["accepted", "rejected", "discarded", "idle"]);
-            }
-            
-            if (candidateThreshold > filteredSourceColumn.maxScore) {
-                updateCandidateThreshold(filteredSourceColumn.maxScore);
+        const sourceColumns = groupedSourceColumns.filter(col => columns.includes(col.name));
+        if (sourceColumns.length > 0) {
+            const minMaxScore = Math.min(...sourceColumns.map(sc => sc.maxScore));
+            if (candidateThreshold > minMaxScore) {
+                updateCandidateThreshold(minMaxScore);
             }
         }
-        
-        updateSourceColumn(column);
-    }, [setSelectedCandidate, filteredSourceColumns, updateStatus, candidateThreshold, updateCandidateThreshold, updateSourceColumn]);
+        updateSourceColumns(columns);
+    }, [setSelectedCandidate, groupedSourceColumns, candidateThreshold, updateCandidateThreshold, updateSourceColumns]);
+
+    const setSourceColumn = useCallback((column: string) => {
+        if (sourceColumns.includes(column)) {
+            updateSourceColumns(sourceColumns.filter(c => c !== column));
+        } else {
+            updateSourceColumns([...sourceColumns, column]);
+        }
+    }, [updateSourceColumns]);
 
     const handleSearchResults = useCallback((results: Candidate[]) => {
         console.log("Search Results: ", results);
@@ -218,10 +223,10 @@ export default function Dashboard() {
         console.log("New Matching Task: ", newCandidates);
         handleFileUpload(newCandidates);
         setSelectedCandidate(undefined);
-        updateSourceColumn("all");
+        updateSourceColumns([]);
         updateCandidateType("all");
         updateCandidateThreshold(0.5);
-    }, [handleFileUpload, setSelectedCandidate, updateSourceColumn, updateCandidateType, updateCandidateThreshold]);
+    }, [handleFileUpload, setSelectedCandidate, updateSourceColumns, updateCandidateType, updateCandidateThreshold]);
     
     const handleNewMatcherSubmit = useCallback((matchers: Matcher[]) => {
         console.log("New Matchers: ", matchers);
@@ -336,9 +341,9 @@ export default function Dashboard() {
             <MainContent>
                 <LeftPanel
                     containerStyle={{ marginBottom: 0, flexGrow: 0 }}
-                    sourceColumns={filteredSourceColumns}
+                    sourceColumns={groupedSourceColumns}
                     matchers={matchers}
-                    onSourceColumnSelect={handleUpdateSourceColumn}
+                    onSourceColumnSelect={handleUpdateSourceColumns}
                     onCandidateTypeSelect={updateCandidateType}
                     onCandidateThresholdSelect={updateCandidateThreshold}
                     acceptMatch={acceptMatch}
@@ -348,7 +353,7 @@ export default function Dashboard() {
                     redo={redo}
                     exportMatchingResults={exportMatchingResults}
                     onMatchersSelect={matchersSelectHandler}
-                    state={{ sourceColumn, candidateType, candidateThreshold }}
+                    state={{ sourceColumns, candidateType, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleNewMatchingTask}
                     handleTargetOntology={handleTargetOntology}
@@ -362,8 +367,7 @@ export default function Dashboard() {
                 <MainColumn>
                     <UpperTabs
                         weightedAggregatedCandidates={weightedAggregatedCandidates}
-                        sourceColumn={sourceColumn}
-                        setSourceColumn={handleUpdateSourceColumn}
+                        setSourceColumns={updateSourceColumns}
                         sourceColumns={filteredSourceColumns}
                         targetOntologies={targetOntologies}
                         sourceOntologies={sourceOntologies}
@@ -380,13 +384,12 @@ export default function Dashboard() {
                         deleteCandidate={handleDeleteCandidate}
                     />
                     {/* Show Paginator when sourceColumn is "all" */}
-                    <Paginator setSelectedCandidate={setSelectedCandidate} isShow={sourceColumn === "all"} />
+                    <Paginator setSelectedCandidate={setSelectedCandidate} isShow={sourceColumns.length > pageSize || sourceColumns.length === 0} />
                     <LowerTabs
                         weightedAggregatedCandidates={weightedAggregatedCandidates}
                         matchers={matchers}
                         selectedCandidate={selectedCandidate}
                         setSelectedCandidate={setSelectedCandidateByTargetColumnCallback}
-                        selectedSourceColumn={sourceColumn}
                         handleValueMatches={handleValueMatches}
                         valueMatches={valueMatches}
                     />

@@ -3,8 +3,8 @@ import { TreeNode } from '../../tree/types';
 export interface ColumnData {
   id: string;
   name: string;
-  category: string;
-  superCategory: string;
+  category: LabeledNode;
+  superCategory: LabeledNode;
   x?: number;
   y?: number;
   width?: number;
@@ -16,8 +16,9 @@ export interface ColumnData {
 // Define the category data structure
 export interface CategoryData {
   id: string;
+  name: string;
   columns: ColumnData[];
-  superCategory: string;
+  superCategory: LabeledNode;
   x?: number;
   y?: number;
   width?: number;
@@ -29,13 +30,19 @@ export interface CategoryData {
 // Define the super category data structure
 export interface SuperCategoryData {
   id: string;
-  categories: string[];
+  name: string;
+  categories: LabeledNode[];
   x?: number;
   y?: number;
   width?: number;
   height?: number;
   centerX?: number;
   centerY?: number;
+}
+
+export interface LabeledNode {
+  id: string;
+  name: string;
 }
 
 // Layout configuration for the visualization
@@ -65,28 +72,48 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
   const columnData: ColumnData[] = [];
   const categoryMap: Record<string, string[]> = {};
   const superCategoryMap: Record<string, string[]> = {};
+  const categoryData: CategoryData[] = [];
+  const superCategoryData: SuperCategoryData[] = [];
 
   // Process depth 0 nodes as super categories
   treeData.forEach((superCategoryNode, superCategoryIndex) => {
-    const superCategoryId = superCategoryNode.label.text;
+    const superCategoryName = superCategoryNode.label.text;
+    const superCategoryId = superCategoryNode.id;
     superCategoryMap[superCategoryId] = [];
+    const superCategory: SuperCategoryData = {
+      id: superCategoryId,
+      name: superCategoryName,
+      categories: [],
+    };
 
     // Process depth 1 nodes as categories
     if (superCategoryNode.children) {
       superCategoryNode.children.forEach((categoryNode, categoryIndex) => {
-        const categoryId = categoryNode.label.text;
+        const categoryName = categoryNode.label.text;
+        const categoryId = categoryNode.id;
         categoryMap[categoryId] = [];
         superCategoryMap[superCategoryId].push(categoryId);
-
+        const category: CategoryData = {
+          id: categoryId,
+          name: categoryName,
+          columns: [],
+          superCategory: superCategory,
+        };
         // Process depth 2 nodes as columns
         if (categoryNode.children) {
           categoryNode.children.forEach((columnNode, columnIndex) => {
-            const columnId = `col-${superCategoryIndex}-${categoryIndex}-${columnIndex}`;
+            const columnId = columnNode.id;
             const column: ColumnData = {
               id: columnId,
               name: columnNode.label.text,
-              category: categoryId,
-              superCategory: superCategoryId,
+              category: {
+                id: categoryId,
+                name: categoryName,
+              },
+              superCategory: {
+                id: superCategoryId,
+                name: superCategoryName,
+              },
               isExpanded: columnNode.isExpanded,
               originalNode: columnNode,
               width: columnNode.width ?? 0,
@@ -96,9 +123,13 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
             };
             columnData.push(column);
             categoryMap[categoryId].push(columnId);
+            category.columns.push(column);
           });
+          categoryData.push(category);
         }
+        superCategory.categories.push(category);
       });
+      superCategoryData.push(superCategory);
     }
   });
   if (isSource) {
@@ -112,20 +143,6 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
     columnDataWithWidth.push(column);
     rightColumnX = column.originalNode.x;
   });
-  
-
-  // Step 2: Create category data
-  const categoryData: CategoryData[] = Object.entries(categoryMap).map(([categoryId, columnIds]) => ({
-    id: categoryId,
-    columns: columnIds.map(id => columnData.find(col => col.id === id)!).filter(Boolean),
-    superCategory: columnData.find(col => col.category === categoryId)?.superCategory || ''
-  }));
-
-  // Step 3: Create super category data
-  const superCategoryData: SuperCategoryData[] = Object.entries(superCategoryMap).map(([superCategoryId, categoryIds]) => ({
-    id: superCategoryId,
-    categories: categoryIds
-  }));
 
   return {
     columnData: columnDataWithWidth,

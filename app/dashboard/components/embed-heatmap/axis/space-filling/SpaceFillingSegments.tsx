@@ -1,8 +1,8 @@
 import { Selection } from 'd3';
-import { CategoryData, ColumnData, LayoutConfig, SuperCategoryData, highlightText } from './HierarchyUtils.tsx';
+import { CategoryData, ColumnData, LabeledNode, LayoutConfig, SuperCategoryData, highlightText } from './HierarchyUtils.tsx';
 import * as d3 from 'd3';
 import { getOptimalCategoryColorScale } from './ColorUtils.ts';
-import { applyDefaultStyleOnColumn, applyDefaultStyleOnEdge, applyBackgroundStyleOnColumn, applyBackgroundStyleOnEdge, applyHighlightOnColumn, applyHighlightStyleOnEdge } from './InteractionUtils.ts';
+import { applyDefaultStyleOnColumn, applyDefaultStyleOnEdge } from './InteractionUtils.ts';
 
 // Enum for orientation types
 export enum SpaceFillingOrientation {
@@ -162,10 +162,10 @@ export function calculateSuperCategorySegments(
   for (const cat of categorySegments) {
     if (!cat.superCategory) continue;
     
-    if (!categoriesBySuperCategory.has(cat.superCategory)) {
-      categoriesBySuperCategory.set(cat.superCategory, []);
+    if (!categoriesBySuperCategory.has(cat.superCategory.id)) {
+      categoriesBySuperCategory.set(cat.superCategory.id, []);
     }
-    categoriesBySuperCategory.get(cat.superCategory)!.push(cat);
+    categoriesBySuperCategory.get(cat.superCategory.id)!.push(cat);
   }
   
   return superCategoryData.map(superCategory => {
@@ -219,31 +219,34 @@ export function renderSpaceFillingSegments(
   const positionedSuperCategorySegments = calculateSuperCategorySegments(superCategoryData, positionedCategorySegments, orientation);
 
   // Create maps for faster lookups during interactions
-  const columnsByCategory = new Map<string, string[]>();
-  const columnNamesByCategory = new Map<string, string[]>();
-  const columnsBySuperCategory = new Map<string, string[]>();
-  const categoriesBySuper = new Map<string, string[]>();
+  const columnsByCategoryId = new Map<string, LabeledNode[]>();
+  const columnsBySuperCategoryId = new Map<string, LabeledNode[]>();
+  const categoriesBySuperCategoryId = new Map<string, LabeledNode[]>();
 
   // Convert SelectedNodes to string list for faster lookups
   const selectedNodesStringList = selectedNodes.map(node => node.node);
   
   // Build lookup maps
   for (const cat of categoryData) {
-    const columnIds = cat.columns.map(col => col.id);
-    columnsByCategory.set(cat.id, columnIds);
-    const columnNames = cat.columns.map(col => col.name);
-    columnNamesByCategory.set(cat.id, columnNames);
+    const columns = cat.columns.map(col => ({
+      id: col.id,
+      name: col.name
+    }));
+    columnsByCategoryId.set(cat.id, columns);
     
     if (cat.superCategory) {
-      if (!categoriesBySuper.has(cat.superCategory)) {
-        categoriesBySuper.set(cat.superCategory, []);
+      if (!categoriesBySuperCategoryId.has(cat.superCategory.id)) {
+        categoriesBySuperCategoryId.set(cat.superCategory.id, []);
       }
-      categoriesBySuper.get(cat.superCategory)!.push(cat.id);
+      categoriesBySuperCategoryId.get(cat.superCategory.id)!.push({
+        id: cat.id,
+        name: cat.name
+      });
       
-      if (!columnsBySuperCategory.has(cat.superCategory)) {
-        columnsBySuperCategory.set(cat.superCategory, []);
+      if (!columnsBySuperCategoryId.has(cat.superCategory.id)) {
+        columnsBySuperCategoryId.set(cat.superCategory.id, []);
       }
-      columnsBySuperCategory.get(cat.superCategory)!.push(...columnIds);
+      columnsBySuperCategoryId.get(cat.superCategory.id)!.push(...columns);
     }
   }
 
@@ -292,7 +295,7 @@ export function renderSpaceFillingSegments(
         .attr('font-size', orientation === SpaceFillingOrientation.HORIZONTAL ? '0.9rem' : '0.8rem')
         .attr('font-weight', '500')
         .attr('letter-spacing', '0')
-        .html(highlightText(d.id, globalQuery, theme));
+        .html(highlightText(d.name, globalQuery, theme));
       
       if (orientation === SpaceFillingOrientation.HORIZONTAL) {
         text
@@ -309,20 +312,23 @@ export function renderSpaceFillingSegments(
     })
     .on('click', function(event, d: SuperCategoryData) {
       // Get child categories
-      const childCategories = categoriesBySuper.get(d.id) || [];
+      const childCategories = categoriesBySuperCategoryId.get(d.id) || [];
       
       // Toggle selection of child categories
-      const allChildrenSelected = childCategories.every(catId => selectedNodesStringList.includes(catId));
+      const allChildrenSelected = childCategories.every(cat => selectedNodesStringList.includes(cat.name));
+
+      console.log("allChildrenSelected", allChildrenSelected);
+      console.log("childCategories", childCategories.map(cat => cat.name));
       
       if (allChildrenSelected) {
         // Remove all child categories from selection
-        setSelectedNodes(selectedNodes.filter(node => !childCategories.includes(node.node)));
+        setSelectedNodes(selectedNodes.filter(node => !childCategories.map(cat => cat.name).includes(node.node)));
       } else {
         // Add all child categories to selection
-        setSelectedNodes([...selectedNodes, ...childCategories.map(catId => ({
-          node: catId,
-          columns: columnNamesByCategory.get(catId) || [],
-          category: catId
+        setSelectedNodes([...selectedNodes, ...childCategories.map((cat: LabeledNode) => ({
+          node: cat.name,
+          columns: columnsByCategoryId.get(cat.id)?.map(col => col.name) || [],
+          category: d.name
         }))]);
       }
     });
@@ -354,10 +360,10 @@ export function renderSpaceFillingSegments(
         .attr('rx', 2)
         .attr('fill', (() => {
           const color = d3.color(categoryColorScale(d.id));
-          return color ? color.darker(selectedNodesStringList.includes(d.id) ? 0.4 : 0).toString() : categoryColorScale(d.id);
+          return color ? color.darker(selectedNodesStringList.includes(d.name) ? 0.4 : 0).toString() : categoryColorScale(d.id);
         })())
-        .attr('stroke', selectedNodesStringList.includes(d.id) ? theme.palette.primary.main : theme.palette.text.primary)
-        .attr('stroke-width', selectedNodesStringList.includes(d.id) ? 3 : 1)
+        .attr('stroke', selectedNodesStringList.includes(d.name) ? theme.palette.primary.main : theme.palette.text.primary)
+        .attr('stroke-width', selectedNodesStringList.includes(d.name) ? 3 : 1)
         .style('cursor', 'pointer');
       
       // Label text
@@ -366,9 +372,9 @@ export function renderSpaceFillingSegments(
         .attr('fill', theme.palette.common.white)
         .attr('font-family', `"Roboto","Helvetica","Arial",sans-serif`)
         .attr('font-size', orientation === SpaceFillingOrientation.HORIZONTAL ? '0.8rem' : '0.7rem')
-        .attr('font-weight', selectedNodesStringList.includes(d.id) ? '700' : '400')
-        .attr('letter-spacing', selectedNodesStringList.includes(d.id) ? '0.3px' : '0')
-        .html(highlightText(d.id, globalQuery, theme));
+        .attr('font-weight', selectedNodesStringList.includes(d.name) ? '700' : '400')
+        .attr('letter-spacing', selectedNodesStringList.includes(d.name) ? '0.3px' : '0')
+        .html(highlightText(d.name, globalQuery, theme));
       
       if (orientation === SpaceFillingOrientation.HORIZONTAL) {
         text
@@ -385,15 +391,15 @@ export function renderSpaceFillingSegments(
     })
     .on('click', function(event, d: CategoryData) {
       // Toggle selection of this category
-      const isSelected = selectedNodesStringList.includes(d.id);
+      const isSelected = selectedNodesStringList.includes(d.name);
       
       if (isSelected) {
-        setSelectedNodes(selectedNodes.filter(node => node.node !== d.id));
+        setSelectedNodes(selectedNodes.filter(node => node.node !== d.name ));
       } else {
         setSelectedNodes([...selectedNodes, {
-          node: d.id,
-          columns: columnNamesByCategory.get(d.id) || [],
-          category: d.id
+          node: d.name,
+          columns: columnsByCategoryId.get(d.id)?.map(col => col.name) || [],
+          category: d.superCategory.name
         }]);
       }
       
@@ -404,7 +410,7 @@ export function renderSpaceFillingSegments(
         .attr('stroke', isSelected ? theme.palette.text.primary : theme.palette.primary.main);
     })
     .on('mouseover', function(event, d: CategoryData) {
-      const isSelected = selectedNodesStringList.includes(d.id);
+      const isSelected = selectedNodesStringList.includes(d.name);
       
       // Only apply hover effects if not selected
       if (!isSelected) {
@@ -416,11 +422,11 @@ export function renderSpaceFillingSegments(
           .attr('stroke-dasharray', '0');
       }
       
-      const relatedColumnIds = columnsByCategory.get(d.id) || [];
-      
+      const relatedColumns = columnsByCategoryId.get(d.id) || [];
+
       // Highlight related columns
       columnData.forEach(column => {
-        if (relatedColumnIds.includes(column.id)) {
+        if (relatedColumns.map(col => col.id).includes(column.id)) {
           g.select(`#column-${column.id}`)
             .attr('opacity', 1)
             .select('rect')
@@ -436,7 +442,7 @@ export function renderSpaceFillingSegments(
             .select('rect')
             .attr('stroke-width', 1);
           
-          g.select(`#edge-${column.id}-${column.category}`)
+          g.select(`#edge-${column.id}-${column.category.id}`)
             .attr('stroke-width', 1.5)
             .attr('stroke-opacity', 0.2)
             .attr('stroke-dasharray', '3,3');
@@ -445,7 +451,7 @@ export function renderSpaceFillingSegments(
     })
     .on('mouseout', function(event, d: CategoryData) {
       // Only reset if not selected
-      if (!selectedNodesStringList.includes(d.id)) {
+      if (!selectedNodesStringList.includes(d.name)) {
         d3.select(this)
           .select('rect')
           .attr('fill', (() => {
@@ -464,13 +470,13 @@ export function renderSpaceFillingSegments(
       // Reset all columns and edges
       columnData.forEach(column => {
         g.select(`#column-${column.id}`).call(applyDefaultStyleOnColumn);
-        g.select(`#edge-${column.id}-${column.category}`).call(applyDefaultStyleOnEdge);
+        g.select(`#edge-${column.id}-${d.id}`).call(applyDefaultStyleOnEdge);
       });
     });
 
   // Create connecting lines from categories to super categories
   positionedCategorySegments.forEach(category => {
-    const superCategory = positionedSuperCategorySegments.find(sc => sc.id === category.superCategory);
+    const superCategory = positionedSuperCategorySegments.find(sc => sc.id === category.superCategory.id);
     if (!superCategory) return;
     
     let path: string;

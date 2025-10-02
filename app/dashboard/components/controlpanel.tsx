@@ -19,13 +19,13 @@ interface ControlPanelProps {
   width?: string | number;
   containerStyle?: React.CSSProperties;
 
-  onSourceColumnSelect: (column: string) => void;
+  onSourceColumnSelect: (columns: string[]) => void;
   onCandidateTypeSelect: (dataType: string) => void;
   onCandidateThresholdSelect: (num: number) => void;
   onMatchersSelect: (matchers: Matcher[]) => void;
 
   state: {
-    sourceColumn: string;
+    sourceColumns: string[];
     candidateType: string;
     candidateThreshold: number;
   };
@@ -46,7 +46,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     display: "flex",
     flexWrap: "wrap",
     justifyContent: "flex-start",
-    minWidth: "min-content",
+    width: "100%",
     gap: 2,
     paddingBottom: 2,
     paddingTop: 2,
@@ -60,7 +60,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
     <Box sx={rootStyles}>
               <SourceColumnSelection
                 sourceColumns={props.sourceColumns}
-                selectedSourceColumn={props.state.sourceColumn}
+                selectedSourceColumns={props.state.sourceColumns}
                 onSelect={props.onSourceColumnSelect}
               />
               <CandidateThresholdSlide

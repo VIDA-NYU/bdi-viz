@@ -16,12 +16,6 @@ interface UseOntologyLayoutProps {
   currentExpanding?: AggregatedCandidate;
   useHorizontalPadding?: boolean;
 }
-interface ColumnWithLocation {
-  name: string;
-  x: number;
-  y: number;
-  width: number;
-  }
 export const useOntologyLayout = ({
   targetColumns,
   sourceColumns,
@@ -63,7 +57,7 @@ export const useOntologyLayout = ({
 
     const usableWidth = width - margin.left - margin.right;
 
-    const treeNodes: TreeNode[] = grandparents.map((grandparent, index) => {
+    const treeNodes: TreeNode[] = grandparents.map((grandparent, gi) => {
       // Calculate category node position evenly across available space
       const nodes = filteredTargetOntologies.filter(
         (ontology) => ontology.grandparent === grandparent
@@ -91,7 +85,7 @@ export const useOntologyLayout = ({
       
 
       return {
-        id: grandparent,
+        id: `category-${gi}`,
         label: {
           text: grandparent,
           show: true,
@@ -111,7 +105,7 @@ export const useOntologyLayout = ({
           // const parentIsExpanded = expandedNodes.size > 0;
           const layerIsExpanded = expandedNodes.size > 2;
           return {
-            id: parent,
+            id: `node-${gi}-${parents.indexOf(parent)}`,
             label: {
               text: parent,
               show: true,
@@ -124,7 +118,7 @@ export const useOntologyLayout = ({
                 childIsExpanded = currentExpanding.targetColumn == col;
               }
               return {
-                id: col,
+                id: `attribute-${gi}-${parents.indexOf(parent)}-${cols.indexOf(col)}`,
                 label: {
                   text: col,
                   show: true,
@@ -169,7 +163,7 @@ export const useOntologyLayout = ({
 
     const usableHeight = height - margin.top - margin.bottom;
 
-    const treeNodes: TreeNode[] = grandparents.map((grandparent, index) => {
+    const treeNodes: TreeNode[] = grandparents.map((grandparent, gi) => {
       const nodes = filteredSourceOntologies.filter(
         (ontology) => ontology.grandparent === grandparent
       );
@@ -187,7 +181,7 @@ export const useOntologyLayout = ({
       }
 
       return {
-        id: grandparent,
+        id: `category-${gi}`,
         label: {
           text: grandparent,
           show: true,
@@ -206,7 +200,7 @@ export const useOntologyLayout = ({
           }
           const layerIsExpanded = expandedNodes.size > 2;
           return {
-            id: parent,
+            id: `node-${gi}-${parents.indexOf(parent)}`,
             label: {
               text: parent,
               show: true,
@@ -219,7 +213,7 @@ export const useOntologyLayout = ({
                 childIsExpanded = currentExpanding.sourceColumn == col;
               }
               return {
-                id: col,
+                id: `attribute-${gi}-${parents.indexOf(parent)}-${cols.indexOf(col)}`,
                 label: {
                   text: col,
                   show: true,
@@ -252,13 +246,39 @@ export const useOntologyLayout = ({
     return treeNodes;
   }, [filteredSourceOntologies, y, getHeight, height, margin, expandedNodes]);
 
-  const toggleNode = (nodeId: string) => {
+  // Build lookup maps from column label to node id for convenient toggling
+  const targetColumnIdMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const traverse = (node: TreeNode) => {
+      if (node.originalColumn) {
+        map.set(node.originalColumn, node.id);
+      }
+      if (node.children) node.children.forEach(traverse);
+    };
+    targetTreeData.forEach(traverse);
+    return map;
+  }, [targetTreeData]);
+
+  const sourceColumnIdMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const traverse = (node: TreeNode) => {
+      if (node.originalColumn) {
+        map.set(node.originalColumn, node.id);
+      }
+      if (node.children) node.children.forEach(traverse);
+    };
+    sourceTreeData.forEach(traverse);
+    return map;
+  }, [sourceTreeData]);
+
+  const toggleNode = (nodeKey: string) => {
+    const resolvedId = targetColumnIdMap.get(nodeKey) || sourceColumnIdMap.get(nodeKey) || nodeKey;
     setExpandedNodes((prev) => {
       const next = new Set(prev);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
+      if (next.has(resolvedId)) {
+        next.delete(resolvedId);
       } else {
-        next.add(nodeId);
+        next.add(resolvedId);
       }
       return next;
     });
