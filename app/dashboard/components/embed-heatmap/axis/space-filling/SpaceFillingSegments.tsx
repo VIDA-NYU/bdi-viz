@@ -1,5 +1,5 @@
 import { Selection } from 'd3';
-import { CategoryData, ColumnData, LabeledNode, LayoutConfig, SuperCategoryData, highlightText } from './HierarchyUtils.tsx';
+import { ColumnData, LabeledNode, LayoutConfig, NodeData, SuperCategoryData, highlightText } from './HierarchyUtils.tsx';
 import * as d3 from 'd3';
 import { getOptimalCategoryColorScale } from './ColorUtils.ts';
 import { applyDefaultStyleOnColumn, applyDefaultStyleOnEdge } from './InteractionUtils.ts';
@@ -18,19 +18,19 @@ interface SpaceFillingPosition {
 }
 
 // Function to calculate segment positions for categories
-export function calculateCategorySegments(
-  categoryData: CategoryData[],
+export function calculateNodeSegments(
+  nodeData: NodeData[],
   layoutConfig: LayoutConfig,
   columnsPositioned: boolean,
   columnPositions?: { id: string; x?: number; y?: number; width?: number; height?: number; }[],
   orientation: SpaceFillingOrientation = SpaceFillingOrientation.HORIZONTAL
-): CategoryData[] {
+): NodeData[] {
   const { innerWidth, innerHeight, segmentSpacing } = layoutConfig;
   const MIN_CATEGORY_SIZE = orientation === SpaceFillingOrientation.HORIZONTAL ? 80 : 20; // Minimum size for category to ensure text fits
   const containerSize = orientation === SpaceFillingOrientation.HORIZONTAL ? innerWidth : innerHeight;
   
   // First, sort categories based on their leftmost/topmost column position
-  const sortedCategories = [...categoryData].sort((a, b) => {
+  const sortedNodes = [...nodeData].sort((a, b) => {
     if (!columnsPositioned || !columnPositions) return 0;
     
     // Find leftmost/topmost column for each category
@@ -54,17 +54,17 @@ export function calculateCategorySegments(
   });
   
   // Create a result array to hold the calculated positions
-  const result: CategoryData[] = [];
+  const result: NodeData[] = [];
   
   if (columnsPositioned && columnPositions) {
     // Calculate based on column positions
-    for (const category of sortedCategories) {
-      const updatedCategory = { ...category };
+    for (const node of sortedNodes) {
+      const updatedNode = { ...node };
       
       // Get columns for this category
-      const categoryColumns = category.columns;
-      if (categoryColumns.length > 0) {
-        const columnIds = categoryColumns.map(col => col.id);
+      const nodeColumns = node.columns;
+      if (nodeColumns.length > 0) {
+        const columnIds = nodeColumns.map(col => col.id);
         const relevantPositions = columnPositions.filter(pos => columnIds.includes(pos.id));
         
         if (relevantPositions.length > 0) {
@@ -73,34 +73,34 @@ export function calculateCategorySegments(
             const leftmost = Math.min(...relevantPositions.map(pos => pos.x || 0));
             const rightmost = Math.max(...relevantPositions.map(pos => (pos.x || 0) + (pos.width || 0)));
             
-            updatedCategory.x = leftmost;
-            updatedCategory.width = Math.max(rightmost - leftmost, MIN_CATEGORY_SIZE);
-            updatedCategory.centerX = leftmost + (updatedCategory.width / 2);
+            updatedNode.x = leftmost;
+            updatedNode.width = Math.max(rightmost - leftmost, MIN_CATEGORY_SIZE);
+            updatedNode.centerX = leftmost + (updatedNode.width / 2);
           } else {
             // Find actual span based on column positions
             const topmost = Math.min(...relevantPositions.map(pos => pos.y || 0));
             const bottommost = Math.max(...relevantPositions.map(pos => (pos.y || 0) + (pos.height || 0)));
             
-            updatedCategory.y = topmost;
-            updatedCategory.height = Math.max(bottommost - topmost, MIN_CATEGORY_SIZE);
-            updatedCategory.centerY = topmost + (updatedCategory.height / 2);
+            updatedNode.y = topmost;
+            updatedNode.height = Math.max(bottommost - topmost, MIN_CATEGORY_SIZE);
+            updatedNode.centerY = topmost + (updatedNode.height / 2);
           }
         }
       }
       
-      result.push(updatedCategory);
+      result.push(updatedNode);
     }
   } else {
     // If columns aren't positioned yet, distribute categories evenly
-    const totalCategories = sortedCategories.length;
+    const totalCategories = sortedNodes.length;
     
     // Calculate percentage size based on column count with minimum size consideration
-    const totalColumns = sortedCategories.reduce((sum, cat) => sum + cat.columns.length, 0);
+    const totalColumns = sortedNodes.reduce((sum, cat) => sum + cat.columns.length, 0);
     const sizeThreshold = MIN_CATEGORY_SIZE / containerSize;
     
     // Pre-calculate which categories are below threshold
     const categoriesBelowThreshold = new Set<string>();
-    for (const cat of sortedCategories) {
+    for (const cat of sortedNodes) {
       const proportion = cat.columns.length / totalColumns;
       if (proportion < sizeThreshold) {
         categoriesBelowThreshold.add(cat.id);
@@ -110,37 +110,37 @@ export function calculateCategorySegments(
     const availableSize = containerSize - (MIN_CATEGORY_SIZE * totalCategories) - ((totalCategories - 1) * segmentSpacing);
     
     // Calculate total columns in categories above threshold once
-    const numColumnsInCategoriesAboveThreshold = sortedCategories
-      .filter(cat => !categoriesBelowThreshold.has(cat.id))
-      .reduce((sum, cat) => sum + cat.columns.length, 0);
+    const numColumnsInCategoriesAboveThreshold = sortedNodes
+      .filter(node => !categoriesBelowThreshold.has(node.id))
+      .reduce((sum, node) => sum + node.columns.length, 0);
     
     // Pre-calculate sizes for each category
     const categorySizes = new Map<string, number>();
-    for (const cat of sortedCategories) {
-      const calculatedSize = categoriesBelowThreshold.has(cat.id) 
+    for (const node of sortedNodes) {
+      const calculatedSize = categoriesBelowThreshold.has(node.id) 
         ? MIN_CATEGORY_SIZE 
-        : MIN_CATEGORY_SIZE + cat.columns.length * availableSize / numColumnsInCategoriesAboveThreshold;
-      categorySizes.set(cat.id, calculatedSize);
+        : MIN_CATEGORY_SIZE + node.columns.length * availableSize / numColumnsInCategoriesAboveThreshold;
+      categorySizes.set(node.id, calculatedSize);
     }
     
     // Calculate positions in a single pass
     let currentPosition = 0;
-    for (let i = 0; i < sortedCategories.length; i++) {
-      const category = sortedCategories[i];
-      const updatedCategory = { ...category };
-      const calculatedSize = categorySizes.get(category.id) || MIN_CATEGORY_SIZE;
+    for (let i = 0; i < sortedNodes.length; i++) {
+      const node = sortedNodes[i];
+      const updatedNode = { ...node };
+      const calculatedSize = categorySizes.get(node.id) || MIN_CATEGORY_SIZE;
       
       if (orientation === SpaceFillingOrientation.HORIZONTAL) {
-        updatedCategory.x = currentPosition;
-        updatedCategory.width = calculatedSize;
-        updatedCategory.centerX = currentPosition + (calculatedSize / 2);
+        updatedNode.x = currentPosition;
+        updatedNode.width = calculatedSize;
+        updatedNode.centerX = currentPosition + (calculatedSize / 2);
       } else {
-        updatedCategory.y = currentPosition;
-        updatedCategory.height = calculatedSize;
-        updatedCategory.centerY = currentPosition + (calculatedSize / 2);
+        updatedNode.y = currentPosition;
+        updatedNode.height = calculatedSize;
+        updatedNode.centerY = currentPosition + (calculatedSize / 2);
       }
       
-      result.push(updatedCategory);
+      result.push(updatedNode);
       
       // Update position for next category
       currentPosition += calculatedSize + segmentSpacing;
@@ -153,19 +153,19 @@ export function calculateCategorySegments(
 // Function to calculate segment positions for super categories
 export function calculateSuperCategorySegments(
   superCategoryData: SuperCategoryData[],
-  categorySegments: CategoryData[],
+  nodeSegments: NodeData[],
   orientation: SpaceFillingOrientation = SpaceFillingOrientation.HORIZONTAL
 ): SuperCategoryData[] {
   // Create a map to group categories by super category for faster lookup
-  const categoriesBySuperCategory = new Map<string, CategoryData[]>();
+  const categoriesBySuperCategory = new Map<string, NodeData[]>();
   
-  for (const cat of categorySegments) {
-    if (!cat.superCategory) continue;
+  for (const node of nodeSegments) {
+    if (!node.category) continue;
     
-    if (!categoriesBySuperCategory.has(cat.superCategory.id)) {
-      categoriesBySuperCategory.set(cat.superCategory.id, []);
+    if (!categoriesBySuperCategory.has(node.category.id)) {
+      categoriesBySuperCategory.set(node.category.id, []);
     }
-    categoriesBySuperCategory.get(cat.superCategory.id)!.push(cat);
+    categoriesBySuperCategory.get(node.category.id)!.push(node);
   }
   
   return superCategoryData.map(superCategory => {
@@ -174,15 +174,15 @@ export function calculateSuperCategorySegments(
     
     if (relevantCategories.length > 0) {
       if (orientation === SpaceFillingOrientation.HORIZONTAL) {
-        const leftmost = Math.min(...relevantCategories.map(cat => cat.x || 0));
-        const rightmost = Math.max(...relevantCategories.map(cat => (cat.x || 0) + (cat.width || 0)));
+        const leftmost = Math.min(...relevantCategories.map(node => node.x || 0));
+        const rightmost = Math.max(...relevantCategories.map(node => (node.x || 0) + (node.width || 0)));
         
         updatedSuperCategory.x = leftmost;
         updatedSuperCategory.width = rightmost - leftmost;
         updatedSuperCategory.centerX = leftmost + (rightmost - leftmost) / 2;
       } else {
-        const topmost = Math.min(...relevantCategories.map(cat => cat.y || 0));
-        const bottommost = Math.max(...relevantCategories.map(cat => (cat.y || 0) + (cat.height || 0)));
+        const topmost = Math.min(...relevantCategories.map(node => node.y || 0));
+        const bottommost = Math.max(...relevantCategories.map(node => (node.y || 0) + (node.height || 0)));
         
         updatedSuperCategory.y = topmost;
         updatedSuperCategory.height = bottommost - topmost;
@@ -199,11 +199,11 @@ export function renderSpaceFillingSegments(
   g: Selection<SVGGElement, unknown, null, undefined>,
   columnData: ColumnData[],
   superCategoryData: SuperCategoryData[],
-  categoryData: CategoryData[],
+  nodeData: NodeData[],
   layoutConfig: LayoutConfig,
   superCategoryPosition: number,
   categoryPosition: number,
-  categoryColorScale: (id: string) => string,
+  nodeColorScale: (id: string) => string,
   selectedNodes: SelectedNode[],
   setSelectedNodes: (nodes: SelectedNode[]) => void,
   orientation: SpaceFillingOrientation = SpaceFillingOrientation.HORIZONTAL
@@ -215,38 +215,38 @@ export function renderSpaceFillingSegments(
   const superCategoryColorScale = getOptimalCategoryColorScale(superCategoryIds);
 
   // Position the segments
-  const positionedCategorySegments = calculateCategorySegments(categoryData, layoutConfig, false, undefined, orientation);
-  const positionedSuperCategorySegments = calculateSuperCategorySegments(superCategoryData, positionedCategorySegments, orientation);
+  const positionedNodeSegments = calculateNodeSegments(nodeData, layoutConfig, false, undefined, orientation);
+  const positionedSuperCategorySegments = calculateSuperCategorySegments(superCategoryData, positionedNodeSegments, orientation);
 
   // Create maps for faster lookups during interactions
-  const columnsByCategoryId = new Map<string, LabeledNode[]>();
+  const columnsByNodeId = new Map<string, LabeledNode[]>();
   const columnsBySuperCategoryId = new Map<string, LabeledNode[]>();
-  const categoriesBySuperCategoryId = new Map<string, LabeledNode[]>();
+  const nodesBySuperCategoryId = new Map<string, LabeledNode[]>();
 
   // Convert SelectedNodes to string list for faster lookups
   const selectedNodesStringList = selectedNodes.map(node => node.node);
   
   // Build lookup maps
-  for (const cat of categoryData) {
-    const columns = cat.columns.map(col => ({
+  for (const node of nodeData) {
+    const columns = node.columns.map(col => ({
       id: col.id,
       name: col.name
     }));
-    columnsByCategoryId.set(cat.id, columns);
+    columnsByNodeId.set(node.id, columns);
     
-    if (cat.superCategory) {
-      if (!categoriesBySuperCategoryId.has(cat.superCategory.id)) {
-        categoriesBySuperCategoryId.set(cat.superCategory.id, []);
+    if (node.category) {
+      if (!nodesBySuperCategoryId.has(node.category.id)) {
+        nodesBySuperCategoryId.set(node.category.id, []);
       }
-      categoriesBySuperCategoryId.get(cat.superCategory.id)!.push({
-        id: cat.id,
-        name: cat.name
+      nodesBySuperCategoryId.get(node.category.id)!.push({
+        id: node.id,
+        name: node.name
       });
       
-      if (!columnsBySuperCategoryId.has(cat.superCategory.id)) {
-        columnsBySuperCategoryId.set(cat.superCategory.id, []);
+      if (!columnsBySuperCategoryId.has(node.category.id)) {
+        columnsBySuperCategoryId.set(node.category.id, []);
       }
-      columnsBySuperCategoryId.get(cat.superCategory.id)!.push(...columns);
+      columnsBySuperCategoryId.get(node.category.id)!.push(...columns);
     }
   }
 
@@ -312,37 +312,37 @@ export function renderSpaceFillingSegments(
     })
     .on('click', function(event, d: SuperCategoryData) {
       // Get child categories
-      const childCategories = categoriesBySuperCategoryId.get(d.id) || [];
+      const childNodes = nodesBySuperCategoryId.get(d.id) || [];
       
       // Toggle selection of child categories
-      const allChildrenSelected = childCategories.every(cat => selectedNodesStringList.includes(cat.name));
+      const allChildrenSelected = childNodes.every(cat => selectedNodesStringList.includes(cat.name));
 
       console.log("allChildrenSelected", allChildrenSelected);
-      console.log("childCategories", childCategories.map(cat => cat.name));
+      console.log("childNodes", childNodes.map(cat => cat.name));
       
       if (allChildrenSelected) {
         // Remove all child categories from selection
-        setSelectedNodes(selectedNodes.filter(node => !childCategories.map(cat => cat.name).includes(node.node)));
+        setSelectedNodes(selectedNodes.filter(node => !childNodes.map(cat => cat.name).includes(node.node)));
       } else {
         // Add all child categories to selection
-        setSelectedNodes([...selectedNodes, ...childCategories.map((cat: LabeledNode) => ({
-          node: cat.name,
-          columns: columnsByCategoryId.get(cat.id)?.map(col => col.name) || [],
+        setSelectedNodes([...selectedNodes, ...childNodes.map((node: LabeledNode) => ({
+          node: node.name,
+          columns: columnsByNodeId.get(node.id)?.map(col => col.name) || [],
           category: d.name
         }))]);
       }
     });
 
   // Create category segments
-  const categoryGroup = g.append('g')
+  const nodeGroup = g.append('g')
     .attr('class', 'categories');
   
-  categoryGroup.selectAll('.category')
-    .data(positionedCategorySegments)
+  nodeGroup.selectAll('.node')
+    .data(positionedNodeSegments)
     .enter()
     .append('g')
-    .attr('class', 'category')
-    .attr('id', d => `category-${d.id}`)
+    .attr('class', 'node')
+    .attr('id', d => `node-${d.id}`)
     .attr('transform', d => {
       if (orientation === SpaceFillingOrientation.HORIZONTAL) {
         return `translate(${d.x}, ${categoryPosition})`;
@@ -359,8 +359,8 @@ export function renderSpaceFillingSegments(
         .attr('height', orientation === SpaceFillingOrientation.HORIZONTAL ? segmentHeight : d.height)
         .attr('rx', 2)
         .attr('fill', (() => {
-          const color = d3.color(categoryColorScale(d.id));
-          return color ? color.darker(selectedNodesStringList.includes(d.name) ? 0.4 : 0).toString() : categoryColorScale(d.id);
+          const color = d3.color(nodeColorScale(d.id));
+          return color ? color.darker(selectedNodesStringList.includes(d.name) ? 0.4 : 0).toString() : nodeColorScale(d.id);
         })())
         .attr('stroke', selectedNodesStringList.includes(d.name) ? theme.palette.primary.main : theme.palette.text.primary)
         .attr('stroke-width', selectedNodesStringList.includes(d.name) ? 3 : 1)
@@ -389,8 +389,8 @@ export function renderSpaceFillingSegments(
           .attr('transform', `rotate(-90)`);
       }
     })
-    .on('click', function(event, d: CategoryData) {
-      // Toggle selection of this category
+    .on('click', function(event, d: NodeData) {
+      // Toggle selection of this node
       const isSelected = selectedNodesStringList.includes(d.name);
       
       if (isSelected) {
@@ -398,8 +398,8 @@ export function renderSpaceFillingSegments(
       } else {
         setSelectedNodes([...selectedNodes, {
           node: d.name,
-          columns: columnsByCategoryId.get(d.id)?.map(col => col.name) || [],
-          category: d.superCategory.name
+          columns: columnsByNodeId.get(d.id)?.map(col => col.name) || [],
+          category: d.category.name
         }]);
       }
       
@@ -409,7 +409,7 @@ export function renderSpaceFillingSegments(
         .attr('stroke-width', isSelected ? 1 : 3)
         .attr('stroke', isSelected ? theme.palette.text.primary : theme.palette.primary.main);
     })
-    .on('mouseover', function(event, d: CategoryData) {
+    .on('mouseover', function(event, d: NodeData) {
       const isSelected = selectedNodesStringList.includes(d.name);
       
       // Only apply hover effects if not selected
@@ -422,7 +422,7 @@ export function renderSpaceFillingSegments(
           .attr('stroke-dasharray', '0');
       }
       
-      const relatedColumns = columnsByCategoryId.get(d.id) || [];
+      const relatedColumns = columnsByNodeId.get(d.id) || [];
 
       // Highlight related columns
       columnData.forEach(column => {
@@ -449,14 +449,14 @@ export function renderSpaceFillingSegments(
         }
       });
     })
-    .on('mouseout', function(event, d: CategoryData) {
+    .on('mouseout', function(event, d: NodeData) {
       // Only reset if not selected
       if (!selectedNodesStringList.includes(d.name)) {
         d3.select(this)
           .select('rect')
           .attr('fill', (() => {
-            const color = d3.color(categoryColorScale(d.id));
-            return color ? color.darker(0).toString() : categoryColorScale(d.id);
+            const color = d3.color(nodeColorScale(d.id));
+            return color ? color.darker(0).toString() : nodeColorScale(d.id);
           })())
           .attr('stroke-width', 1)
           .attr('stroke', theme.palette.text.primary);
@@ -475,43 +475,43 @@ export function renderSpaceFillingSegments(
     });
 
   // Create connecting lines from categories to super categories
-  positionedCategorySegments.forEach(category => {
-    const superCategory = positionedSuperCategorySegments.find(sc => sc.id === category.superCategory.id);
+  positionedNodeSegments.forEach(node => {
+    const superCategory = positionedSuperCategorySegments.find(sc => sc.id === node.category.id);
     if (!superCategory) return;
     
     let path: string;
     if (orientation === SpaceFillingOrientation.HORIZONTAL) {
-      if (!category.centerX || !superCategory.centerX) return;
+      if (!node.centerX || !superCategory.centerX) return;
       path = `
-        M ${category.centerX} ${categoryPosition + segmentHeight!}
-        C ${category.centerX} ${categoryPosition + segmentHeight! + 10},
+        M ${node.centerX} ${categoryPosition + segmentHeight!}
+        C ${node.centerX} ${categoryPosition + segmentHeight! + 10},
           ${superCategory.centerX} ${superCategoryPosition - 10},
           ${superCategory.centerX} ${superCategoryPosition}
       `;
     } else {
-      if (!category.centerY || !superCategory.centerY) return;
+      if (!node.centerY || !superCategory.centerY) return;
       path = `
         M ${superCategoryPosition + segmentWidth!} ${superCategory.centerY}
         C ${superCategoryPosition + segmentWidth! + 10} ${superCategory.centerY},
-          ${categoryPosition - 10} ${category.centerY},
-          ${categoryPosition} ${category.centerY}
+          ${categoryPosition - 10} ${node.centerY},
+          ${categoryPosition} ${node.centerY}
       `;
     }
     
     g.append('path')
-      .attr('id', `category-super-connection-${category.id}-${superCategory.id}`)
-      .attr('class', 'category-super-connection')
+      .attr('id', `node-category-connection-${node.id}-${superCategory.id}`)
+      .attr('class', 'node-category-connection')
       .attr('d', path)
       .attr('fill', 'none')
-      .attr('stroke', categoryColorScale(category.id))
+      .attr('stroke', nodeColorScale(node.id))
       .attr('stroke-width', 1.5)
       .attr('stroke-opacity', 0.7);
   });
-
+  
   return {
-    positionedCategorySegments,
+    positionedNodeSegments,
     positionedSuperCategorySegments,
-    categoryColorScale
+    nodeColorScale
   };
 }
 
@@ -520,11 +520,11 @@ export function renderSpaceFillingSegmentsHorizontal(
   g: Selection<SVGGElement, unknown, null, undefined>,
   columnData: ColumnData[],
   superCategoryData: SuperCategoryData[],
-  categoryData: CategoryData[],
+  nodeData: NodeData[],
   layoutConfig: LayoutConfig,
   superCategoryY: number,
-  categoryY: number,
-  categoryColorScale: (id: string) => string,
+  nodeY: number,
+  nodeColorScale: (id: string) => string,
   selectedTargetNodes: SelectedNode[],
   setSelectedTargetNodes: (nodes: SelectedNode[]) => void
 ) {
@@ -532,11 +532,11 @@ export function renderSpaceFillingSegmentsHorizontal(
     g,
     columnData,
     superCategoryData,
-    categoryData,
+    nodeData,
     layoutConfig,
     superCategoryY,
-    categoryY,
-    categoryColorScale,
+    nodeY,
+    nodeColorScale,
     selectedTargetNodes,
     setSelectedTargetNodes,
     SpaceFillingOrientation.HORIZONTAL
@@ -548,11 +548,11 @@ export function renderSpaceFillingSegmentsVertical(
   g: Selection<SVGGElement, unknown, null, undefined>,
   columnData: ColumnData[],
   superCategoryData: SuperCategoryData[],
-  categoryData: CategoryData[],
+  nodeData: NodeData[],
   layoutConfig: LayoutConfig,
   superCategoryX: number,
-  categoryX: number,
-  categoryColorScale: (id: string) => string,
+  nodeX: number,
+  nodeColorScale: (id: string) => string,
   selectedSourceNodes: SelectedNode[],
   setSelectedSourceNodes: (nodes: SelectedNode[]) => void
 ) {
@@ -560,11 +560,11 @@ export function renderSpaceFillingSegmentsVertical(
     g,
     columnData,
     superCategoryData,
-    categoryData,
+    nodeData,
     layoutConfig,
     superCategoryX,
-    categoryX,
-    categoryColorScale,
+    nodeX,
+    nodeColorScale,
     selectedSourceNodes,
     setSelectedSourceNodes,
     SpaceFillingOrientation.VERTICAL

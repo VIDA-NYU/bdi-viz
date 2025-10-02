@@ -14,11 +14,11 @@ export interface ColumnData {
 }
 
 // Define the category data structure
-export interface CategoryData {
+export interface NodeData {
   id: string;
   name: string;
   columns: ColumnData[];
-  superCategory: LabeledNode;
+  category: LabeledNode;
   x?: number;
   y?: number;
   width?: number;
@@ -64,21 +64,21 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
   if (!treeData || treeData.length === 0) {
     return {
       columnData: [],
-      categoryData: [],
+      nodeData: [],
       superCategoryData: []
     };
   }
   // Step 1: Extract column data from tree nodes
   const columnData: ColumnData[] = [];
-  const categoryMap: Record<string, string[]> = {};
+  const nodeMap: Record<string, string[]> = {};
   const superCategoryMap: Record<string, string[]> = {};
-  const categoryData: CategoryData[] = [];
+  const nodeData: NodeData[] = [];
   const superCategoryData: SuperCategoryData[] = [];
 
   // Process depth 0 nodes as super categories
-  treeData.forEach((superCategoryNode, superCategoryIndex) => {
-    const superCategoryName = superCategoryNode.label.text;
-    const superCategoryId = superCategoryNode.id;
+  treeData.forEach((superCategoryTreeNode, superCategoryIndex) => {
+    const superCategoryName = superCategoryTreeNode.label.text;
+    const superCategoryId = superCategoryTreeNode.id;
     superCategoryMap[superCategoryId] = [];
     const superCategory: SuperCategoryData = {
       id: superCategoryId,
@@ -87,28 +87,28 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
     };
 
     // Process depth 1 nodes as categories
-    if (superCategoryNode.children) {
-      superCategoryNode.children.forEach((categoryNode, categoryIndex) => {
-        const categoryName = categoryNode.label.text;
-        const categoryId = categoryNode.id;
-        categoryMap[categoryId] = [];
-        superCategoryMap[superCategoryId].push(categoryId);
-        const category: CategoryData = {
-          id: categoryId,
-          name: categoryName,
+    if (superCategoryTreeNode.children) {
+      superCategoryTreeNode.children.forEach((nodeTreeNode, categoryIndex) => {
+        const nodeName = nodeTreeNode.label.text;
+        const nodeId = nodeTreeNode.id;
+        nodeMap[nodeId] = [];
+        superCategoryMap[superCategoryId].push(nodeId);
+        const node: NodeData = {
+          id: nodeId,
+          name: nodeName,
           columns: [],
-          superCategory: superCategory,
+          category: superCategory,
         };
         // Process depth 2 nodes as columns
-        if (categoryNode.children) {
-          categoryNode.children.forEach((columnNode, columnIndex) => {
+        if (nodeTreeNode.children) {
+          nodeTreeNode.children.forEach((columnNode, columnIndex) => {
             const columnId = columnNode.id;
             const column: ColumnData = {
               id: columnId,
               name: columnNode.label.text,
               category: {
-                id: categoryId,
-                name: categoryName,
+                id: nodeId,
+                name: nodeName,
               },
               superCategory: {
                 id: superCategoryId,
@@ -122,12 +122,12 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
               y: columnNode.y ?? 0,
             };
             columnData.push(column);
-            categoryMap[categoryId].push(columnId);
-            category.columns.push(column);
+            nodeMap[nodeId].push(columnId);
+            node.columns.push(column);
           });
-          categoryData.push(category);
+          nodeData.push(node);
         }
-        superCategory.categories.push(category);
+        superCategory.categories.push(node);
       });
       superCategoryData.push(superCategory);
     }
@@ -146,7 +146,7 @@ export function getHierarchyData(treeData: TreeNode[], layoutConfig: LayoutConfi
 
   return {
     columnData: columnDataWithWidth,
-    categoryData,
+    nodeData,
     superCategoryData
   };
 }

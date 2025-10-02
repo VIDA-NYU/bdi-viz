@@ -16,7 +16,7 @@ export function renderColumns(
   layoutConfig: LayoutConfig,
   columnsPosition: number,
   currentExpanding: any,
-  categoryColorScale: (id: string) => string,
+  nodeColorScale: (id: string) => string,
   globalQuery?: string,
   orientation: ColumnOrientation = ColumnOrientation.HORIZONTAL,
   setSourceColumns?: (columns: string[]) => void
@@ -110,7 +110,7 @@ export function renderColumns(
         .attr('height', columnHeight)
         .attr('rx', styles.column.cornerRadius)
         .attr('fill', styles.column.fill)
-        .attr('stroke', categoryColorScale(d.category.id))
+        .attr('stroke', nodeColorScale(d.category.id))
         .attr('stroke-width', styles.column.strokeWidth);
       
       // Category indicator bar
@@ -120,7 +120,7 @@ export function renderColumns(
         .attr('width', styles.categoryIndicator.width)
         .attr('height', columnHeight - (styles.categoryIndicator.margin * 2))
         .attr('rx', styles.categoryIndicator.cornerRadius)
-        .attr('fill', categoryColorScale(d.category.id))
+        .attr('fill', nodeColorScale(d.category.id))
         .attr('opacity', styles.categoryIndicator.opacity);
       
       // Calculate available text width
@@ -166,19 +166,19 @@ export function renderColumns(
         .attr('stroke-width', styles.column.hoverStrokeWidth);
       
       // Highlight the related paths
-      g.selectAll('.column-category-path')
+      g.selectAll('.column-node-path')
         .filter(path => (path as any)?.column?.id === d.id)
         .attr('stroke-width', styles.path.highlightWidth)
         .attr('stroke-opacity', 1)
         .attr('stroke-dasharray', '0');
       
-      // Highlight the category
-      g.select(`#category-${d.category.id}`)
+      // Highlight the node
+      g.select(`#node-${d.category.id}`)
         .select('rect')
         .attr('stroke-width', styles.column.hoverStrokeWidth);
       
       // Fade other paths
-      g.selectAll('.column-category-path')
+      g.selectAll('.column-node-path')
         .filter(path => (path as any)?.column?.id !== d.id)
         .attr('stroke-opacity', styles.path.fadedOpacity);
       
@@ -230,10 +230,10 @@ export function renderColumns(
       g.selectAll('.column rect')
         .attr('stroke-width', styles.column.strokeWidth);
       
-      g.selectAll('.category rect')
+      g.selectAll('.node rect')
         .attr('stroke-width', styles.column.strokeWidth);
       
-      g.selectAll('.column-category-path')
+      g.selectAll('.column-node-path')
         .attr('stroke-width', styles.path.normalWidth)
         .attr('stroke-opacity', styles.path.normalOpacity)
         .attr('stroke-dasharray', styles.path.dashArray);
@@ -264,7 +264,7 @@ export function renderColumnsHorizontal(
   layoutConfig: LayoutConfig,
   columnsY: number,
   currentExpanding: any,
-  categoryColorScale: (id: string) => string,
+  nodeColorScale: (id: string) => string,
   globalQuery?: string
 ) {
   return renderColumns(
@@ -273,7 +273,7 @@ export function renderColumnsHorizontal(
     layoutConfig,
     columnsY,
     currentExpanding,
-    categoryColorScale,
+    nodeColorScale,
     globalQuery,
     ColumnOrientation.HORIZONTAL
   );
@@ -286,7 +286,7 @@ export function renderColumnsVertical(
   layoutConfig: LayoutConfig,
   columnsX: number,
   currentExpanding: any,
-  categoryColorScale: (id: string) => string,
+  nodeColorScale: (id: string) => string,
   setSourceColumns: (columns: string[]) => void,
   globalQuery?: string
 ) {
@@ -296,7 +296,7 @@ export function renderColumnsVertical(
     layoutConfig,
     columnsX,
     currentExpanding,
-    categoryColorScale,
+    nodeColorScale,
     globalQuery,
     ColumnOrientation.VERTICAL,
     setSourceColumns

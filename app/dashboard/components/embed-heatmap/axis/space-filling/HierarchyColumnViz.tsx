@@ -61,23 +61,23 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
   // Process tree data into the format needed for our visualization
   const { 
     columnData, 
-    categoryData, 
+    nodeData, 
     superCategoryData 
   } = useMemo(() => getHierarchyData(targetTreeData, layoutConfig), [targetTreeData, layoutConfig]);
 
   // Calculate spacing and positions
   const columnsY = useMemo(() => 0, []);
-  const categoryY = useMemo(() => columnsY + layoutConfig.columnHeight + layoutConfig.columnSpacing, [columnsY, layoutConfig.columnHeight, layoutConfig.columnSpacing]);
-  const superCategoryY = useMemo(() => categoryY + layoutConfig.hierarchyHeight + layoutConfig.hierarchySpacing, [categoryY, layoutConfig.hierarchyHeight, layoutConfig.hierarchySpacing]);
+  const nodeY = useMemo(() => columnsY + layoutConfig.columnHeight + layoutConfig.columnSpacing, [columnsY, layoutConfig.columnHeight, layoutConfig.columnSpacing]);
+  const superCategoryY = useMemo(() => nodeY + layoutConfig.hierarchyHeight + layoutConfig.hierarchySpacing, [nodeY, layoutConfig.hierarchyHeight, layoutConfig.hierarchySpacing]);
 
   const spaceFillingWidth = useMemo(() => columnData.reduce(
     (acc, column) => Math.max(acc, column.x! + column.width!),
     0 // Initial value
   ), [columnData]);
 
-  const categoryColorScale = useMemo(() => getOptimalCategoryColorScale(
-    categoryData.map(c => c.id)
-  ), [categoryData]);
+  const nodeColorScale = useMemo(() => getOptimalCategoryColorScale(
+    nodeData.map(c => c.id)
+  ), [nodeData]);
 
   // Render function
   const renderVisualization = useCallback(() => {
@@ -91,14 +91,14 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
       g, 
       columnData,
       superCategoryData, 
-      categoryData, 
+      nodeData, 
       {
         ...layoutConfig,
         innerWidth: spaceFillingWidth
       }, 
       superCategoryY, 
-      categoryY,
-      categoryColorScale,
+      nodeY,
+      nodeColorScale,
       selectedTargetNodes,
       setSelectedTargetNodes
     );
@@ -106,14 +106,14 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     renderEdgeBundlingVertical(
       g, 
       columnData, 
-      categoryData, 
+      nodeData, 
       {
         ...layoutConfig,
         innerWidth: spaceFillingWidth
       }, 
       columnsY, 
-      categoryY,
-      categoryColorScale,
+      nodeY,
+      nodeColorScale,
     );
 
     renderColumnsHorizontal(
@@ -122,7 +122,7 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
       layoutConfig, 
       columnsY, 
       currentExpanding,
-      categoryColorScale,
+      nodeColorScale,
       globalQuery,
     );
 
@@ -144,15 +144,15 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     innerWidth, 
     innerHeight, 
     columnData, 
-    categoryData, 
+    nodeData, 
     superCategoryData,
     layoutConfig,
     spaceFillingWidth,
     superCategoryY,
-    categoryY,
+    nodeY,
     columnsY,
     currentExpanding,
-    categoryColorScale,
+    nodeColorScale,
     globalQuery,
     selectedTargetNodes,
     setSelectedTargetNodes
