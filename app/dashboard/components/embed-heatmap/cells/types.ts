@@ -16,6 +16,9 @@ interface CellProps {
     onLeave?: () => void;
     onClick?: (data: AggregatedCandidate) => void;
     isHighlighted?: boolean;
+    hasComment?: boolean;
+    onCommentClick?: (data: AggregatedCandidate, event?: React.MouseEvent) => void;
+    onContextMenu?: (event: React.MouseEvent, data: AggregatedCandidate) => void;
 }
 
 export type {

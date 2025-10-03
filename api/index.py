@@ -977,6 +977,127 @@ def new_matcher():
     return {"task_id": task.id}
 
 
+# ----------------------
+# Session-scoped cell comments API
+# ----------------------
+
+
+def _comments_file(session: str) -> str:
+    return get_session_file(session, "comments.json", create_dir=True)
+
+
+def _read_comments_map(session: str) -> dict:
+    path = _comments_file(session)
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception:
+        pass
+    return {}
+
+
+def _write_comments_map(session: str, data: dict) -> None:
+    path = _comments_file(session)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data or {}, f, indent=2)
+    except Exception:
+        pass
+
+
+def _cell_key(source: str, target: str) -> str:
+    return f"{source}::{target}"
+
+
+@app.route("/api/comments/list", methods=["POST"])
+def comments_list():
+    session = extract_session_name(request)
+    payload = request.json or {}
+    source = payload.get("sourceColumn")
+    target = payload.get("targetColumn")
+
+    data = _read_comments_map(session)
+
+    if source and target:
+        key = _cell_key(source, target)
+        return {"message": "success", "comments": data.get(key, [])}
+
+    return {"message": "success", "commentsMap": data}
+
+
+@app.route("/api/comments/add", methods=["POST"])
+def comments_add():
+    session = extract_session_name(request)
+    payload = request.json or {}
+    source = payload.get("sourceColumn")
+    target = payload.get("targetColumn")
+    text = (payload.get("text") or "").strip()
+    if not source or not target or not text:
+        return {"message": "failure", "error": "Missing source/target/text"}, 400
+
+    data = _read_comments_map(session)
+    key = _cell_key(source, target)
+    arr = data.get(key, [])
+    arr.append({"text": text, "createdAt": pd.Timestamp.utcnow().isoformat()})
+    data[key] = arr
+    _write_comments_map(session, data)
+    return {"message": "success", "comments": arr}
+
+
+@app.route("/api/comments/set", methods=["POST"])
+def comments_set():
+    session = extract_session_name(request)
+    payload = request.json or {}
+    source = payload.get("sourceColumn")
+    target = payload.get("targetColumn")
+    comments = payload.get("comments", [])
+    if not source or not target or not isinstance(comments, list):
+        return {"message": "failure", "error": "Invalid payload"}, 400
+
+    # Normalize to array of objects { text, createdAt }
+    normalized = []
+    for c in comments:
+        if isinstance(c, dict) and "text" in c:
+            obj = {
+                "text": str(c.get("text", "")),
+                "createdAt": str(
+                    c.get("createdAt") or pd.Timestamp.utcnow().isoformat()
+                ),
+            }
+            if obj["text"].strip():
+                normalized.append(obj)
+        else:
+            s = str(c).strip()
+            if s:
+                normalized.append(
+                    {"text": s, "createdAt": pd.Timestamp.utcnow().isoformat()}
+                )
+
+    data = _read_comments_map(session)
+    key = _cell_key(source, target)
+    data[key] = normalized
+    _write_comments_map(session, data)
+    return {"message": "success", "comments": normalized}
+
+
+@app.route("/api/comments/clear", methods=["POST"])
+def comments_clear():
+    session = extract_session_name(request)
+    payload = request.json or {}
+    source = payload.get("sourceColumn")
+    target = payload.get("targetColumn")
+    if not source or not target:
+        return {"message": "failure", "error": "Missing source/target"}, 400
+    data = _read_comments_map(session)
+    key = _cell_key(source, target)
+    data[key] = []
+    _write_comments_map(session, data)
+    return {"message": "success"}
+
+
 @app.route("/api/matcher/status", methods=["POST"])
 def matcher_status():
     session = extract_session_name(request)

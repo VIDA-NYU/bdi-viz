@@ -14,7 +14,10 @@ const RectCell: React.FC<CellProps> = ({
     onMouseMove,
     onLeave,
     onClick,
-    isHighlighted
+    isHighlighted,
+    hasComment,
+    onCommentClick,
+    onContextMenu,
 }) => {
     const theme = useTheme();
 
@@ -32,28 +35,45 @@ const RectCell: React.FC<CellProps> = ({
     };
 
     return (
-        <rect
-            data-testid={`cell-${data.sourceColumn}-${data.targetColumn}`}
-            className='heatmap-cell'
-            x={x}
-            y={y}
-            width={width}
-            height={height}
-            fill={getFillColor()}
-            opacity={getOpacity()}
-            stroke="black"
-            strokeWidth={isHighlighted ? 2 : 0}
-            onMouseEnter={(e) => {
-                onHover?.(e, data);
-            }}
-            onMouseLeave={(e) => {
-                onLeave?.();
-            }}
+        <g
+            onMouseEnter={(e) => onHover?.(e, data)}
+            onMouseLeave={() => onLeave?.()}
             onMouseMove={onMouseMove}
             onClick={() => onClick?.(data)}
-            rx={3}
-            ry={3}
-        />
+            onContextMenu={(e) => {
+                e.preventDefault();
+                onContextMenu?.(e, data);
+            }}
+        >
+            <rect
+                data-testid={`cell-${data.sourceColumn}-${data.targetColumn}`}
+                className='heatmap-cell'
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                fill={getFillColor()}
+                opacity={getOpacity()}
+                stroke="black"
+                strokeWidth={isHighlighted ? 2 : 0}
+                rx={3}
+                ry={3}
+            />
+            {hasComment && (
+                <circle
+                    cx={x + width - Math.min(4, Math.max(3, Math.min(width, height) * 0.12))}
+                    cy={y + Math.min(4, Math.max(3, Math.min(width, height) * 0.12))}
+                    r={Math.max(4, Math.min(4, Math.min(width, height) * 0.1))}
+                    fill={theme.palette.warning.main}
+                    stroke={theme.palette.common.white}
+                    strokeWidth={0.6}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onCommentClick?.(data, e);
+                    }}
+                />
+            )}
+        </g>
     );
 };
 

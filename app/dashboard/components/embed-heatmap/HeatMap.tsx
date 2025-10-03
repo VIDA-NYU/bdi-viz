@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useContext } from "react";
+import React, { useState, useMemo, useCallback, useContext, useEffect } from "react";
 import { Box, Tooltip, IconButton, Chip } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { useTheme } from "@mui/material/styles";
@@ -17,6 +17,8 @@ import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import HierarchicalColumnViz from "./axis/space-filling/HierarchyColumnViz";
 import SourceHierarchyColumnViz from "./axis/space-filling/SourceHierarchyColumnViz";
+import CellCommentDialog, { CellComment } from "../comments/CellCommentDialog";
+import { listAllCellCommentsMap, listCellComments, addCellComment } from "@/app/lib/heatmap/heatmap-helper";
 
 interface HeatMapProps {
   data: AggregatedCandidate[];
@@ -126,6 +128,55 @@ const HeatMap: React.FC<HeatMapProps> = ({
     currentExpanding: currentExpanding as AggregatedCandidate,
     useHorizontalPadding: false,
   });
+
+  // Comments state (per session, stored on backend)
+  const [cellComments, setCellComments] = useState<Record<string, CellComment[]>>({});
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [activeCell, setActiveCell] = useState<AggregatedCandidate | null>(null);
+
+  const getCellKey = useCallback((sourceColumn: string, targetColumn: string) => `${sourceColumn}::${targetColumn}`, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const map = await listAllCellCommentsMap();
+        if (!cancelled) setCellComments(map);
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const openCommentFor = useCallback((data: AggregatedCandidate) => {
+    setActiveCell(data);
+    const key = getCellKey(data.sourceColumn, data.targetColumn);
+    const arr = cellComments[key] || [];
+    setCommentDraft("");
+    setCommentOpen(true);
+  }, [cellComments, getCellKey]);
+
+  const handleSaveComment = useCallback(() => {
+    if (!activeCell) return;
+    const trimmed = commentDraft.trim();
+    if (!trimmed) { setCommentOpen(false); return; }
+    (async () => {
+      try {
+        const updated = await addCellComment(activeCell.sourceColumn, activeCell.targetColumn, trimmed);
+        const key = getCellKey(activeCell.sourceColumn, activeCell.targetColumn);
+        setCellComments(prev => ({ ...prev, [key]: updated }));
+      } catch (_) {}
+      setCommentOpen(false);
+    })();
+  }, [activeCell, commentDraft, getCellKey]);
+
+  const handleClearComment = useCallback(() => {
+    setCommentDraft("");
+  }, []);
+
+  const handleCloseDialog = useCallback(() => {
+    setCommentOpen(false);
+  }, []);
 
   // Handle cell click
   const handleCellClick = useCallback(
@@ -247,6 +298,8 @@ const HeatMap: React.FC<HeatMapProps> = ({
             onMouseMove={(event: React.MouseEvent) => showTooltip(event, d)}
             onMouseLeave={hideTooltip}
             deleteCandidate={() => deleteCandidate(d)}
+            comments={(cellComments[getCellKey(d.sourceColumn, d.targetColumn)] || [])}
+            onCommentOpen={() => openCommentFor(d)}
           />
         );
       }
@@ -279,6 +332,9 @@ const HeatMap: React.FC<HeatMapProps> = ({
           onLeave={hideTooltip}
           onClick={() => handleCellClick(d)}
           isHighlighted={isHighlighted}
+          hasComment={Boolean((cellComments[getCellKey(d.sourceColumn, d.targetColumn)] || []).length)}
+          onCommentClick={(data) => openCommentFor(data)}
+          onContextMenu={(e, data) => openCommentFor(data)}
         />
       );
     });
@@ -300,7 +356,10 @@ const HeatMap: React.FC<HeatMapProps> = ({
     config, 
     color, 
     selectedCandidate, 
-    setGlobalCandidateHighlight
+    setGlobalCandidateHighlight,
+    cellComments,
+    getCellKey,
+    openCommentFor
   ]);
 
   // Memoize tooltip element (MUI-styled for consistency)
@@ -409,6 +468,19 @@ const HeatMap: React.FC<HeatMapProps> = ({
         {/* Tooltip */}
         {tooltipElement}
       </Box>
+
+      {/* Comment editor dialog */}
+      <CellCommentDialog
+        open={commentOpen}
+        sourceColumn={activeCell?.sourceColumn}
+        targetColumn={activeCell?.targetColumn}
+        comments={activeCell ? (cellComments[getCellKey(activeCell.sourceColumn, activeCell.targetColumn)] || []) : []}
+        draft={commentDraft}
+        onDraftChange={setCommentDraft}
+        onSave={handleSaveComment}
+        onCancel={handleCloseDialog}
+        onClear={handleClearComment}
+      />
 
       {hasSourceOntology && (
         <Box sx={{ position: "absolute", top: 160, left: MARGIN.left + 120, zIndex: 999 }}>

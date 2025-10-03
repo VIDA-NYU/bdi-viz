@@ -11,6 +11,8 @@ interface ExpandedCellProps {
     onMouseMove: (event: React.MouseEvent) => void;
     onMouseLeave: () => void;
     deleteCandidate: () => void;
+    comments?: { text: string; createdAt: string }[];
+    onCommentOpen?: (data: AggregatedCandidate) => void;
    }
    
    interface BaseExpandedCellProps extends ExpandedCellProps {
