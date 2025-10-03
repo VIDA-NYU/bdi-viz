@@ -1,14 +1,15 @@
+from typing import Any, Dict
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from typing import Dict, Any
+
 from api.langchain.agent import Agent, AIMessage
 from api.langchain.pydantic import (
+    AttributeProperties,
     CandidateExplanation,
     Ontology,
     RelatedSources,
-    AttributeProperties,
 )
-
 
 mock_candidate = {
     "sourceColumn": "age",

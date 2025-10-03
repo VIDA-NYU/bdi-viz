@@ -1,12 +1,13 @@
 # flake8: noqa
 import os
-import sys
-import pytest
-import tempfile
 import shutil
-import pandas as pd
+import sys
+import tempfile
 from typing import List, Optional
 from unittest.mock import Mock, patch
+
+import pandas as pd
+import pytest
 
 # Add the parent directory to sys.path so we can import from api package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -14,8 +15,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 # Import the global Flask app instance so that all API routes are accessible
 from api.index import app as flask_app  # noqa: E402
 from api.langchain.memory import MemoryRetriever  # noqa: E402
-from api.session_manager import SessionManager  # noqa: E402
 from api.matching_task import MatchingTask  # noqa: E402
+from api.session_manager import SessionManager  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -28,18 +29,51 @@ def _isolate_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
 
+@pytest.fixture(autouse=True)
+def _default_session_is_test_session(monkeypatch):
+    """Make API endpoints default to 'test_session' instead of 'default'.
+
+    This avoids touching the real 'default' session during tests.
+    """
+
+    # Patch only the function used by routes to resolve session names
+    def _extract_session_name(req):
+        try:
+            if getattr(req, "form", None) and req.form is not None:
+                if "session_name" in req.form:
+                    from api.utils import sanitize_session_name as _sanitize
+
+                    return _sanitize(req.form.get("session_name"))
+            if getattr(req, "json", None) and req.json is not None:
+                from api.utils import sanitize_session_name as _sanitize
+
+                return _sanitize(req.json.get("session_name", "test_session"))
+        except Exception:
+            pass
+        return "test_session"
+
+    monkeypatch.setattr(
+        "api.index.extract_session_name", _extract_session_name, raising=True
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _kill_redis_6380_before_tests():
     """Ensure no Redis process is bound to 6380 before running tests."""
     try:
         import subprocess
+
         # Try lsof first (macOS/Linux), fall back to pkill
-        result = subprocess.run(["bash", "-lc", "lsof -ti :6380 || true"], capture_output=True, text=True)
+        result = subprocess.run(
+            ["bash", "-lc", "lsof -ti :6380 || true"], capture_output=True, text=True
+        )
         pids = result.stdout.strip()
         if pids:
             subprocess.run(["bash", "-lc", f"kill -9 {pids} || true"], check=False)
         else:
-            subprocess.run(["bash", "-lc", "pkill -f 'redis-server.*6380' || true"], check=False)
+            subprocess.run(
+                ["bash", "-lc", "pkill -f 'redis-server.*6380' || true"], check=False
+            )
     except Exception:
         pass
 
@@ -262,7 +296,11 @@ def mock_load_ontology_flat_utils():
         yield mock_load_ontology_flat
 
 
-def _mock_load_ontology(dataset: str = "target", columns: Optional[List[str]] = None):
+def _mock_load_ontology(
+    dataset: str = "target",
+    columns: Optional[List[str]] = None,
+    session: Optional[str] = None,
+):
     if dataset == "target":
         if columns is None:
             columns = list(MOCK_TARGET_ONTOLOGY.keys())
@@ -315,7 +353,7 @@ def _mock_load_ontology(dataset: str = "target", columns: Optional[List[str]] = 
         ]
 
 
-def _mock_load_property(target_column: str):
+def _mock_load_property(target_column: str, session: Optional[str] = None):
     return MOCK_TARGET_ONTOLOGY[target_column]
 
 
@@ -382,6 +420,7 @@ def mock_celery_task():
 @pytest.fixture(autouse=True)
 def _mock_celery_apply_async(monkeypatch):
     """Mock Celery apply_async and AsyncResult for API tasks to avoid broker IO."""
+
     # Mock run_matching_task.apply_async
     def _mock_apply_async_match(args, kwargs=None, queue=None):
         mock_result = Mock()
@@ -400,7 +439,9 @@ def _mock_celery_apply_async(monkeypatch):
         "api.index.run_matching_task.apply_async", _mock_apply_async_match, raising=True
     )
     monkeypatch.setattr(
-        "api.index.run_matching_task.AsyncResult", _mock_async_result_match, raising=True
+        "api.index.run_matching_task.AsyncResult",
+        _mock_async_result_match,
+        raising=True,
     )
 
     # Mock infer_source_ontology_task.apply_async
@@ -451,4 +492,70 @@ def _mock_celery_apply_async(monkeypatch):
         "api.index.infer_target_ontology_task.AsyncResult",
         _mock_async_result_target,
         raising=True,
+    )
+
+    # Mock run_new_matcher_task.delay and AsyncResult to avoid broker IO
+    def _mock_delay_new_matcher(session, name, code, params):
+        mock_result = Mock()
+        mock_result.id = "test-new-matcher-task-id"
+        return mock_result
+
+    def _mock_async_result_new_matcher(task_id):
+        mock_result = Mock()
+        mock_result.state = "SUCCESS"
+        mock_result.info = None
+        mock_result.result = {"status": "completed", "error": None}
+        mock_result.traceback = None
+        return mock_result
+
+    monkeypatch.setattr(
+        "api.index.run_new_matcher_task.delay",
+        _mock_delay_new_matcher,
+        raising=True,
+    )
+    monkeypatch.setattr(
+        "api.index.run_new_matcher_task.AsyncResult",
+        _mock_async_result_new_matcher,
+        raising=True,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _mock_agents(monkeypatch):
+    """Mock agent factories to avoid real OpenAI usage during tests."""
+
+    class _DummyAgent:
+        def handle_user_operation(self, operation, candidate, is_match_to_agent):
+            return None
+
+        def handle_undo_operation(self, operation, candidate, is_match_to_agent):
+            return None
+
+        def remember_ontology(self, ontology):
+            return None
+
+        # Optional helpers if an endpoint accidentally calls them
+        def explain(self, candidate, with_memory=True):
+            from api.langchain.pydantic import CandidateExplanation
+
+            return CandidateExplanation(
+                explanations=[], is_match=True, relevant_knowledge=[]
+            )
+
+        def invoke(self, *args, **kwargs):
+            class _Resp:
+                def model_dump(self):
+                    return {"answer": "ok"}
+
+            return _Resp()
+
+    def _get_agent(session: str = "test_session"):
+        return _DummyAgent()
+
+    def _get_langgraph_agent(session: str = "test_session"):
+        return _DummyAgent()
+
+    monkeypatch.setattr("api.index.get_agent", _get_agent, raising=True)
+    monkeypatch.setattr(
+        "api.index.get_langgraph_agent", _get_langgraph_agent, raising=True
     )

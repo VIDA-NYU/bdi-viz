@@ -1,4 +1,5 @@
 import pytest
+
 from api.utils import TaskState
 
 
@@ -86,7 +87,8 @@ class TestMatchingTask:
         sample_target_csv,
     ):
         """When groundtruth_pairs are provided, only those pairs become candidates,
-        marked as accepted with matcher 'groundtruth', and value matches are generated."""
+        marked as accepted with matcher 'groundtruth', and value matches are generated.
+        """
 
         matching_task = session_manager.get_session("test_session").matching_task
 

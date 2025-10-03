@@ -1,10 +1,50 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from api.index import SESSION_MANAGER
 
 
 class TestAPIEndpoints:
     """Test the API endpoints."""
+
+    def test_session_create(self, client):
+        response = client.post(
+            "/api/session/create", json={"session_name": "test_session"}
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+        assert "sessions" in data
+        assert "test_session" in data["sessions"]
+
+    def test_session_delete(self, client):
+        response = client.post(
+            "/api/session/delete", json={"session_name": "test_session"}
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+        assert "sessions" in data
+        assert data["sessions"] == ["default"]
+
+        response = client.post(
+            "/api/session/create", json={"session_name": "test_session"}
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+        assert "sessions" in data
+        assert "test_session" in data["sessions"]
+
+    def test_session_list(self, client):
+        response = client.post(
+            "/api/session/list", json={"session_name": "test_session"}
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+        assert "sessions" in data
+        assert "test_session" in data["sessions"]
+        assert "default" in data["sessions"]
 
     def test_get_history(
         self,
@@ -14,8 +54,8 @@ class TestAPIEndpoints:
     ):
         """POST /api/history should return 200 and success message."""
 
-        # Prepare the default session's matching task with sample data.
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        # Prepare the test_session session's matching task with sample data.
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
 
         # Send an empty JSON payload to satisfy application/json requirement.
@@ -28,8 +68,8 @@ class TestAPIEndpoints:
     def test_get_results(self, client, sample_source_csv, sample_target_csv):
         """POST /api/results should return 200 and success message."""
 
-        # Prepare the default session's matching task with sample data.
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        # Prepare the test_session session's matching task with sample data.
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
 
         # Send an empty JSON payload to satisfy application/json requirement.
@@ -42,15 +82,21 @@ class TestAPIEndpoints:
         assert "candidates" in results
         assert "sourceClusters" in results
 
-    def test_start_matching_csv_input(self, client, sample_source_csv):
+    def test_start_matching_csv_input(
+        self, client, sample_source_csv, sample_target_csv
+    ):
         """
         POST /api/matching/start with csv_input form should return task_id.
         """
 
         source_csv = sample_source_csv.to_csv(index=False)
+        target_csv = sample_target_csv.to_csv(index=False)
         form = {
             "type": "csv_input",
             "source_csv": source_csv,
+            "target_csv": target_csv,
+            "source_csv_name": "mock_source.csv",
+            "target_csv_name": "mock_target.csv",
         }
         # no target => target defaults to GDC_DATA_PATH in handler
         response = client.post(
@@ -62,15 +108,22 @@ class TestAPIEndpoints:
         data = response.get_json()
         assert "task_id" in data
 
-    def test_start_matching_with_groundtruth(self, client, sample_source_csv):
+    def test_start_matching_with_groundtruth(
+        self, client, sample_source_csv, sample_target_csv
+    ):
         """POST /api/matching/start with groundtruth CSV should enqueue task successfully."""
 
         source_csv = sample_source_csv.to_csv(index=False)
+        target_csv = sample_target_csv.to_csv(index=False)
         groundtruth_csv = "source_attribute,target_attribute\nGender,gender\nAge,age\n"
         form = {
             "type": "csv_input",
             "source_csv": source_csv,
+            "target_csv": target_csv,
             "groundtruth_csv": groundtruth_csv,
+            "source_csv_name": "mock_source.csv",
+            "target_csv_name": "mock_target.csv",
+            "groundtruth_csv_name": "mock_groundtruth.csv",
         }
 
         response = client.post(
@@ -91,7 +144,7 @@ class TestAPIEndpoints:
         assert "status" in data
 
     def test_value_bins(self, client, sample_source_csv, sample_target_csv):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
 
         response = client.post("/api/value/bins", json={})
@@ -101,7 +154,7 @@ class TestAPIEndpoints:
         assert "results" in data
 
     def test_value_matches(self, client, sample_source_csv, sample_target_csv):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
 
         response = client.post("/api/value/matches", json={})
@@ -118,7 +171,7 @@ class TestAPIEndpoints:
         assert "results" in data
 
     def test_target_ontology(self, client, sample_source_csv, sample_target_csv):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
         response = client.post("/api/ontology/target", json={})
         assert response.status_code == 200
@@ -127,7 +180,7 @@ class TestAPIEndpoints:
         assert "results" in data
 
     def test_source_ontology(self, client, sample_source_csv, sample_target_csv):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
         response = client.post("/api/ontology/source", json={})
         assert response.status_code == 200
@@ -150,7 +203,7 @@ class TestAPIEndpoints:
         assert "property" in data
 
     def test_candidates_results_csv(self, client, sample_source_csv, sample_target_csv):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
         default_task.get_candidates()
         response = client.post("/api/candidates/results", json={"format": "csv"})
@@ -162,7 +215,7 @@ class TestAPIEndpoints:
     def test_candidates_results_json(
         self, client, sample_source_csv, sample_target_csv
     ):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
         default_task.get_candidates()
         response = client.post("/api/candidates/results", json={"format": "json"})
@@ -173,7 +226,7 @@ class TestAPIEndpoints:
         assert len(data["results"]) > 0
 
     def test_get_matchers(self, client, sample_source_csv, sample_target_csv):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
         default_task.get_candidates()
         response = client.post("/api/matchers", json={})
@@ -183,7 +236,7 @@ class TestAPIEndpoints:
         assert isinstance(data["matchers"], list)
 
     def test_new_matcher_and_status(self, client, sample_source_csv, sample_target_csv):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
 
         with patch("api.index.run_new_matcher_task.delay") as mock_delay:
@@ -209,7 +262,7 @@ class TestAPIEndpoints:
             assert data["status"] in {"completed", "pending", "failed"}
 
     def test_agent_explain(self, client, sample_source_csv, sample_target_csv):
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
         with patch("api.index.get_agent") as mock_get_agent:
             mock_agent = MagicMock()
@@ -300,7 +353,9 @@ class TestAPIEndpoints:
             mock_task.state = "SUCCESS"
             mock_task.result = {"status": "completed", "taskId": "task-src-1"}
             mock_async.return_value = mock_task
-            response = client.post("/api/ontology/source/status", json={"taskId": "task-src-1"})
+            response = client.post(
+                "/api/ontology/source/status", json={"taskId": "task-src-1"}
+            )
             assert response.status_code == 200
             data = response.get_json()
             assert data["status"] in {"completed", "pending", "failed", "SUCCESS"}
@@ -311,7 +366,9 @@ class TestAPIEndpoints:
             mock_task.state = "PENDING"
             mock_task.result = None
             mock_async.return_value = mock_task
-            response = client.post("/api/ontology/target/status", json={"taskId": "task-tgt-1"})
+            response = client.post(
+                "/api/ontology/target/status", json={"taskId": "task-tgt-1"}
+            )
             assert response.status_code == 200
             data = response.get_json()
             assert data["status"] in {"pending", "PENDING"}
@@ -338,9 +395,11 @@ class TestAPIEndpoints:
             data = response.get_json()
             assert data.get("result") == "explored"
 
-    def test_agent_outer_source_endpoint(self, client, sample_source_csv, sample_target_csv):
+    def test_agent_outer_source_endpoint(
+        self, client, sample_source_csv, sample_target_csv
+    ):
         # Ensure matching task has data loaded
-        default_task = SESSION_MANAGER.get_session("default").matching_task
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)
         response = client.post(
             "/api/agent/outer-source",
@@ -349,3 +408,132 @@ class TestAPIEndpoints:
         assert response.status_code == 200
         data = response.get_json()
         assert data["message"] == "success"
+
+    def test_value_update_endpoint(self, client, sample_source_csv, sample_target_csv):
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
+        default_task.update_dataframe(sample_source_csv, sample_target_csv)
+        response = client.post(
+            "/api/value/update",
+            json={
+                "operation": "source",
+                "column": "Gender",
+                "value": "Male",
+                "newValue": "M",
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+
+        response = client.post(
+            "/api/value/update",
+            json={
+                "operation": "target",
+                "sourceColumn": "Gender",
+                "sourceValue": "male",
+                "targetColumn": "gender",
+                "newTargetValue": "female",
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+
+    def test_candidate_create_endpoint(
+        self, client, sample_source_csv, sample_target_csv
+    ):
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
+        default_task.update_dataframe(sample_source_csv, sample_target_csv)
+        response = client.post(
+            "/api/candidate/create",
+            json={
+                "candidate": {
+                    "sourceColumn": "Age",
+                    "targetColumn": "age",
+                    "status": "idle",
+                    "score": 0.8,
+                    "matcher": "m1",
+                }
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+
+        # test undo
+        response = client.post("/api/user-operation/undo", json={})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+
+        # test redo
+        response = client.post("/api/user-operation/redo", json={})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+
+    def test_get_dataset_names_endpoint(self, client):
+        response = client.post("/api/datasets/names", json={})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+        assert "sourceMeta" in data
+        assert "targetMeta" in data
+        assert data["sourceMeta"]["name"] == "mock_source.csv"
+        assert data["targetMeta"]["name"] == "mock_target.csv"
+
+    def test_candidate_delete_endpoint(
+        self, client, sample_source_csv, sample_target_csv
+    ):
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
+        default_task.update_dataframe(sample_source_csv, sample_target_csv)
+        response = client.post(
+            "/api/candidate/delete",
+            json={
+                "candidate": {
+                    "sourceColumn": "Age",
+                    "targetColumn": "age",
+                }
+            },
+        )
+
+        # test undo
+        response = client.post("/api/user-operation/undo", json={})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+
+        # test redo
+        response = client.post("/api/user-operation/redo", json={})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+
+    def test_run_new_matcher_task(self, client, sample_source_csv, sample_target_csv):
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
+        default_task.update_dataframe(sample_source_csv, sample_target_csv)
+        response = client.post(
+            "/api/matcher/new",
+            json={
+                "name": "m1",
+                "code": """
+            class MyCustomMatcher():
+                def __init__(self, name, weight=1, **params):
+                    self.name = name
+                    self.weight = 1
+                def top_matches(self, source, target, top_k=20, **kwargs):
+                    return []
+                def top_value_matches(self, source_values, target_values, top_k=20, **kwargs):
+                    return []
+            """,
+                "params": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "task_id" in data
+
+        response = client.post("/api/matcher/status", json={"taskId": data["task_id"]})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["status"] in {"completed", "pending", "failed"}

@@ -1,12 +1,13 @@
 import json
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from api.tools.candidate_tools import CandidateTools
-from api.tools.query_tools import QueryTools
-from api.tools.task_tools import TaskTools
 from api.tools.online_research_tools import OnlineResearchTools
+from api.tools.query_tools import QueryTools
 from api.tools.source_scraper import scraping_websource
+from api.tools.task_tools import TaskTools
 
 
 class TestCandidateTools:
