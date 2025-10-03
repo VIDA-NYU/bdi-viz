@@ -916,3 +916,35 @@ export {
     createCandidate,
     deleteCandidate,
 };
+
+// ----------------------
+// Comments API (session-scoped)
+// ----------------------
+
+type CellComment = { text: string; createdAt: string };
+
+export const listCellComments = async (sourceColumn: string, targetColumn: string): Promise<CellComment[]> => {
+    const response = await axios.post("/api/comments/list", { sourceColumn, targetColumn, session_name: getSessionName() }, { ...getHttpAgents() });
+    return (response.data?.comments || []) as CellComment[];
+};
+
+export const addCellComment = async (sourceColumn: string, targetColumn: string, text: string): Promise<CellComment[]> => {
+    const response = await axios.post("/api/comments/add", { sourceColumn, targetColumn, text, session_name: getSessionName() }, { ...getHttpAgents() });
+    return (response.data?.comments || []) as CellComment[];
+};
+
+export const setCellComments = async (sourceColumn: string, targetColumn: string, comments: CellComment[]): Promise<CellComment[]> => {
+    const response = await axios.post("/api/comments/set", { sourceColumn, targetColumn, comments, session_name: getSessionName() }, { ...getHttpAgents() });
+    return (response.data?.comments || []) as CellComment[];
+};
+
+export const clearCellComments = async (sourceColumn: string, targetColumn: string): Promise<void> => {
+    await axios.post("/api/comments/clear", { sourceColumn, targetColumn, session_name: getSessionName() }, { ...getHttpAgents() });
+};
+
+export const listAllCellCommentsMap = async (): Promise<Record<string, CellComment[]>> => {
+    const response = await axios.post("/api/comments/list", { session_name: getSessionName() }, { ...getHttpAgents() });
+    return (response.data?.commentsMap || {}) as Record<string, CellComment[]>;
+};
+
+export type { CellComment };
