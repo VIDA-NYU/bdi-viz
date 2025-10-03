@@ -3,13 +3,17 @@
 import axios from "axios";
 import http from 'http';
 import https from 'https';
+import { getSessionName, setSessionName } from "@/app/lib/settings/session";
 
 const candidateExplanationRequest = async (candidate: Candidate): Promise<CandidateExplanation | undefined> => {
     try {
         const httpAgent = new http.Agent({ keepAlive: true });
         const httpsAgent = new https.Agent({ keepAlive: true });
 
-        const resp = await axios.post("/api/agent/explain", candidate, {
+        const resp = await axios.post("/api/agent/explain", {
+            session_name: getSessionName(),
+            ...candidate,
+        }, {
             httpAgent,
             httpsAgent,
             timeout: 10000000, // Set timeout to unlimited
@@ -64,7 +68,10 @@ const agentSuggestValueMappings = async (candidate: Candidate): Promise<Suggeste
         const httpAgent = new http.Agent({ keepAlive: true });
         const httpsAgent = new https.Agent({ keepAlive: true });
 
-        const resp = await axios.post("/api/agent/value-mapping", candidate, {
+        const resp = await axios.post("/api/agent/value-mapping", {
+            session_name: getSessionName(),
+            ...candidate,
+        }, {
             httpAgent,
             httpsAgent,
             timeout: 10000000, // Set timeout to unlimited
@@ -84,6 +91,7 @@ const agentSuggestValueMappings = async (candidate: Candidate): Promise<Suggeste
 const agentThumbRequest = async (explanation: Explanation, userOperation: UserOperation) => {
     try {
         const resp = await axios.post("/api/agent/thumb", {
+            session_name: getSessionName(),
             explanation,
             userOperation,
         });
@@ -100,7 +108,10 @@ const agentGetRelatedSources = async (candidate: Candidate) => {
         const httpAgent = new http.Agent({ keepAlive: true });
         const httpsAgent = new https.Agent({ keepAlive: true });
 
-        const resp = await axios.post("/api/agent/outer-source", candidate, {
+        const resp = await axios.post("/api/agent/outer-source", {
+            session_name: getSessionName(),
+            ...candidate,
+        }, {
             httpAgent,
             httpsAgent,
             timeout: 10000000, // Set timeout to unlimited
@@ -130,6 +141,7 @@ const agentSearchOntology = async (query: string, candidate?: Candidate) => {
         const httpsAgent = new https.Agent({ keepAlive: true });
 
         const resp = await axios.post("/api/agent/explore", {
+            session_name: getSessionName(),
             candidate: candidate || undefined,
             query,
         }, {
