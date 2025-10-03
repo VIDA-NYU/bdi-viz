@@ -221,8 +221,8 @@ export function renderColumns(
         // Position above the column
         tooltip.attr('transform', `translate(${d.x + columnWidth / 2 - (textBox.width + styles.tooltip.padding.x * 2) / 2}, ${columnsPosition - styles.tooltip.offsetY})`);
       } else {
-        // Position to the right of the column
-        tooltip.attr('transform', `translate(${d.x + columnWidth / 2 - (textBox.width + styles.tooltip.padding.x * 2) / 2}, ${d.y + columnHeight})`);
+        // Position to the bottom of the column
+        tooltip.attr('transform', `translate(${d.x - (textBox.width - columnWidth + styles.tooltip.padding.x * 2)}, ${d.y + columnHeight})`);
       }
     })
     .on('mouseout', function() {

@@ -38,3 +38,22 @@ chroma_db
 
 tests/
 **/tests/
+
+.pytest_cache/
+**/.pytest_cache/
+**/pytest-coverage.txt
+**/pytest.xml
+
+api/matching_results_test_session.json
+matching_results_test_session.json
+
+report.json
+
+api/task_state_*.json
+.task_state_*.json
+celery.log
+
+# None default sessions
+api/sessions/*
+**/api/sessions/*
+!api/sessions/default
