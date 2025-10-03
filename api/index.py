@@ -442,7 +442,7 @@ def start_matching():
             with open(source_json_path, "r") as f:
                 source_json = json.load(f)
         # If not, or if the source has changed, infer ontology
-        if source_json is None or not source.equals(load_source_df()):
+        if source_json is None or not source.equals(load_source_df(session)):
             infer_source_ontology = True
     else:
         # If no .source.csv, infer and cache

@@ -1,9 +1,9 @@
 from api.matcher.bdikit import BDIKitMatcher
 from api.matcher.difflib import DiffLibMatcher
-from api.matcher.valentine import ValentineMatcher
 from api.matcher.magneto import MagnetoMatcher
 from api.matcher.rapidfuzz import RapidFuzzMatcher
 from api.matcher.rapidfuzz_value import RapidFuzzValueMatcher
+from api.matcher.valentine import ValentineMatcher
 
 
 class TestMatchers:
