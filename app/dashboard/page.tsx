@@ -262,6 +262,7 @@ export default function Dashboard() {
         } else {
             aggregatedCandidate = candidate as AggregatedCandidate;
         }
+        setSelectedCandidate(undefined);
         deleteCandidate({
             candidate: aggregatedCandidate,
             callback: handleFileUpload,
@@ -269,7 +270,7 @@ export default function Dashboard() {
             userOperationHistoryCallback: handleUserOperationsUpdate,
         });
         toastify("success", <p>Candidate deleted successfully!</p>);
-    }, [deleteCandidate]);
+    }, [deleteCandidate, setSelectedCandidate]);
 
     const headerContent = useMemo(() => (
         <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} alignItems="center">
