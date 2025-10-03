@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useContext } from 'react';
+import { useEffect, useState, useContext, useRef } from 'react';
 import { Box, FormControl, Autocomplete, TextField, useTheme, Checkbox, Button, Chip } from '@mui/material';
 import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 
@@ -18,6 +18,17 @@ const SourceColumnSelection: React.FC<SourceColumnSelectionProps> = ({ sourceCol
     const { setGlobalCandidateHighlight, setSelectedSourceNodes } = useContext(HighlightGlobalContext);
 
     const theme = useTheme();
+    const listboxRef = useRef<HTMLUListElement | null>(null);
+
+    const preserveListboxScroll = (fn: () => void) => {
+        const prevTop = listboxRef.current?.scrollTop ?? 0;
+        fn();
+        requestAnimationFrame(() => {
+            if (listboxRef.current) {
+                listboxRef.current.scrollTop = prevTop;
+            }
+        });
+    };
 
     // Build grouped options: All, Selected, Matched, Unmatched
     const groupOrder: Record<string, number> = { "All": 0, "Selected": 1, "Matched": 2, "Unmatched": 3 };
@@ -73,27 +84,39 @@ const SourceColumnSelection: React.FC<SourceColumnSelectionProps> = ({ sourceCol
                     value={selectedOptions}
                     isOptionEqualToValue={(option, value) => option.name === value.name}
                     inputValue={inputValue}
-                    onInputChange={(event, newValue) => setInputValue(newValue)}
+                    onInputChange={(event, newValue, reason) => {
+                        if (reason === 'input' || reason === 'clear') {
+                            setInputValue(newValue);
+                        }
+                        // ignore 'reset' to preserve user-typed text on selection
+                    }}
+                    clearOnBlur={false}
+                    clearOnEscape={false}
                     onChange={(event, newValue, reason, details) => {
                         const totalColumns = sourceColumns.length;
                         // Handle toggling All explicitly
                         if ((details as any)?.option?.name === 'all') {
                             const allSelected = selectedOptions.length === totalColumns;
-                            if (allSelected) {
-                                setSelectedOptions([]);
-                                handleEmit([]);
-                            } else {
-                                const allOpts = sourceColumns.map(col => ({ name: col.name, displayName: col.name, status: col.status, group: 'Selected' } as OptionItem));
-                                setSelectedOptions(allOpts);
-                                handleEmit(allOpts.map(o => o.name));
-                            }
+                            preserveListboxScroll(() => {
+                                if (allSelected) {
+                                    setSelectedOptions([]);
+                                    handleEmit([]);
+                                } else {
+                                    const allOpts = sourceColumns.map(col => ({ name: col.name, displayName: col.name, status: col.status, group: 'Selected' } as OptionItem));
+                                    setSelectedOptions(allOpts);
+                                    handleEmit(allOpts.map(o => o.name));
+                                }
+                            });
                             return;
                         }
                         // Normal multi-select behavior
                         const filtered = (newValue as OptionItem[]).filter(v => v.name !== 'all');
-                        setSelectedOptions(filtered);
-                        handleEmit(filtered.map(f => f.name));
+                        preserveListboxScroll(() => {
+                            setSelectedOptions(filtered);
+                            handleEmit(filtered.map(f => f.name));
+                        });
                     }}
+                    slotProps={{ listbox: { ref: listboxRef } as any }}
                     filterOptions={(options, { inputValue }) => {
                         return options.filter(option =>
                             option.displayName.toLowerCase().includes(inputValue.toLowerCase())
@@ -131,8 +154,10 @@ const SourceColumnSelection: React.FC<SourceColumnSelectionProps> = ({ sourceCol
                                             const map = new Map<string, OptionItem>();
                                             [...selectedOptions, ...filtered].forEach(o => map.set(o.name, o));
                                             const merged = Array.from(map.values());
-                                            setSelectedOptions(merged);
-                                            handleEmit(merged.filter(o => o.name !== 'all').map(o => o.name));
+                                            preserveListboxScroll(() => {
+                                                setSelectedOptions(merged);
+                                                handleEmit(merged.filter(o => o.name !== 'all').map(o => o.name));
+                                            });
                                         }}
                                         sx={{ minWidth: 0, padding: 0.25, fontSize: 11 }}
                                     >

@@ -194,7 +194,9 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
                 sx={{
                     minWidth: 150,
                     height: 36,
-                    fontSize: '0.85rem',
+                    fontSize: 11,
+                    fontFamily: `"Roboto", "Helvetica", "Arial", sans-serif`,
+                    fontWeight: 400,
                     '& .MuiSelect-select': {
                         display: 'block',
                         whiteSpace: 'nowrap',
@@ -212,7 +214,15 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
                 )}
                 {sessions.map((s) => (
                     <MenuItem key={s.name} value={s.name} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ flexGrow: 1, maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <Box sx={{ 
+                            flexGrow: 1, 
+                            maxWidth: 220, 
+                            whiteSpace: 'nowrap', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis',
+                            fontSize: 11,
+                            fontWeight: 400,
+                        }}>
                             {s.name}
                         </Box>
                         {s.name !== 'default' && (
