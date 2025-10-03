@@ -1,4 +1,4 @@
-import { useMemo, useContext } from 'react';
+import { useMemo, useContext, useEffect, useRef } from 'react';
 import * as d3 from "d3";
 import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 
@@ -42,7 +42,9 @@ export const {
         setSourceColumns,
     }: DashboardInterfacesProps): DashboardInterfacesState => {
 
-        const { selectedTargetNodes, selectedSourceNodes } = useContext(HighlightGlobalContext);
+        const { selectedTargetNodes, selectedSourceNodes, setSelectedSourceNodes } = useContext(HighlightGlobalContext);
+        const programmaticSourceColumnsUpdate = useRef(false);
+        const lastSourceColumnsSetProgrammatically = useRef(false);
 
         const columnsBySourceCluster = useMemo(() => {
             const columnsBySourceCluster: string[] = [];
@@ -53,9 +55,37 @@ export const {
                     })
                 });
             }
-            setSourceColumns(columnsBySourceCluster);
             return columnsBySourceCluster;
         }, [sourceClusters, selectedSourceNodes]);
+
+        // When source cluster selection drives the sourceColumns, mark it as programmatic.
+        // When the cluster selection is cleared (empty), also reset sourceColumns if they were programmatically set.
+        useEffect(() => {
+            if (columnsBySourceCluster.length > 0) {
+                programmaticSourceColumnsUpdate.current = true;
+                lastSourceColumnsSetProgrammatically.current = true;
+                setSourceColumns(columnsBySourceCluster);
+            } else if (lastSourceColumnsSetProgrammatically.current) {
+                // User cleared source node selection → clear sourceColumns that were set via clusters
+                setSourceColumns([]);
+                lastSourceColumnsSetProgrammatically.current = false;
+            }
+        }, [columnsBySourceCluster, setSourceColumns]);
+
+        useEffect(() => {
+            // If filters.sourceColumns is updated manually, clear selectedSourceNodes
+            if (filters.sourceColumns.length > 0) {
+                if (programmaticSourceColumnsUpdate.current) {
+                    // Skip clearing when update is triggered by source cluster selection
+                    programmaticSourceColumnsUpdate.current = false;
+                    // Keep lastSourceColumnsSetProgrammatically as true
+                    return;
+                }
+                // Manual update: reflect that sourceColumns are not programmatic anymore
+                lastSourceColumnsSetProgrammatically.current = false;
+                setSelectedSourceNodes([]);
+            }
+        }, [filters.sourceColumns, setSelectedSourceNodes]);
 
         // useWhatChanged([filters.sourceColumn, filters.selectedMatchers, filters.similarSources, filters.candidateThreshold, filters.candidateType]);
 

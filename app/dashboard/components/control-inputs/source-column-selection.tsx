@@ -15,7 +15,7 @@ const SourceColumnSelection: React.FC<SourceColumnSelectionProps> = ({ sourceCol
     type OptionItem = { name: string; displayName: string; status?: string; group: string };
     const [selectedOptions, setSelectedOptions] = useState<OptionItem[]>([]);
     const [inputValue, setInputValue] = useState<string>("");
-    const { setGlobalCandidateHighlight } = useContext(HighlightGlobalContext);
+    const { setGlobalCandidateHighlight, setSelectedSourceNodes } = useContext(HighlightGlobalContext);
 
     const theme = useTheme();
 
