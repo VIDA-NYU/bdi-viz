@@ -16,6 +16,7 @@ from .langchain.pydantic import AgentResponse
 from .session_manager import SESSION_MANAGER
 from .utils import (
     TaskState,
+    compute_dataframe_checksum,
     extract_data_from_request,
     extract_session_name,
     get_session_file,
@@ -24,8 +25,10 @@ from .utils import (
     load_source_df,
     load_target_df,
     parse_llm_generated_ontology,
+    read_cached_ontology,
     read_candidate_explanation_json,
     read_session_csv_with_comments,
+    write_cached_ontology,
     write_candidate_explanation_json,
     write_session_csv_with_comments,
 )
@@ -271,6 +274,23 @@ def infer_source_ontology_task(self, session):
 
         source = load_source_df(session)
 
+        # Check checksum-based cache before inferring
+        src_checksum = compute_dataframe_checksum(source)
+        cached = read_cached_ontology(src_checksum, "source")
+        if cached is not None:
+            with open(
+                get_session_file(session, "source.json", create_dir=True), "w"
+            ) as f:
+                json.dump(cached, f)
+            task_state._update_task_state(
+                status="completed",
+                progress=100,
+                completed_steps=1,
+                current_step="Infer source ontology",
+                log_message="Source ontology loaded from cache.",
+            )
+            return {"status": "completed", "taskId": celery_task_id, "cached": True}
+
         agent = get_agent(session)
         properties = []
         total_batches = len(source.columns) // 5 + 1
@@ -287,6 +307,22 @@ def infer_source_ontology_task(self, session):
         parsed_ontology = parse_llm_generated_ontology({"properties": properties})
         with open(get_session_file(session, "source.json", create_dir=True), "w") as f:
             json.dump(parsed_ontology, f)
+        # Save to global cache keyed by checksum
+        try:
+            task_state._update_task_state(
+                progress=98,
+                current_step="Infer source ontology",
+                log_message=f"Trying to save source ontology to cache: {src_checksum}",
+            )
+            if src_checksum:
+                write_cached_ontology(parsed_ontology, src_checksum, "source")
+                task_state._update_task_state(
+                    progress=99,
+                    current_step="Infer source ontology",
+                    log_message=f"Source ontology saved to cache: {src_checksum}",
+                )
+        except Exception:
+            pass
 
         task_state._update_task_state(
             status="completed",
@@ -336,6 +372,23 @@ def infer_target_ontology_task(self, session):
 
         target = load_target_df(session)
 
+        # Check checksum-based cache before inferring
+        tgt_checksum = compute_dataframe_checksum(target)
+        cached = read_cached_ontology(tgt_checksum, "target")
+        if cached is not None:
+            with open(
+                get_session_file(session, "target.json", create_dir=True), "w"
+            ) as f:
+                json.dump(cached, f)
+            task_state._update_task_state(
+                status="completed",
+                progress=100,
+                completed_steps=1,
+                current_step="Infer target ontology",
+                log_message="Target ontology loaded from cache.",
+            )
+            return {"status": "completed", "taskId": celery_task_id, "cached": True}
+
         agent = get_agent(session)
         properties = []
         total_batches = len(target.columns) // 5 + 1
@@ -352,6 +405,22 @@ def infer_target_ontology_task(self, session):
         parsed_ontology = parse_llm_generated_ontology({"properties": properties})
         with open(get_session_file(session, "target.json", create_dir=True), "w") as f:
             json.dump(parsed_ontology, f)
+        # Save to global cache keyed by checksum
+        task_state._update_task_state(
+            progress=98,
+            current_step="Infer target ontology",
+            log_message=f"Trying to save target ontology to cache: {tgt_checksum}",
+        )
+        try:
+            if tgt_checksum:
+                write_cached_ontology(parsed_ontology, tgt_checksum, "target")
+                task_state._update_task_state(
+                    progress=99,
+                    current_step="Infer target ontology",
+                    log_message=f"Target ontology saved to cache: {tgt_checksum}",
+                )
+        except Exception:
+            pass
 
         task_state._update_task_state(
             status="completed",

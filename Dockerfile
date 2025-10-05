@@ -41,6 +41,8 @@ RUN pnpm run build && \
 COPY --chown=yfw215:yfw215 .cache/bdikit /home/yfw215/.cache/bdikit
 COPY --chown=yfw215:yfw215 .cache/huggingface /home/yfw215/.cache/huggingface
 COPY --chown=yfw215:yfw215 .cache/magneto-gdc-v0.1 /home/bdi-viz-react/.cache/
+COPY --chown=yfw215:yfw215 .cache/ontologies /home/bdi-viz-react/.cache/ontologies
+COPY --chown=yfw215:yfw215 .cache/explanations /home/bdi-viz-react/.cache/explanations
 
 # Create directories and set ownership for chroma db and redis cache
 RUN mkdir -p /home/bdi-viz-react/chroma_db && chown -R yfw215:yfw215 /home/bdi-viz-react/chroma_db
