@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 import json
 import logging
@@ -17,6 +18,8 @@ logger = logging.getLogger("bdiviz_flask.sub")
 
 CACHE_DIR = ".cache"
 EXPLANATION_DIR = os.path.join(CACHE_DIR, "explanations")
+# Global cache for inferred ontologies keyed by dataset checksum
+ONTOLOGY_CACHE_DIR = os.path.join(CACHE_DIR, "ontologies")
 # Root directory for per-session assets under the api package
 SESSIONS_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sessions")
 
@@ -154,7 +157,14 @@ def write_session_csv_with_comments(
         raise ValueError("which must be 'source' or 'target'")
     filename = f"{which}.csv"
     path = get_session_file(session_name, filename, create_dir=True)
-    write_csv_with_comments(df, path, meta)
+    # Best-effort: include checksum in metadata
+    try:
+        checksum = compute_dataframe_checksum(df)
+        enriched_meta = dict(meta or {})
+        enriched_meta.setdefault("checksum", checksum)
+    except Exception:
+        enriched_meta = meta
+    write_csv_with_comments(df, path, enriched_meta)
     return path
 
 
@@ -194,6 +204,62 @@ def read_session_csv_with_comments(
         raise ValueError("which must be 'source' or 'target'")
     path = get_session_file(session_name, f"{which}.csv", create_dir=False)
     return read_csv_with_comments(path)
+
+
+def _ensure_ontology_cache_dir() -> str:
+    """Ensure and return the ontology cache directory path."""
+    if not os.path.exists(ONTOLOGY_CACHE_DIR):
+        os.makedirs(ONTOLOGY_CACHE_DIR, exist_ok=True)
+    return ONTOLOGY_CACHE_DIR
+
+
+def compute_dataframe_checksum(df: pd.DataFrame) -> str:
+    """Compute a stable checksum for a DataFrame's contents and schema.
+
+    Uses pandas' hashing plus column names to build a sha256 hex digest.
+    """
+    try:
+        hashed = pd.util.hash_pandas_object(df, index=True).values.tobytes()
+        m = hashlib.sha256()
+        m.update(hashed)
+        # Include column names to protect against collisions when shapes align
+        m.update("||".join(list(df.columns)).encode("utf-8"))
+        return m.hexdigest()
+    except Exception:
+        csv_bytes = df.to_csv(index=True).encode("utf-8")
+        return hashlib.sha256(csv_bytes).hexdigest()
+
+
+def _cached_ontology_path(checksum: str, which: str) -> str:
+    """Return path to cached ontology json for checksum and dataset side."""
+    which_safe = which if which in {"source", "target"} else "target"
+    cache_dir = _ensure_ontology_cache_dir()
+    return os.path.join(cache_dir, f"{which_safe}_{checksum}.json")
+
+
+def read_cached_ontology(checksum: str, which: str) -> Optional[Dict[str, Any]]:
+    """Read cached ontology by checksum if present."""
+    try:
+        path = _cached_ontology_path(checksum, which)
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
+def write_cached_ontology(
+    ontology_flat: Dict[str, Any], checksum: str, which: str
+) -> None:
+    """Write ontology json to checksum-keyed cache."""
+    try:
+        path = _cached_ontology_path(checksum, which)
+        _ensure_ontology_cache_dir()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(ontology_flat, f)
+    except Exception:
+        pass
 
 
 def load_source_df(session_name: Optional[str] = None) -> pd.DataFrame:
