@@ -202,7 +202,9 @@ interface getDatasetNamesProps {
 const getDatasetNames = (prop: getDatasetNamesProps) => {
     return makeApiRequest<void>(
         "/api/datasets/names",
-        {},
+        {
+            session_name: getSessionName(),
+        },
         prop.signal,
         (data) => {
             const sourceMeta = data?.sourceMeta;

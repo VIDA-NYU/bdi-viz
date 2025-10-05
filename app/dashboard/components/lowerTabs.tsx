@@ -4,9 +4,8 @@ import { useState } from "react";
 import UpsetPlot from "./upset-plot/UpsetPlot";
 import ValueComparisonTable from "./value-comparisons/value-comparison-table";
 
-import { Box, Tab, Paper } from "@mui/material";
+import { Box, Tab } from "@mui/material";
 import { TabPanel, TabList, TabContext } from "@mui/lab";
-import ParallelCoordinatesVisualization from "./value-comparisons/parallel-coordinates";
 
 interface LowerTabsProps {
   weightedAggregatedCandidates: AggregatedCandidate[];
@@ -37,7 +36,6 @@ const LowerTabs: React.FC<LowerTabsProps> = ({
           <TabList onChange={handleChange} aria-label="basic tabs example">
             <Tab label="UpSet Plot" value="1" />
             <Tab label="Value Comparisons" value="2" />
-            <Tab label="Parallel Coordinates" value="3" />
           </TabList>
           <TabPanel sx={{ paddingBottom: 2, maxHeight: 0, overflowY: "scroll", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }} value="0">
           </TabPanel>
