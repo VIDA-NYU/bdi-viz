@@ -108,7 +108,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
             <Box sx={{ flexGrow: 1, maxWidth: 300 }}>
                 <TextField
                     variant="outlined"
-                    placeholder="Search or ask AI..."
+                    placeholder="Search by keyword..."
                     value={query}
                     onChange={(e) => {
                         setQuery(e.target.value);
@@ -158,30 +158,31 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
                                         </IconButton>
                                     </UnifiedTooltip>
                                 )}
-                                <UnifiedTooltip title={ontologySearchPopupOpen ? 'Deactivate AI agent' : 'Activate AI agent'}>
-                                    <IconButton
-                                        onClick={() => setOntologySearchPopupOpen(!ontologySearchPopupOpen)}
-                                        size="small"
-                                        sx={{ 
-                                            backgroundColor: ontologySearchPopupOpen ? '#4caf50' : '#e0e0e0',
-                                            color: ontologySearchPopupOpen ? 'white' : '#666',
-                                            borderRadius: 1,
-                                            width: 28,
-                                            height: 28,
-                                            ml: 0.5,
-                                            '&:hover': {
-                                                backgroundColor: ontologySearchPopupOpen ? '#45a049' : '#d0d0d0',
-                                            }
-                                        }}
-                                    >
-                                        <SmartToyIcon sx={{ fontSize: 14 }} />
-                                    </IconButton>
-                                </UnifiedTooltip>
                             </InputAdornment>
                         ),
                     }}
                 />
             </Box>
+
+            {/* AI Agent Toggle (moved outside the search box) */}
+            <UnifiedTooltip title={ontologySearchPopupOpen ? 'Deactivate AI agent' : 'Activate AI agent'}>
+                <IconButton
+                    onClick={() => setOntologySearchPopupOpen(!ontologySearchPopupOpen)}
+                    size="small"
+                    sx={{ 
+                        backgroundColor: ontologySearchPopupOpen ? '#4caf50' : '#e0e0e0',
+                        color: ontologySearchPopupOpen ? 'white' : '#666',
+                        borderRadius: 1,
+                        width: 28,
+                        height: 28,
+                        '&:hover': {
+                            backgroundColor: ontologySearchPopupOpen ? '#45a049' : '#d0d0d0',
+                        }
+                    }}
+                >
+                    <SmartToyIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+            </UnifiedTooltip>
 
             {/* Vertical Divider */}
             <Divider 

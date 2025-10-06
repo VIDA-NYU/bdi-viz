@@ -19,6 +19,7 @@ import HierarchicalColumnViz from "./axis/space-filling/HierarchyColumnViz";
 import SourceHierarchyColumnViz from "./axis/space-filling/SourceHierarchyColumnViz";
 import CellCommentDialog, { CellComment } from "../comments/CellCommentDialog";
 import { listAllCellCommentsMap, listCellComments, addCellComment } from "@/app/lib/heatmap/heatmap-helper";
+import { useSession } from "@/app/lib/settings/session";
 
 interface HeatMapProps {
   data: AggregatedCandidate[];
@@ -61,6 +62,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
 
   const { globalCandidateHighlight, setGlobalCandidateHighlight, globalQuery } = useContext(HighlightGlobalContext);
   const { hoverMode } = useContext(SettingsGlobalContext);
+  const [sessionName] = useSession();
 
   const [config] = useState<HeatMapConfig>({
     cellType: "rect",
@@ -137,6 +139,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
 
   const getCellKey = useCallback((sourceColumn: string, targetColumn: string) => `${sourceColumn}::${targetColumn}`, []);
 
+  // Refetch comments whenever the session changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -146,7 +149,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
       } catch (_) {}
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [sessionName]);
 
   const openCommentFor = useCallback((data: AggregatedCandidate) => {
     setActiveCell(data);
