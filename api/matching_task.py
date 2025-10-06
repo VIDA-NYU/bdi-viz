@@ -10,10 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.neighbors import NearestNeighbors
 
 from .candidate_quadrants import CandidateQuadrants
-from .clusterer.embedding_clusterer import EmbeddingClusterer
 from .matcher.bdikit import BDIKitMatcher
 
 # from .matcher.difflib import DiffLibMatcher
@@ -35,7 +33,7 @@ logger = logging.getLogger("bdiviz_flask.sub")
 DEFAULT_PARAMS = {
     "encoding_mode": "header_values_verbose",
     "sampling_mode": "mixed",
-    "sampling_size": 10,
+    "sampling_size": 5,
     "topk": 20,
     "include_strsim_matches": False,
     "include_embedding_matches": True,
@@ -90,7 +88,6 @@ class MatchingTask:
                 "source_hash": None,
                 "target_hash": None,
                 "candidates": [],
-                "source_clusters": None,
                 "value_matches": {},
                 "matchers": {
                     "magneto_ft": {
@@ -564,47 +561,14 @@ class MatchingTask:
         # Define generation steps for better logging
         generation_steps = [
             "Generating embeddings",
-            "Clustering source columns",
             "Identifying candidate quadrants",
             "Running matchers",
             "Generating value matches",
         ]
 
+        # Step 2: Apply candidate quadrants
         task_state._update_task_state(
-            current_step=generation_steps[0],
-            log_message="Starting embedding generation.",
-        )
-
-        # Generate embeddings for clustering
-        embedding_clusterer = EmbeddingClusterer(
-            params={
-                "embedding_model": self.clustering_model,
-                "topk": self.top_k,
-                **DEFAULT_PARAMS,
-            }
-        )
-
-        source_embeddings = embedding_clusterer.get_source_embeddings(
-            source_df=self.source_df
-        )
-        task_state._update_task_state(
-            progress=60, log_message="Source embeddings generated."
-        )
-
-        # Step 2: Cluster source columns
-        task_state._update_task_state(
-            current_step=generation_steps[1], log_message="Clustering source columns."
-        )
-
-        # Generate clusters
-        source_clusters = self._generate_source_clusters(source_embeddings)
-        task_state._update_task_state(
-            progress=70, log_message="Source columns clustered."
-        )
-
-        # Step 3: Apply candidate quadrants
-        task_state._update_task_state(
-            current_step=generation_steps[2],
+            current_step=generation_steps[1],
             log_message="Identifying candidate quadrants.",
         )
 
@@ -629,7 +593,7 @@ class MatchingTask:
 
         # Step 4: Run matchers
         task_state._update_task_state(
-            current_step=generation_steps[3], log_message="Running matchers."
+            current_step=generation_steps[2], log_message="Running matchers."
         )
         total_matchers = len(self.matcher_objs)
 
@@ -655,7 +619,7 @@ class MatchingTask:
 
         # Step 5: Generate value matches
         task_state._update_task_state(
-            current_step=generation_steps[4],
+            current_step=generation_steps[3],
             log_message="Generating value matches for candidates.",
         )
 
@@ -691,7 +655,6 @@ class MatchingTask:
                 "source_hash": source_hash,
                 "target_hash": target_hash,
                 "candidates": layered_candidates,
-                "source_clusters": source_clusters,
                 "value_matches": self.cached_candidates["value_matches"],
                 "matchers": matcher_cache,
                 "matcher_code": matcher_code_cache,
@@ -716,47 +679,14 @@ class MatchingTask:
         # Define generation steps for better logging
         generation_steps = [
             "Generating embeddings",
-            "Clustering source columns",
             "Identifying candidate quadrants",
             "Running matchers",
             "Generating value matches",
         ]
 
-        task_state._update_task_state(
-            current_step=generation_steps[0],
-            log_message="Starting embedding generation.",
-        )
-
-        # Generate embeddings for clustering
-        embedding_clusterer = EmbeddingClusterer(
-            params={
-                "embedding_model": self.clustering_model,
-                "topk": self.top_k,
-                **DEFAULT_PARAMS,
-            }
-        )
-
-        source_embeddings = embedding_clusterer.get_source_embeddings(
-            source_df=self.source_df
-        )
-        task_state._update_task_state(
-            progress=60, log_message="Source embeddings generated."
-        )
-
-        # Step 2: Cluster source columns
-        task_state._update_task_state(
-            current_step=generation_steps[1], log_message="Clustering source columns."
-        )
-
-        # Generate clusters
-        source_clusters = self._generate_source_clusters(source_embeddings)
-        task_state._update_task_state(
-            progress=70, log_message="Source columns clustered."
-        )
-
         # Step 3: Apply candidate quadrants
         task_state._update_task_state(
-            current_step=generation_steps[2],
+            current_step=generation_steps[1],
             log_message="Identifying candidate quadrants.",
         )
 
@@ -765,7 +695,7 @@ class MatchingTask:
 
         # Step 4: Run matchers
         task_state._update_task_state(
-            current_step=generation_steps[3],
+            current_step=generation_steps[2],
             log_message="Adding groundtruth candidates.",
         )
 
@@ -786,7 +716,7 @@ class MatchingTask:
 
         # Step 5: Generate value matches
         task_state._update_task_state(
-            current_step=generation_steps[4],
+            current_step=generation_steps[3],
             log_message="Generating value matches for candidates.",
         )
 
@@ -822,7 +752,6 @@ class MatchingTask:
                 "source_hash": source_hash,
                 "target_hash": target_hash,
                 "candidates": layered_candidates,
-                "source_clusters": source_clusters,
                 "value_matches": self.cached_candidates["value_matches"],
                 "matchers": matcher_cache,
                 "matcher_code": matcher_code_cache,
@@ -835,21 +764,6 @@ class MatchingTask:
             progress=100, log_message="Candidate generation complete."
         )
         return layered_candidates
-
-    def _generate_source_clusters(
-        self, source_embeddings: np.ndarray
-    ) -> Dict[str, List[str]]:
-        n_neighbors = min(10, len(self.source_df.columns))
-        knn = NearestNeighbors(n_neighbors=n_neighbors, metric="cosine")
-        knn.fit(source_embeddings)
-
-        clusters = {}
-        for i, source_embedding in enumerate(source_embeddings):
-            cluster_idx = knn.kneighbors([source_embedding], return_distance=False)[0]
-            source_col = self.source_df.columns[i]
-            clusters[source_col] = [self.source_df.columns[idx] for idx in cluster_idx]
-
-        return clusters
 
     def _generate_gdc_ontology(self) -> List[Dict]:
         candidates = self.get_cached_candidates()
@@ -981,7 +895,6 @@ class MatchingTask:
     def to_frontend_json(self) -> dict:
         return {
             "candidates": self.get_cached_candidates(),
-            "sourceClusters": self._format_source_clusters_for_frontend(),
             # "targetClusters": self.get_cached_target_clusters(),
             # "matchers": self.get_matchers(),
         }
@@ -1027,13 +940,6 @@ class MatchingTask:
             ret_json.append(source_json)
 
         return ret_json
-
-    def _format_source_clusters_for_frontend(self) -> List[Dict[str, Any]]:
-        source_clusters = self.get_cached_source_clusters()
-        return [
-            {"sourceColumn": source_col, "cluster": cluster}
-            for source_col, cluster in source_clusters.items()
-        ]
 
     def _export_cache_to_json(self, json_obj: Dict) -> None:
         """Export cache to JSON file with file locking to ensure atomic operations"""
@@ -1392,9 +1298,6 @@ class MatchingTask:
                 break
 
         self.set_cached_candidates(cached_candidates)
-
-    def get_cached_source_clusters(self) -> Dict[str, List[str]]:
-        return self.cached_candidates["source_clusters"] or {}
 
     def get_matchers(self) -> List[Dict[str, any]]:
         matcher_list = []
