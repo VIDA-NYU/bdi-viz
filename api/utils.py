@@ -105,7 +105,17 @@ def extract_data_from_request(request):
         if "target_json" in form:
             target_json = form["target_json"]
             target_json_string_io = StringIO(target_json)
-            target_json = parse_llm_generated_ontology(json.load(target_json_string_io))
+            target_raw = json.load(target_json_string_io)
+            valid, err = validate_flat_ontology_json(target_raw)
+            if valid:
+                target_json = target_raw
+            else:
+                logger.error(f"Invalid target JSON schema: {err}")
+                target_json = None
+            # If no target CSV was provided, synthesize a DataFrame from ontology JSON
+            logger.critical("Synthesizing target DataFrame from ontology JSON")
+            if target_df is None and isinstance(target_json, dict):
+                target_df = build_dataframe_from_ontology_json(target_json)
 
         if "groundtruth_csv" in form:
             groundtruth_csv = form["groundtruth_csv"]
@@ -454,6 +464,7 @@ def parse_llm_generated_ontology(ontology: Dict[str, Any]) -> Dict[str, Any]:
 
     # Parse the ontology to ensure it's in the correct format
     if "properties" not in ontology:
+        logger.critical("properties not in ontology")
         return
 
     properties = ontology["properties"]
@@ -465,6 +476,76 @@ def parse_llm_generated_ontology(ontology: Dict[str, Any]) -> Dict[str, Any]:
         json_dict[column_name] = property
 
     return json_dict
+
+
+def build_dataframe_from_ontology_json(ontology_flat: Dict[str, Any]) -> pd.DataFrame:
+    """Construct a DataFrame from an ontology JSON schema.
+
+    - Columns: keys of the ontology_flat dict.
+    - If a column has an `enum` list: produce one row per enum value.
+      Other columns in those rows are NaN.
+    - If a column has no enum: fill NaN for that column in all rows.
+    - The final number of rows equals the maximum enum length across columns,
+      with shorter enum columns padded by NaN.
+    """
+    columns = list(ontology_flat.keys())
+    enum_lists: Dict[str, List[Any]] = {}
+    max_len = 0
+    for col in columns:
+        spec = ontology_flat.get(col, {}) or {}
+        values = spec.get("enum", [])
+        if isinstance(values, list) and len(values) > 0:
+            enum_lists[col] = values
+            if len(values) > max_len:
+                max_len = len(values)
+        else:
+            enum_lists[col] = []
+    if max_len == 0:
+        # No enums at all → single row of NaNs
+        return pd.DataFrame({col: [pd.NA] for col in columns})
+
+    data: Dict[str, List[Any]] = {}
+    for col in columns:
+        values = enum_lists.get(col, [])
+        padded = list(values) + [pd.NA] * (max_len - len(values))
+        data[col] = padded
+    return pd.DataFrame(data)
+
+
+def validate_flat_ontology_json(obj: Any) -> Tuple[bool, str]:
+    """Validate flat ontology JSON shape: { column_name: {column_name, category, node, type, ...} }
+
+    Returns (True, "") when valid; otherwise (False, reason).
+    """
+    if not isinstance(obj, dict) or not obj:
+        return False, "Root must be a non-empty object mapping column names to specs"
+    for col, spec in obj.items():
+        if not isinstance(col, str) or not col:
+            return False, "Column key must be a non-empty string"
+        if not isinstance(spec, dict):
+            return False, f"Spec for '{col}' must be an object"
+        # Required fields
+        for key in ("column_name", "category", "node", "type"):
+            if key not in spec:
+                return False, f"Spec for '{col}' missing required field '{key}'"
+        # column_name must match key
+        if spec.get("column_name") != col:
+            return (
+                False,
+                f"Spec for '{col}' has mismatched column_name '{spec.get('column_name')}'",
+            )
+        # type-specific checks
+        t = spec.get("type")
+        if t == "enum":
+            enums = spec.get("enum")
+
+            def _valid_item(x: Any) -> bool:
+                return isinstance(x, (str, int, float, bool)) or x is None
+
+            if not isinstance(enums, list) or not all(_valid_item(x) for x in enums):
+                return False, f"Spec for '{col}' has invalid 'enum' list"
+        # Optional numeric constraints can exist for integer/number types; skip strict validation
+    return True, ""
 
 
 def load_ontology_flat(session_name: Optional[str] = None) -> Dict[str, Any]:
