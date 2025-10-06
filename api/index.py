@@ -272,11 +272,12 @@ def infer_source_ontology_task(self, session):
             )
             return {"status": "failed", "message": "Source file not found"}
 
-        source = load_source_df(session)
-
+        source, metadata = read_session_csv_with_comments(session, "source")
+        checksum = metadata.get("checksum", None)
+        if checksum is None:
+            checksum = compute_dataframe_checksum(source)
         # Check checksum-based cache before inferring
-        src_checksum = compute_dataframe_checksum(source)
-        cached = read_cached_ontology(src_checksum, "source")
+        cached = read_cached_ontology(checksum, "source")
         if cached is not None:
             with open(
                 get_session_file(session, "source.json", create_dir=True), "w"
@@ -312,14 +313,14 @@ def infer_source_ontology_task(self, session):
             task_state._update_task_state(
                 progress=98,
                 current_step="Infer source ontology",
-                log_message=f"Trying to save source ontology to cache: {src_checksum}",
+                log_message=f"Trying to save source ontology to cache: {checksum}",
             )
-            if src_checksum:
-                write_cached_ontology(parsed_ontology, src_checksum, "source")
+            if checksum:
+                write_cached_ontology(parsed_ontology, checksum, "source")
                 task_state._update_task_state(
                     progress=99,
                     current_step="Infer source ontology",
-                    log_message=f"Source ontology saved to cache: {src_checksum}",
+                    log_message=f"Source ontology saved to cache: {checksum}",
                 )
         except Exception:
             pass
@@ -370,11 +371,13 @@ def infer_target_ontology_task(self, session):
             )
             return {"status": "failed", "message": "Target file not found"}
 
-        target = load_target_df(session)
+        target, metadata = read_session_csv_with_comments(session, "target")
+        checksum = metadata.get("checksum", None)
+        if checksum is None:
+            checksum = compute_dataframe_checksum(target)
 
         # Check checksum-based cache before inferring
-        tgt_checksum = compute_dataframe_checksum(target)
-        cached = read_cached_ontology(tgt_checksum, "target")
+        cached = read_cached_ontology(checksum, "target")
         if cached is not None:
             with open(
                 get_session_file(session, "target.json", create_dir=True), "w"
@@ -409,15 +412,15 @@ def infer_target_ontology_task(self, session):
         task_state._update_task_state(
             progress=98,
             current_step="Infer target ontology",
-            log_message=f"Trying to save target ontology to cache: {tgt_checksum}",
+            log_message=f"Trying to save target ontology to cache: {checksum}",
         )
         try:
-            if tgt_checksum:
-                write_cached_ontology(parsed_ontology, tgt_checksum, "target")
+            if checksum:
+                write_cached_ontology(parsed_ontology, checksum, "target")
                 task_state._update_task_state(
                     progress=99,
                     current_step="Infer target ontology",
-                    log_message=f"Target ontology saved to cache: {tgt_checksum}",
+                    log_message=f"Target ontology saved to cache: {checksum}",
                 )
         except Exception:
             pass
@@ -497,46 +500,24 @@ def run_matching_task(
 def start_matching():
     session = extract_session_name(request)
 
-    source, target, target_json, groundtruth_pairs = extract_data_from_request(request)
+    source_df, target_df, target_json, groundtruth_pairs = extract_data_from_request(
+        request
+    )
 
-    # --- SOURCE ONTOLOGY INFERENCE ---
-    source_json = None
-    infer_source_ontology = False
-    infer_target_ontology = False
-    source_csv_path = get_session_file(session, "source.csv", create_dir=False)
-    if os.path.exists(source_csv_path):
-        # If .source.json exists, try to load it
-        source_json_path = get_session_file(session, "source.json", create_dir=False)
-        if os.path.exists(source_json_path):
-            with open(source_json_path, "r") as f:
-                source_json = json.load(f)
-        # If not, or if the source has changed, infer ontology
-        if source_json is None or not source.equals(load_source_df(session)):
-            infer_source_ontology = True
-    else:
-        # If no .source.csv, infer and cache
-        infer_source_ontology = True
+    if source_df is None:
+        return {
+            "status": "failed",
+            "message": "Source file not found",
+        }, 400
 
-    # --- TARGET ONTOLOGY INFERENCE (existing logic) ---
-    if target is None:
-        app.logger.info("Using default GDC data")
-        target = pd.read_csv(GDC_DATA_PATH)
-        target_json = json.load(open(GDC_JSON_PATH, "r"))
-        with open(get_session_file(session, "target.json", create_dir=True), "w") as f:
-            json.dump(target_json, f)
-    else:
-        app.logger.info("Using uploaded target")
-        if target_json is None:
-            # Defer target ontology inference to a dedicated task
-            infer_target_ontology = True
-        else:
-            app.logger.info("Using cached ontology for uploaded target")
-
-    # cache csvs with leading metadata comments
     src_name = request.form.get("source_csv_name") if request.form is not None else None
     tgt_name = request.form.get("target_csv_name") if request.form is not None else None
+
+    # --- SOURCE ONTOLOGY INFERENCE ---
+    infer_source_ontology = True
+
     write_session_csv_with_comments(
-        source,
+        source_df,
         session,
         "source",
         {
@@ -553,8 +534,29 @@ def start_matching():
             ),
         },
     )
+
+    # --- TARGET ONTOLOGY INFERENCE (existing logic) ---
+    infer_target_ontology = False
+    if target_df is None:
+        app.logger.info("Using default GDC data")
+        target_df = pd.read_csv(GDC_DATA_PATH)
+        target_json = json.load(open(GDC_JSON_PATH, "r"))
+        with open(get_session_file(session, "target.json", create_dir=True), "w") as f:
+            json.dump(target_json, f)
+    else:
+        app.logger.info("Using uploaded target")
+        if target_json is None:
+            # Defer target ontology inference to a dedicated task
+            infer_target_ontology = True
+        else:
+            with open(
+                get_session_file(session, "target.json", create_dir=True), "w"
+            ) as f:
+                json.dump(target_json, f)
+            app.logger.info("Using cached ontology for uploaded target")
+
     write_session_csv_with_comments(
-        target,
+        target_df,
         session,
         "target",
         {
@@ -599,6 +601,7 @@ def start_matching():
         queue="matching",
     )
     return {
+        "status": "completed",
         "task_id": task.id,
         "source_ontology_task_id": (source_task.id if source_task else None),
         "target_ontology_task_id": (target_task.id if target_task else None),
