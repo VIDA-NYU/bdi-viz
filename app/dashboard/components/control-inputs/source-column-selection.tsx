@@ -94,6 +94,15 @@ const SourceColumnSelection: React.FC<SourceColumnSelectionProps> = ({ sourceCol
                     clearOnEscape={false}
                     onChange={(event, newValue, reason, details) => {
                         const totalColumns = sourceColumns.length;
+                        // If user clicked the clear (cross) icon
+                        if (reason === 'clear') {
+                            preserveListboxScroll(() => {
+                                setSelectedOptions([]);
+                                handleEmit([]);
+                                setSelectedSourceNodes([]);
+                            });
+                            return;
+                        }
                         // Handle toggling All explicitly
                         if ((details as any)?.option?.name === 'all') {
                             const allSelected = selectedOptions.length === totalColumns;
