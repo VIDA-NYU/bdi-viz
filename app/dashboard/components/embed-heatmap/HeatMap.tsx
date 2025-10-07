@@ -18,7 +18,7 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import HierarchicalColumnViz from "./axis/space-filling/HierarchyColumnViz";
 import SourceHierarchyColumnViz from "./axis/space-filling/SourceHierarchyColumnViz";
 import CellCommentDialog, { CellComment } from "../comments/CellCommentDialog";
-import { listAllCellCommentsMap, listCellComments, addCellComment } from "@/app/lib/heatmap/heatmap-helper";
+import { listAllCellCommentsMap, listCellComments, addCellComment, clearCellComments as apiClearCellComments, setCellComments as apiSetCellComments } from "@/app/lib/heatmap/heatmap-helper";
 import { useSession } from "@/app/lib/settings/session";
 
 interface HeatMapProps {
@@ -180,6 +180,32 @@ const HeatMap: React.FC<HeatMapProps> = ({
   const handleCloseDialog = useCallback(() => {
     setCommentOpen(false);
   }, []);
+
+  // Delete a single comment by index
+  const handleDeleteComment = useCallback((index: number) => {
+    if (!activeCell) return;
+    const key = getCellKey(activeCell.sourceColumn, activeCell.targetColumn);
+    const current = cellComments[key] || [];
+    const updated = current.filter((_, i) => i !== index);
+    (async () => {
+      try {
+        const saved = await apiSetCellComments(activeCell.sourceColumn, activeCell.targetColumn, updated);
+        setCellComments(prev => ({ ...prev, [key]: saved }));
+      } catch (_) {}
+    })();
+  }, [activeCell, cellComments, getCellKey]);
+
+  // Clear all comments for active cell
+  const handleClearAllComments = useCallback(() => {
+    if (!activeCell) return;
+    const key = getCellKey(activeCell.sourceColumn, activeCell.targetColumn);
+    (async () => {
+      try {
+        await apiClearCellComments(activeCell.sourceColumn, activeCell.targetColumn);
+        setCellComments(prev => ({ ...prev, [key]: [] }));
+      } catch (_) {}
+    })();
+  }, [activeCell, getCellKey]);
 
   // Handle cell click
   const handleCellClick = useCallback(
@@ -483,6 +509,8 @@ const HeatMap: React.FC<HeatMapProps> = ({
         onSave={handleSaveComment}
         onCancel={handleCloseDialog}
         onClear={handleClearComment}
+        onDeleteComment={handleDeleteComment}
+        onClearAll={handleClearAllComments}
       />
 
       {hasSourceOntology && (

@@ -421,8 +421,39 @@ Important:
 
     def remember_ontology(self, ontology: Dict[str, AttributeProperties]) -> None:
         logger.info(f"🧠Memory: Remembering the ontology...")
-        for _, property in ontology.items():
-            self.store.put_target_schema(property)
+        try:
+            # Prefer batch insert for performance
+            props: List[Dict[str, Any]] = []
+            for _, prop in ontology.items():
+                # Ensure plain dicts
+                if hasattr(prop, "model_dump"):
+                    props.append(prop.model_dump())
+                else:
+                    props.append(prop)
+            batch_size = 16
+            try:
+                from os import getenv
+
+                bs = int(getenv("ONTOLOGY_BATCH_SIZE", "16") or "16")
+                if bs > 0:
+                    batch_size = bs
+            except Exception:
+                pass
+            # Some MemoryRetriever implementations may not have batch; fallback
+            if hasattr(self.store, "put_target_schema_batch"):
+                self.store.put_target_schema_batch(props, batch_size=batch_size)
+            else:
+                for prop in props:
+                    self.store.put_target_schema(prop)
+        except Exception as e:
+            logger.warning(
+                f"Batch ontology remember failed, falling back to per-item: {e}"
+            )
+            for _, prop in ontology.items():
+                try:
+                    self.store.put_target_schema(prop)
+                except Exception:
+                    continue
         logger.info(f"🧠Memory: Ontology remembered!")
 
     def invoke(

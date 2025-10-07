@@ -6,6 +6,7 @@ import { useTheme } from "@mui/material/styles";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import SendIcon from "@mui/icons-material/Send";
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 export type CellComment = { text: string; createdAt: string };
 
@@ -19,6 +20,8 @@ interface CellCommentDialogProps {
   onSave: () => void;
   onCancel: () => void;
   onClear: () => void;
+  onDeleteComment?: (index: number) => void;
+  onClearAll?: () => void;
 }
 
 const CellCommentDialog: React.FC<CellCommentDialogProps> = ({
@@ -31,6 +34,8 @@ const CellCommentDialog: React.FC<CellCommentDialogProps> = ({
   onSave,
   onCancel,
   onClear,
+  onDeleteComment,
+  onClearAll,
 }) => {
   const theme = useTheme();
 
@@ -61,7 +66,7 @@ const CellCommentDialog: React.FC<CellCommentDialogProps> = ({
         </Box>
       </DialogTitle>
       <DialogContent sx={{ py: 0, px: 1 }}>
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
           <Box sx={{
             maxHeight: 260,
             overflowY: 'auto',
@@ -77,11 +82,21 @@ const CellCommentDialog: React.FC<CellCommentDialogProps> = ({
             ) : (
               comments.map((c, idx) => (
                 <Box key={idx} sx={{ display: 'flex' }}>
-                  <Paper elevation={0} sx={{ p: 1.25, backgroundColor: 'action.hover', borderRadius: 1.5, width: '100%' }}>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{c.text}</Typography>
+                  <Paper elevation={0} sx={{ p: 1.25, backgroundColor: 'action.hover', borderRadius: 1.5, width: '100%', position: 'relative' }}>
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', pr: 4 }}>{c.text}</Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                       {new Date(c.createdAt).toLocaleString()}
                     </Typography>
+                    {onDeleteComment && (
+                      <IconButton
+                        size="small"
+                        aria-label="Delete comment"
+                        onClick={() => onDeleteComment(idx)}
+                        sx={{ position: 'absolute', top: 4, right: 4 }}
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    )}
                   </Paper>
                 </Box>
               ))
@@ -123,6 +138,9 @@ const CellCommentDialog: React.FC<CellCommentDialogProps> = ({
         </Box>
       </DialogContent>
       <DialogActions>
+        {onClearAll && comments.length > 0 && (
+          <Button color="error" onClick={onClearAll}>Clear all</Button>
+        )}
         <Button onClick={onCancel}>Cancel</Button>
         <Button onClick={onSave} variant="contained">Save</Button>
       </DialogActions>

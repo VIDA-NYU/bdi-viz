@@ -114,10 +114,20 @@ _EMBEDDINGS_SINGLETON: Optional[HuggingFaceEmbeddings] = None
 def get_shared_embeddings() -> HuggingFaceEmbeddings:
     global _EMBEDDINGS_SINGLETON
     if _EMBEDDINGS_SINGLETON is None:
+        model_name = os.getenv(
+            "EMBED_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2"
+        )
+        encode_kwargs = {"normalize_embeddings": True}
+        try:
+            bs = int(os.getenv("EMBED_BATCH_SIZE", "0"))
+            if bs > 0:
+                encode_kwargs["batch_size"] = bs
+        except Exception:
+            pass
         _EMBEDDINGS_SINGLETON = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-mpnet-base-v2",
+            model_name=model_name,
             model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True},
+            encode_kwargs=encode_kwargs,
         )
     return _EMBEDDINGS_SINGLETON
 
@@ -161,30 +171,6 @@ class MemoryRetriever:
         self.client = None
         self.collections: Dict[str, chromadb.Collection] = {}
         self._switch_session_unlocked(self.session_id)
-
-    def _switch_session_unlocked(self, session_id: str) -> None:
-        """Rebind client/collections to a different session (caller must hold lock)."""
-        self.session_id = session_id
-        session_dir = get_session_dir(session_id, create=True)
-        chroma_dir = os.path.join(session_dir, "chroma_db")
-        os.makedirs(chroma_dir, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=chroma_dir)
-        self.collections = {}
-        for ns in self.supported_namespaces:
-            self.collections[ns] = self.client.get_or_create_collection(
-                name=f"agent_memory_{ns}",
-                metadata={
-                    "hnsw:space": "cosine",
-                    "hnsw:construction_ef": 100,
-                    "hnsw:search_ef": 100,
-                    "hnsw:M": 16,
-                },
-            )
-
-    def switch_session(self, session_id: str) -> None:
-        with self._lock:
-            if self.session_id != session_id:
-                self._switch_session_unlocked(session_id)
 
         self.search_ontology_tool = StructuredTool.from_function(
             func=self.search_target_schema,
@@ -278,6 +264,110 @@ class MemoryRetriever:
                 Optional[List[str]]: The list of source-target pairs if found, None otherwise.
             """.strip(),
         )
+
+    def _switch_session_unlocked(self, session_id: str) -> None:
+        """Rebind client/collections to a different session (caller must hold lock)."""
+        self.session_id = session_id
+        session_dir = get_session_dir(session_id, create=True)
+        chroma_dir = os.path.join(session_dir, "chroma_db")
+        os.makedirs(chroma_dir, exist_ok=True)
+        self.client = chromadb.PersistentClient(path=chroma_dir)
+        self.collections = {}
+        for ns in self.supported_namespaces:
+            self.collections[ns] = self.client.get_or_create_collection(
+                name=f"agent_memory_{ns}",
+                metadata={
+                    "hnsw:space": "cosine",
+                    "hnsw:construction_ef": 100,
+                    "hnsw:search_ef": 100,
+                    "hnsw:M": 16,
+                },
+            )
+
+    def switch_session(self, session_id: str) -> None:
+        with self._lock:
+            if self.session_id != session_id:
+                self._switch_session_unlocked(session_id)
+
+    def put_target_schema_batch(
+        self, properties: List[Dict[str, Any]], batch_size: int = 16
+    ) -> None:
+        """Batch insert schema properties with dedup and trimmed content."""
+        if not properties:
+            return
+        coll = self.collections.get("schema")
+        if coll is None:
+            return
+        ids: List[str] = []
+        docs: List[str] = []
+        metas: List[Dict[str, Any]] = []
+        for prop in properties:
+            if not isinstance(prop, dict) or "column_name" not in prop:
+                continue
+            col = prop["column_name"]
+            description = prop.get("description")
+            if isinstance(description, str) and len(description) > 500:
+                description = description[:500]
+            enum_vals = prop.get("enum")
+            if isinstance(enum_vals, list) and len(enum_vals) > 50:
+                enum_vals = enum_vals[:50]
+            aliases = set()
+            if "_" in col:
+                aliases.add(col.replace("_", " "))
+                aliases.add(col.replace("_", "").lower())
+                aliases.add(col.replace("_", " ").title())
+            aliases.add(col.lower())
+            aliases.add(col.title())
+            doc = (
+                f"Column name: {col}\n"
+                f"Aliases: {', '.join(aliases)}\n"
+                f"Category: {prop['category']}\n"
+                f"Node: {prop['node']}\n"
+                f"Type: {prop['type']}\n"
+                f"Description: {description}"
+            )
+            if enum_vals is not None:
+                doc += f"\nEnum: {enum_vals}"
+            docs.append(doc)
+            metas.append(
+                {
+                    "column_name": col,
+                    "category": prop["category"],
+                    "node": prop["node"],
+                    "type": prop["type"],
+                    "namespace": "schema",
+                }
+            )
+            ids.append(f"target-schema-{col}")
+        if not ids:
+            return
+        # Dedup existing
+        to_add_idx = list(range(len(ids)))
+        try:
+            existing = coll.get(ids=ids)
+            existing_ids = set(existing.get("ids", [])) if existing else set()
+            to_add_idx = [i for i, _id in enumerate(ids) if _id not in existing_ids]
+        except Exception:
+            pass
+        if not to_add_idx:
+            return
+        with self._lock:
+            for i in range(0, len(to_add_idx), batch_size):
+                batch_indices = to_add_idx[i : i + batch_size]
+                batch_ids = [ids[j] for j in batch_indices]
+                batch_docs = [docs[j] for j in batch_indices]
+                batch_metas = [metas[j] for j in batch_indices]
+                try:
+                    vecs = self.embeddings.embed_documents(batch_docs)
+                    coll.add(
+                        ids=batch_ids,
+                        documents=batch_docs,
+                        metadatas=batch_metas,
+                        embeddings=vecs,
+                    )
+                    self._increase_namespace_count("schema", len(batch_ids))
+                except Exception as e:
+                    logger.warning(f"Failed to batch add schema items: {e}")
 
     def get_validation_tools(self, with_memory: bool):
         tools = [
