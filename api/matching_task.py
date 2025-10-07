@@ -30,27 +30,12 @@ from .utils import (
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
-DEFAULT_PARAMS = {
-    "encoding_mode": "header_values_verbose",
-    "sampling_mode": "mixed",
-    "sampling_size": 5,
-    "topk": 20,
-    "include_strsim_matches": False,
-    "include_embedding_matches": True,
-    "embedding_threshold": 0.1,
-    "include_equal_matches": True,
-    "use_bp_reranker": True,
-    "use_gpt_reranker": False,
-}
-
 
 class MatchingTask:
     def __init__(
         self,
         session_name: str = "default",
         top_k: int = 20,
-        # clustering_model="michiyasunaga/BioLinkBERT-base",
-        clustering_model="sentence-transformers/all-mpnet-base-v2",
     ) -> None:
         self.lock = threading.Lock()
         self.session_name = session_name
@@ -68,7 +53,6 @@ class MatchingTask:
             "magneto_zs": BDIKitMatcher("magneto_zs"),
         }
 
-        self.clustering_model = clustering_model
         self.source_df = None
         self.target_df = None
         self._initialize_cache()

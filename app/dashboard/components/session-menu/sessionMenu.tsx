@@ -54,11 +54,8 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
         if (!name || isDuplicate || isCreating) return;
         setIsCreating(true);
         try {
-            await createSession(name, {
-                onSession: (names) => {
-                    setSessions(toSessionObjs(names));
-                },
-            });
+            await createSession(name);
+            await listSessions({ onSession: (names) => { setSessions(toSessionObjs(names)); } });
             setNewSessionName('');
             // ensure local state reflects the just-created session
             updateSessionName(name);
@@ -68,6 +65,7 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
             getTargetOntology({ callback: targetOntologyCallback });
             getValueBins({ callback: uniqueValuesCallback });
             getValueMatches({ callback: valueMatchesCallback });
+            getUserOperationHistory({ callback: userOperationHistoryCallback });
         } catch (_) {
             // no-op toast; container handles feedback
         } finally {
@@ -80,11 +78,7 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
         if (!confirm) return;
         setDeleting(name);
         try {
-            const remaining = await deleteSession(name, {
-                onSession: (names) => {
-                    setSessions(toSessionObjs(names));
-                },
-            });
+            const remaining = await deleteSession(name);
             if (name == sessionName) {
                 const next = (remaining && remaining.length > 0) ? remaining[0] : 'default';
                 updateSessionName(next);
@@ -95,6 +89,7 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
                 getValueBins({ callback: uniqueValuesCallback });
                 getValueMatches({ callback: valueMatchesCallback });
                 getUserOperationHistory({ callback: userOperationHistoryCallback });
+                setSessions(toSessionObjs(remaining));
             }
         } catch (_) {
             // no-op toast; container handles feedback

@@ -2,6 +2,7 @@
 import logging
 import os
 import shutil
+import threading
 from typing import Any, Dict, List, Optional
 
 import chromadb
@@ -9,6 +10,8 @@ from langchain.tools import StructuredTool
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from ..utils import get_session_dir
 
 # Configure logging to mute verbose Chroma messages
 logging.getLogger("chromadb").setLevel(logging.CRITICAL)
@@ -105,6 +108,20 @@ FP_CANDIDATES = [
 ]
 
 
+_EMBEDDINGS_SINGLETON: Optional[HuggingFaceEmbeddings] = None
+
+
+def get_shared_embeddings() -> HuggingFaceEmbeddings:
+    global _EMBEDDINGS_SINGLETON
+    if _EMBEDDINGS_SINGLETON is None:
+        _EMBEDDINGS_SINGLETON = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-mpnet-base-v2",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+    return _EMBEDDINGS_SINGLETON
+
+
 class MemoryRetriever:
     supported_namespaces = [
         "candidates",
@@ -119,12 +136,9 @@ class MemoryRetriever:
 
     def __init__(self, session_id: str = "default"):
         self.session_id = session_id
-        # Initialize embeddings with a model that matches the expected dimensions
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-mpnet-base-v2",  # 768d
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True},
-        )
+        self._lock = threading.RLock()
+        # Use shared embeddings model across sessions to avoid duplication
+        embeddings = get_shared_embeddings()
 
         self.namespace_counts = {
             "candidates": 0,
@@ -142,55 +156,35 @@ class MemoryRetriever:
             chunk_size=100, chunk_overlap=20, length_function=len
         )
 
-        # Handle existing chroma_db directory more gracefully
-        if os.path.exists("./chroma_db"):
-            # Instead of removing, try to fix permissions
-            import stat
-
-            try:
-                # Ensure directory has proper permissions
-                dir_perms = (
-                    stat.S_IRWXU
-                    | stat.S_IRGRP
-                    | stat.S_IXGRP
-                    | stat.S_IROTH
-                    | stat.S_IXOTH
-                )
-                os.chmod("./chroma_db", dir_perms)
-                # Fix any sqlite files in the directory
-                for root, dirs, files in os.walk("./chroma_db"):
-                    for file in files:
-                        if file.endswith(".sqlite3"):
-                            file_path = os.path.join(root, file)
-                            file_perms = (
-                                stat.S_IRUSR
-                                | stat.S_IWUSR
-                                | stat.S_IRGRP
-                                | stat.S_IROTH
-                            )
-                            os.chmod(file_path, file_perms)
-            except Exception as e:
-                logger.warning(f"Could not fix permissions, removing directory: {e}")
-                shutil.rmtree("./chroma_db")
-
-        # Initialize Chroma client and create a dedicated collection per
-        # namespace. This avoids the previous "namespace not supported" errors
-        # when filtering on a metadata field that had not yet been indexed.
-
+        # Initialize per-session Chroma client and collections under api/sessions/<session>/chroma_db
         self.embeddings = embeddings
-        self.client = chromadb.PersistentClient(path="./chroma_db")
-
+        self.client = None
         self.collections: Dict[str, chromadb.Collection] = {}
+        self._switch_session_unlocked(self.session_id)
+
+    def _switch_session_unlocked(self, session_id: str) -> None:
+        """Rebind client/collections to a different session (caller must hold lock)."""
+        self.session_id = session_id
+        session_dir = get_session_dir(session_id, create=True)
+        chroma_dir = os.path.join(session_dir, "chroma_db")
+        os.makedirs(chroma_dir, exist_ok=True)
+        self.client = chromadb.PersistentClient(path=chroma_dir)
+        self.collections = {}
         for ns in self.supported_namespaces:
             self.collections[ns] = self.client.get_or_create_collection(
-                name=f"agent_memory_{self.session_id}_{ns}",
+                name=f"agent_memory_{ns}",
                 metadata={
                     "hnsw:space": "cosine",
                     "hnsw:construction_ef": 100,
                     "hnsw:search_ef": 100,
-                    "hnsw:M": 16,  # lower value to save memory
+                    "hnsw:M": 16,
                 },
             )
+
+    def switch_session(self, session_id: str) -> None:
+        with self._lock:
+            if self.session_id != session_id:
+                self._switch_session_unlocked(session_id)
 
         self.search_ontology_tool = StructuredTool.from_function(
             func=self.search_target_schema,
@@ -298,22 +292,21 @@ class MemoryRetriever:
 
     def clear_namespaces(self, namespaces: List[str]):
         """Clear specific namespaces from the vector store"""
-        for namespace in namespaces:
-            try:
-                coll = self.collections.get(namespace)
-                if coll is None:
-                    continue
-                # Delete everything by fetching all ids first (avoids empty `where` error)
-                all_ids = coll.get()["ids"]
-                if all_ids:
-                    coll.delete(ids=all_ids)
-                logger.info(
-                    f"🧠Memory: clear_namespaces cleared {len(all_ids)} docs from namespace '{namespace}'"
-                )
-            except Exception as e:
-                logger.warning(  # noqa: E501
-                    f"Error clearing namespace '{namespace}': {e}"  # noqa: E501
-                )
+        with self._lock:
+            for namespace in namespaces:
+                try:
+                    coll = self.collections.get(namespace)
+                    if coll is None:
+                        continue
+                    # Delete everything by fetching all ids first (avoids empty `where` error)
+                    all_ids = coll.get()["ids"]
+                    if all_ids:
+                        coll.delete(ids=all_ids)
+                    logger.info(
+                        f"🧠Memory: clear_namespaces cleared {len(all_ids)} docs from namespace '{namespace}'"
+                    )
+                except Exception as e:
+                    logger.warning(f"Error clearing namespace '{namespace}': {e}")
 
         # Reset namespace counts if namespaces were cleared
         for namespace in namespaces:
@@ -788,14 +781,15 @@ Explanations: {formatted_explanations}
         # Embed the text and add to collection
         collection = self.collections.get(namespace, self.collections["user_memory"])
 
-        embedding = self.embeddings.embed_documents([page_content])[0]
-        collection.add(
-            ids=[id],
-            documents=[page_content],
-            metadatas=[metadata],
-            embeddings=[embedding],
-        )
-        self._increase_namespace_count(namespace, 1)
+        with self._lock:
+            embedding = self.embeddings.embed_documents([page_content])[0]
+            collection.add(
+                ids=[id],
+                documents=[page_content],
+                metadatas=[metadata],
+                embeddings=[embedding],
+            )
+            self._increase_namespace_count(namespace, 1)
 
     def _search_vector_store(
         self,
@@ -835,8 +829,9 @@ Explanations: {formatted_explanations}
             return
 
         collection = self.collections.get(namespace, self.collections["user_memory"])
-        collection.delete(ids=[id])
-        self._decrease_namespace_count(namespace, 1)
+        with self._lock:
+            collection.delete(ids=[id])
+            self._decrease_namespace_count(namespace, 1)
 
     def get_namespace_count(self, namespace: str):
         if namespace not in self.namespace_counts:
@@ -854,20 +849,24 @@ Explanations: {formatted_explanations}
         self.namespace_counts[namespace] = 0
 
 
-MEMORY_RETRIEVERS: Dict[str, MemoryRetriever] = {}
+_GLOBAL_MEMORY_RETRIEVER: Optional[MemoryRetriever] = None
+_GLOBAL_MEMORY_LOCK = threading.RLock()
 
 
 def get_memory_retriever(session_id: str = "default"):
-    global MEMORY_RETRIEVERS
-    if session_id not in MEMORY_RETRIEVERS:
-        logger.info(
-            f"🧠Memory: Initializing memory retriever for session '{session_id}'..."
-        )
-        MEMORY_RETRIEVERS[session_id] = MemoryRetriever(session_id=session_id)
-    return MEMORY_RETRIEVERS[session_id]
+    global _GLOBAL_MEMORY_RETRIEVER
+    with _GLOBAL_MEMORY_LOCK:
+        if _GLOBAL_MEMORY_RETRIEVER is None:
+            logger.info(
+                f"🧠Memory: Initializing shared memory retriever at session '{session_id}'..."
+            )
+            _GLOBAL_MEMORY_RETRIEVER = MemoryRetriever(session_id=session_id)
+        else:
+            _GLOBAL_MEMORY_RETRIEVER.switch_session(session_id)
+        return _GLOBAL_MEMORY_RETRIEVER
 
 
 def delete_memory_retriever(session_id: str = "default"):
-    global MEMORY_RETRIEVERS
-    if session_id in MEMORY_RETRIEVERS:
-        del MEMORY_RETRIEVERS[session_id]
+    global _GLOBAL_MEMORY_RETRIEVER
+    # No-op: We keep a single shared retriever; switching session retargets paths.
+    return None
