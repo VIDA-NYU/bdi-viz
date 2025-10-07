@@ -11,11 +11,13 @@ type DashboardOperationProps = {
     selectedCandidate: Candidate | undefined;
     isMatch: boolean | undefined;
     selectedExplanations?: Explanation[];
+    candidateThreshold: number;
     onCandidateUpdate: (candidates: Candidate[]) => void;
     onCandidateSelect: (candidate: Candidate | undefined) => void;
     onExplanation?: (candidate: Candidate, explanation: CandidateExplanation | undefined) => void;
     onUserOperationsUpdate: (userOperations: UserOperation[]) => void;
     onRelatedOuterSources?: (relatedOuterSources: RelatedSource[]) => void;
+    onCandidateThresholdUpdate?: (threshold: number) => void;
 }
 
 type DashboardOperationState = {
@@ -40,11 +42,13 @@ export const {
         selectedCandidate,
         isMatch,
         selectedExplanations,
+        candidateThreshold,
         onCandidateUpdate,
         onCandidateSelect,
         onExplanation,
         onUserOperationsUpdate,
         onRelatedOuterSources,
+        onCandidateThresholdUpdate,
     }: DashboardOperationProps): DashboardOperationState => {
         const [isExplaining, setIsExplaining] = useState<boolean>(false);
         const { setIsLoadingGlobal, isLoadingGlobal } = useContext(SettingsGlobalContext);
@@ -149,6 +153,9 @@ export const {
                 userOperationCallback: (userOperation: UserOperation) => {
                     toastify("info", <p>Operation undone: <strong>{userOperation.operation}</strong> - <strong>{userOperation.candidate.sourceColumn}</strong> - <strong>{userOperation.candidate.targetColumn}</strong></p>);
                     if (userOperation.operation === "accept" || userOperation.operation === "reject") {
+                        if (userOperation.candidate.score < candidateThreshold) {
+                            onCandidateThresholdUpdate?.(userOperation.candidate.score);
+                        }
                         onCandidateSelect(userOperation.candidate);
                     } else {
                         onCandidateSelect(undefined);
@@ -162,13 +169,16 @@ export const {
                 },
             });
             
-        }, [candidates, onCandidateUpdate, onCandidateSelect]);
+        }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate]);
 
         const redo = useCallback(() => {
             redoUserOperation({
                 userOperationCallback: (userOperation: UserOperation) => {
                     toastify("info", <p>Operation redone: <strong>{userOperation.operation}</strong> - <strong>{userOperation.candidate.sourceColumn}</strong> - <strong>{userOperation.candidate.targetColumn}</strong></p>);
                     if (userOperation.operation === "accept" || userOperation.operation === "reject") {
+                        if (userOperation.candidate.score < candidateThreshold) {
+                            onCandidateThresholdUpdate?.(userOperation.candidate.score);
+                        }
                         onCandidateSelect(userOperation.candidate);
                     } else {
                         onCandidateSelect(undefined);
@@ -181,7 +191,7 @@ export const {
                     onUserOperationsUpdate(userOperations);
                 },
             });
-        }, [candidates, onCandidateUpdate, onCandidateSelect]);
+        }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate]);
             
 
         const explain = useCallback(async (candidate?: Candidate) => {
