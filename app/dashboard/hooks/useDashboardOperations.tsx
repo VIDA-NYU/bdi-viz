@@ -5,6 +5,7 @@ import { toastify } from "@/app/lib/toastify/toastify-helper";
 import { applyUserOperation, undoUserOperation, redoUserOperation, getCandidatesResult } from "@/app/lib/heatmap/heatmap-helper";
 import { candidateExplanationRequest, agentGetRelatedSources } from "@/app/lib/langchain/agent-helper";
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
+import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 
 type DashboardOperationProps = {
     candidates: Candidate[];
@@ -17,6 +18,7 @@ type DashboardOperationProps = {
     onExplanation?: (candidate: Candidate, explanation: CandidateExplanation | undefined) => void;
     onUserOperationsUpdate: (userOperations: UserOperation[]) => void;
     onRelatedOuterSources?: (relatedOuterSources: RelatedSource[]) => void;
+    onSourceColumnsUpdate?: (sourceColumns: string[]) => void;
     onCandidateThresholdUpdate?: (threshold: number) => void;
 }
 
@@ -48,10 +50,12 @@ export const {
         onExplanation,
         onUserOperationsUpdate,
         onRelatedOuterSources,
+        onSourceColumnsUpdate,
         onCandidateThresholdUpdate,
     }: DashboardOperationProps): DashboardOperationState => {
         const [isExplaining, setIsExplaining] = useState<boolean>(false);
         const { setIsLoadingGlobal, isLoadingGlobal } = useContext(SettingsGlobalContext);
+        const { setSelectedSourceNodes } = useContext(HighlightGlobalContext);
 
         const acceptMatch = useCallback(async () => {
             if (!selectedCandidate) return;
@@ -153,10 +157,13 @@ export const {
                 userOperationCallback: (userOperation: UserOperation) => {
                     toastify("info", <p>Operation undone: <strong>{userOperation.operation}</strong> - <strong>{userOperation.candidate.sourceColumn}</strong> - <strong>{userOperation.candidate.targetColumn}</strong></p>);
                     if (userOperation.operation === "accept" || userOperation.operation === "reject") {
+                        onSourceColumnsUpdate?.([]);
+                        setSelectedSourceNodes([]);
                         if (userOperation.candidate.score < candidateThreshold) {
                             onCandidateThresholdUpdate?.(userOperation.candidate.score);
                         }
-                        onCandidateSelect(userOperation.candidate);
+                        // onCandidateSelect(userOperation.candidate);
+                        onCandidateSelect(undefined);
                     } else {
                         onCandidateSelect(undefined);
                     }
@@ -169,17 +176,20 @@ export const {
                 },
             });
             
-        }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate]);
+            }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate, onSourceColumnsUpdate]);
 
         const redo = useCallback(() => {
             redoUserOperation({
                 userOperationCallback: (userOperation: UserOperation) => {
                     toastify("info", <p>Operation redone: <strong>{userOperation.operation}</strong> - <strong>{userOperation.candidate.sourceColumn}</strong> - <strong>{userOperation.candidate.targetColumn}</strong></p>);
                     if (userOperation.operation === "accept" || userOperation.operation === "reject") {
+                        onSourceColumnsUpdate?.([]);
+                        setSelectedSourceNodes([]);
                         if (userOperation.candidate.score < candidateThreshold) {
                             onCandidateThresholdUpdate?.(userOperation.candidate.score);
                         }
-                        onCandidateSelect(userOperation.candidate);
+                        // onCandidateSelect(userOperation.candidate);
+                        onCandidateSelect(undefined);
                     } else {
                         onCandidateSelect(undefined);
                     }
@@ -191,7 +201,7 @@ export const {
                     onUserOperationsUpdate(userOperations);
                 },
             });
-        }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate]);
+        }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate, onSourceColumnsUpdate]);
             
 
         const explain = useCallback(async (candidate?: Candidate) => {

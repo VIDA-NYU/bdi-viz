@@ -123,6 +123,7 @@ export default function Dashboard() {
         onExplanation: generateExplanations,
         onUserOperationsUpdate: handleUserOperationsUpdate,
         onRelatedOuterSources: setRelatedOuterSources,
+        onSourceColumnsUpdate: updateSourceColumns,
         onCandidateThresholdUpdate: updateCandidateThreshold,
     });
 
