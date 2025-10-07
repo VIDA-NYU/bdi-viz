@@ -117,11 +117,13 @@ export default function Dashboard() {
         selectedCandidate,
         isMatch,
         selectedExplanations,
+        candidateThreshold,
         onCandidateUpdate: handleFileUpload,
         onCandidateSelect: setSelectedCandidate,
         onExplanation: generateExplanations,
         onUserOperationsUpdate: handleUserOperationsUpdate,
         onRelatedOuterSources: setRelatedOuterSources,
+        onCandidateThresholdUpdate: updateCandidateThreshold,
     });
 
 
