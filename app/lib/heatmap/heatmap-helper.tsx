@@ -758,58 +758,14 @@ const runRematchTask = async ({ nodes, onResult, onError, taskStateCallback }: R
 
 // Session sync helpers
 
-interface SyncSessionOptions {
-    onSession?: (session: Session[]) => void;
-    onDatasetMeta?: (sourceMeta: DatasetMeta, targetMeta: DatasetMeta) => void;
-    onCandidates?: (candidates: Candidate[]) => void;
-    onMatchers?: (matchers: Matcher[]) => void;
-    signal?: AbortSignal;
-}
-
-const syncSessionData = async ({ onSession, onDatasetMeta, onCandidates, onMatchers, signal }: SyncSessionOptions = {}) => {
-    const tasks: Promise<any>[] = [];
-
-    if (onSession) {
-        tasks.push(
-            listSessions({ onSession, signal }),
-        );
-    }
-    if (onDatasetMeta) {
-        tasks.push(
-            getDatasetNames({
-                callback: (sourceMeta, targetMeta) => onDatasetMeta(sourceMeta, targetMeta),
-                signal,
-            })
-        );
-    }
-    if (onCandidates) {
-        tasks.push(
-            getCachedResults({
-                callback: (candidates) => onCandidates(candidates),
-                signal,
-            })
-        );
-    }
-    if (onMatchers) {
-        tasks.push(
-            getMatchers({
-                callback: (matchers) => onMatchers(matchers),
-                signal,
-            })
-        );
-    }
-    await Promise.all(tasks);
-};
-
-const createSession = async (sessionName: string, opts: SyncSessionOptions = {}) => {
+const createSession = async (sessionName: string) => {
     const sessions = await axios.post('/api/session/create', { session_name: sessionName });
     // Switch current session to the newly created one
     setSessionName(sessionName);
-    await syncSessionData(opts);
     return sessions;
 };
 
-const listSessions = async ({ onSession }: SyncSessionOptions = {}): Promise<Session[]> => {
+const listSessions = async ({ onSession }: { onSession: (sessions: Session[]) => void }): Promise<Session[]> => {
     const response = await axios.post('/api/session/list', {});
     let sessions: Session[] = [];
     if (onSession) {
@@ -824,9 +780,8 @@ const listSessions = async ({ onSession }: SyncSessionOptions = {}): Promise<Ses
     return sessions;
 };
 
-const deleteSession = async (sessionName: string, opts: SyncSessionOptions = {}) => {
+const deleteSession = async (sessionName: string) => {
     const response = await axios.post('/api/session/delete', { session_name: sessionName });
-    await syncSessionData(opts);
     return response.data.sessions as string[];
 };
 
@@ -914,7 +869,6 @@ export {
     createSession,
     listSessions,
     deleteSession,
-    syncSessionData,
     createCandidate,
     deleteCandidate,
 };

@@ -461,7 +461,7 @@ def run_matching_task(
         )
 
         # Clear specific namespaces for new task
-        memory_retriever = get_memory_retriever()
+        memory_retriever = get_memory_retriever(session)
         memory_retriever.clear_namespaces(["user_memory", "schema", "explanations"])
 
         matching_task = SESSION_MANAGER.get_session(session).matching_task
@@ -575,7 +575,7 @@ def start_matching():
     )
 
     # Clear specific namespaces for new task
-    memory_retriever = get_memory_retriever()
+    memory_retriever = get_memory_retriever(session)
     memory_retriever.clear_namespaces(["user_memory", "schema", "explanations"])
 
     # Kick off tasks in parallel: source ontology (if needed) and matching
