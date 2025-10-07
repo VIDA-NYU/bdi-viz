@@ -57,3 +57,6 @@ celery.log
 api/sessions/*
 **/api/sessions/*
 !api/sessions/default
+# But remove api/sessions/default/chroma_db
+api/sessions/default/chroma_db
+**/api/sessions/default/chroma_db
