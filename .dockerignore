@@ -60,3 +60,6 @@ api/sessions/*
 # But remove api/sessions/default/chroma_db
 api/sessions/default/chroma_db
 **/api/sessions/default/chroma_db
+
+.env
+**/.env
