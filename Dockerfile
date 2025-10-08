@@ -30,7 +30,6 @@ COPY --chown=yfw215:yfw215 ./.source.csv ./.source.csv
 COPY --chown=yfw215:yfw215 ./.target.csv ./.target.csv
 COPY --chown=yfw215:yfw215 ./.source.json ./.source.json
 COPY --chown=yfw215:yfw215 ./.target.json ./.target.json
-COPY --chown=yfw215:yfw215 ./.env ./.env
 # Add any other needed files/folders (e.g., fonts, if used by Next.js)
 COPY --chown=yfw215:yfw215 ./app/fonts ./app/fonts
 
