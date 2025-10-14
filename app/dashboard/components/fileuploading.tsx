@@ -5,7 +5,7 @@ import { runMatchingTask, getCachedResults, getTargetOntology, getValueBins, get
 
 import { Box, Paper, IconButton, Typography, Divider, Chip, Stack, Table, TableHead, TableRow, TableCell, TableBody, Alert } from "@mui/material";
 import { BasicButton } from "../layout/components";
-import UploadFileIcon from '@mui/icons-material/UploadFile';
+import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 
 import SettingsGlobalContext from "@/app/lib/settings/settings-context";
@@ -144,14 +144,13 @@ const FileUploading: React.FC<FileUploadingProps> = ({
 
     return (
         <>
-            {isVisible ? (
+            {isVisible && (
                 <FileUploadForm
                     onSubmit={handleOnSubmit}
                     onCancel={() => setIsVisible(false)}
                 />
-            ) : (
-                <UploadButton onClick={() => setIsVisible(true)} />
             )}
+            <UploadButton onClick={() => setIsVisible(!isVisible)} />
         </>
     );
 };
@@ -345,7 +344,7 @@ const UploadButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
         }}
         title="New matching task"
     >
-        <UploadFileIcon />
+        <AddIcon />
     </IconButton>
 );
 

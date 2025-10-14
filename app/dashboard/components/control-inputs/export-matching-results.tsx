@@ -1,8 +1,7 @@
 'use client';
 import React from 'react';
-import { Box, IconButton, Menu, MenuItem } from '@mui/material';
-import { BasicButton } from '../../layout/components';
-import IosShareIcon from '@mui/icons-material/IosShare';
+import { IconButton, Menu, MenuItem } from '@mui/material';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 
 interface ExportMatchingResultsButtonProps {
     onClick: (format: string) => void;
@@ -35,9 +34,9 @@ const ExportMatchingResultsButton: React.FC<ExportMatchingResultsButtonProps> = 
                     color: 'primary.main',
                     '&:hover': { color: 'primary.dark' },
                 }}
-                title="Export Matching Results"
+                title="Export matching results"
             >
-                <IosShareIcon />
+                <FileDownloadOutlinedIcon />
             </IconButton>
             <Menu
                 anchorEl={anchorEl}
