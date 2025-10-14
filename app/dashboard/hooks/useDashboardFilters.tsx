@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 type DashboardFilterState = {
     sourceColumns: string[];
@@ -24,6 +24,30 @@ export const {
         const [candidateThreshold, setCandidateThreshold] = useState<number>(0.7);
         const [searchResults, setSearchResults] = useState<Candidate[]>([]);
         const [status, setStatus] = useState<string[]>(['accepted', 'rejected', 'discarded', 'idle']); // 'accepted', 'rejected', 'discarded', 'idle'
+
+        // Reset filters on session change
+        useEffect(() => {
+            if (typeof window === 'undefined') return;
+
+            const reset = () => {
+                setSourceColumns([]);
+                setCandidateType('all');
+                setCandidateThreshold(0.7);
+                setSearchResults([]);
+                setStatus(['accepted', 'rejected', 'discarded', 'idle']);
+            };
+
+            const onStorage = (e: StorageEvent) => {
+                if (e.key === 'bdiviz_session_name') reset();
+            };
+
+            window.addEventListener('bdiviz:session', reset);
+            window.addEventListener('storage', onStorage);
+            return () => {
+                window.removeEventListener('bdiviz:session', reset);
+                window.removeEventListener('storage', onStorage);
+            };
+        }, []);
 
         const updateSourceColumns = useCallback((columns: string[]) => {
             setSourceColumns(columns);
