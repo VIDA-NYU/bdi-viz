@@ -17,8 +17,6 @@ const Paginator: React.FC<PaginatorProps> = ({
     const {
         pageNumber,
         setPageNumber,
-        pageSize,
-        setPageSize,
         totalPages,
     } = useContext(PaginationGlobalContext);
 
