@@ -36,6 +36,29 @@ const SettingsGlobalProvider: React.FC<{ children: ReactNode }> = ({ children })
         setIsLoadingGlobal(isAnyTaskActive);
     }, [isAnyTaskActive]);
 
+    // Clear important global settings state when the session changes
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const clearOnSessionChange = () => {
+            setIsLoadingGlobal(false);
+            setTaskStates({});
+            setOntologySearchPopupOpen(false);
+        };
+
+        const onStorage = (e: StorageEvent) => {
+            if (e.key === "bdiviz_session_name") clearOnSessionChange();
+        };
+
+        window.addEventListener("bdiviz:session", clearOnSessionChange);
+        window.addEventListener("storage", onStorage);
+
+        return () => {
+            window.removeEventListener("bdiviz:session", clearOnSessionChange);
+            window.removeEventListener("storage", onStorage);
+        };
+    }, []);
+
     const value = {
         isLoadingGlobal,
         setIsLoadingGlobal,

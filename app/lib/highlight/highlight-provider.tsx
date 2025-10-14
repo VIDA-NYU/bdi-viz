@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, createContext, ReactNode } from 'react';
+import { useEffect, useState, createContext, ReactNode } from 'react';
 import HighlightGlobalContext from './highlight-context';
 
 const HighlightGlobalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -10,6 +10,31 @@ const HighlightGlobalProvider: React.FC<{ children: ReactNode }> = ({ children }
     const [globalQuery, setGlobalQuery] = useState<string | undefined>();
     const [selectedTargetNodes, setSelectedTargetNodes] = useState<SelectedNode[]>([]);
     const [selectedSourceNodes, setSelectedSourceNodes] = useState<SelectedNode[]>([]);
+
+    // Clear highlight/selections on session change
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const clearOnSessionChange = () => {
+            setGlobalValueSelection(undefined);
+            setGlobalValueConnections([]);
+            setGlobalCandidateHighlight(undefined);
+            setGlobalQuery(undefined);
+            setSelectedTargetNodes([]);
+            setSelectedSourceNodes([]);
+        };
+
+        const onStorage = (e: StorageEvent) => {
+            if (e.key === "bdiviz_session_name") clearOnSessionChange();
+        };
+
+        window.addEventListener("bdiviz:session", clearOnSessionChange);
+        window.addEventListener("storage", onStorage);
+        return () => {
+            window.removeEventListener("bdiviz:session", clearOnSessionChange);
+            window.removeEventListener("storage", onStorage);
+        };
+    }, []);
 
     const value = {
         globalValueSelection,
