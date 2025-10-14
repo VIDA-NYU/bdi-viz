@@ -93,4 +93,20 @@ celery.log
 # kubernetes
 .kube/
 
-api/sessions/
+
+# files
+.source.csv
+.source.json
+.target.csv
+.target.json
+matching_results_*.json
+task_state_*.json
+
+# sessions
+api/sessions/*
+**/api/sessions/*
+!api/sessions/default
+api/sessions/default/task_state/*.json
+# But remove api/sessions/default/chroma_db
+api/sessions/default/chroma_db
+**/api/sessions/default/chroma_db
