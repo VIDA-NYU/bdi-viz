@@ -90,4 +90,7 @@ api/task_state_*.json
 .task_state_*.json
 celery.log
 
+# kubernetes
+.kube/
+
 api/sessions/
