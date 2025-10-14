@@ -1,6 +1,7 @@
 import { useMemo, useContext, useEffect, useRef } from 'react';
 import * as d3 from "d3";
 import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
+import PaginationGlobalContext from '@/app/lib/pagination/pagination-context';
 
 type DashboardInterfacesState = {
     groupedSourceColumns: SourceColumn[];
@@ -20,10 +21,8 @@ type DashboardInterfacesProps = {
         selectedMatcher?: Matcher;
         status: string[];
     };
-    pageNumber: number;
-    pageSize: number;
-    setTotalPages: (totalPages: number) => void;
     setSourceColumns: (sourceColumns: string[]) => void;
+    setCandidateThreshold: (candidateThreshold: number) => void;
 }
 
 export type { DashboardInterfacesState };
@@ -36,13 +35,12 @@ export const {
         matchers,
         sourceClusters,
         filters,
-        pageNumber,
-        pageSize,
-        setTotalPages,
         setSourceColumns,
+        setCandidateThreshold,
     }: DashboardInterfacesProps): DashboardInterfacesState => {
 
-        const { selectedTargetNodes, selectedSourceNodes, setSelectedSourceNodes } = useContext(HighlightGlobalContext);
+        const { selectedTargetNodes, setSelectedTargetNodes, selectedSourceNodes, setSelectedSourceNodes } = useContext(HighlightGlobalContext);
+        const { pageNumber, setPageNumber, pageSize, setTotalPages } = useContext(PaginationGlobalContext);
         const programmaticSourceColumnsUpdate = useRef(false);
         const lastSourceColumnsSetProgrammatically = useRef(false);
 
@@ -86,6 +84,11 @@ export const {
                 setSelectedSourceNodes([]);
             }
         }, [filters.sourceColumns, setSelectedSourceNodes]);
+
+        // Reset pagination when sourceColumns filter changes
+        useEffect(() => {
+            setPageNumber(1);
+        }, [filters.sourceColumns, setPageNumber]);
 
         // useWhatChanged([filters.sourceColumn, filters.selectedMatchers, filters.similarSources, filters.candidateThreshold, filters.candidateType]);
 
@@ -136,9 +139,16 @@ export const {
                 filteredGroupedSourceColumns = filteredGroupedSourceColumns.slice(pageStart, pageEnd);
             }
 
-            // Filter grouped columns by the paged selection
+            // Update candidate threshold based on the filtered source columns
+            if (filters?.candidateThreshold) {
+                const minMaxScore = Math.min(...filteredGroupedSourceColumns.map(c => c.maxScore));
+                if (filters.candidateThreshold > minMaxScore) {
+                    setCandidateThreshold(minMaxScore);
+                }
+            }
+
             return filteredGroupedSourceColumns;
-        }, [groupedSourceColumns, filters?.sourceColumns, columnsBySourceCluster, pageNumber, pageSize, setTotalPages]);
+        }, [groupedSourceColumns, filters?.sourceColumns, columnsBySourceCluster, pageNumber, pageSize, setTotalPages, setCandidateThreshold]);
 
 
         const weightedAggregatedCandidates = useMemo(() => {
@@ -159,13 +169,17 @@ export const {
 
             if (selectedTargetNodes.length > 0) {
                 const columns = selectedTargetNodes.map(node => node.columns).flat();
-                filteredData = filteredData.filter((d) => columns.includes(d.targetColumn));
+
+                const filteredDataByTargetNodes = filteredData.filter((d) => columns.includes(d.targetColumn));
+                if (filteredDataByTargetNodes.length === 0) {
+                    setSelectedTargetNodes([]);
+                } else {
+                    filteredData = filteredDataByTargetNodes;
+                }
             }
 
-            // columnsBySourceCluster effect is already reflected in filteredSourceColumns
-            
             return filteredData;
-        }, [weightedCandidates, filteredSourceColumns, filters.candidateThreshold, filters.status, selectedTargetNodes, selectedSourceNodes]);
+        }, [weightedCandidates, filteredSourceColumns, filters.candidateThreshold, filters.status, selectedTargetNodes, selectedSourceNodes, setSelectedTargetNodes]);
 
         return {
             groupedSourceColumns,

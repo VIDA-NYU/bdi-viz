@@ -132,7 +132,6 @@ class RapidFuzzValueMatcher(BaseMatcher):
                 fuzz.ratio(source_v, target_v, processor=utils.default_process) / 100
                 for target_v in target_values
             ]
-            max_target_v = target_values[scores.index(max(scores))]
             max_score = max(scores)
 
             total_score += max_score

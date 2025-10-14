@@ -45,9 +45,7 @@ export default function Dashboard() {
     } = useContext(SettingsGlobalContext);
 
     const {
-        pageNumber,
         pageSize,
-        setTotalPages,
     } = useContext(PaginationGlobalContext);
 
     const {
@@ -145,10 +143,8 @@ export default function Dashboard() {
             candidateThreshold,
             status,
         },
-        pageNumber,
-        pageSize,
-        setTotalPages,
         setSourceColumns: updateSourceColumns,
+        setCandidateThreshold: updateCandidateThreshold,
     });
 
     const {
@@ -196,18 +192,18 @@ export default function Dashboard() {
     }, [selectedCandidate, explain]);
 
 
-    const handleUpdateSourceColumns = useCallback((columns: string[]) => {
-        setSelectedCandidate(undefined);
+    // const handleUpdateSourceColumns = useCallback((columns: string[]) => {
+    //     setSelectedCandidate(undefined);
 
-        const sourceColumns = groupedSourceColumns.filter(col => columns.includes(col.name));
-        if (sourceColumns.length > 0) {
-            const minMaxScore = Math.min(...sourceColumns.map(sc => sc.maxScore));
-            if (candidateThreshold > minMaxScore) {
-                updateCandidateThreshold(minMaxScore);
-            }
-        }
-        updateSourceColumns(columns);
-    }, [setSelectedCandidate, groupedSourceColumns, candidateThreshold, updateCandidateThreshold, updateSourceColumns]);
+    //     const sourceColumns = groupedSourceColumns.filter(col => columns.includes(col.name));
+    //     if (sourceColumns.length > 0) {
+    //         const minMaxScore = Math.min(...sourceColumns.map(sc => sc.maxScore));
+    //         if (candidateThreshold > minMaxScore) {
+    //             updateCandidateThreshold(minMaxScore);
+    //         }
+    //     }
+    //     updateSourceColumns(columns);
+    // }, [setSelectedCandidate, groupedSourceColumns, candidateThreshold, updateCandidateThreshold, updateSourceColumns]);
 
     const setSourceColumn = useCallback((column: string) => {
         if (sourceColumns.includes(column)) {
@@ -347,7 +343,7 @@ export default function Dashboard() {
                     containerStyle={{ marginBottom: 0, flexGrow: 0 }}
                     sourceColumns={groupedSourceColumns}
                     matchers={matchers}
-                    onSourceColumnSelect={handleUpdateSourceColumns}
+                    onSourceColumnSelect={updateSourceColumns}
                     onCandidateTypeSelect={updateCandidateType}
                     onCandidateThresholdSelect={updateCandidateThreshold}
                     acceptMatch={acceptMatch}
