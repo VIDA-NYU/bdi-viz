@@ -6,6 +6,27 @@ from api.utils import TaskState
 class TestMatchingTask:
     """Test the matching task functionality."""
 
+    @pytest.fixture(autouse=True)
+    def _manage_test_session(self, client):
+        """Create and clean up a dedicated 'test_session' for this class.
+
+        This uses the API endpoints to mirror real behavior and ensures the
+        class's tests run with a predictable session lifecycle.
+        """
+        create_resp = client.post(
+            "/api/session/create", json={"session_name": "test_session"}
+        )
+        assert create_resp.status_code == 200
+        assert "test_session" in create_resp.get_json().get("sessions", [])
+
+        yield
+
+        delete_resp = client.post(
+            "/api/session/delete", json={"session_name": "test_session"}
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json().get("message") == "success"
+
     def test_get_candidates_success(
         self,
         session_manager,

@@ -11,13 +11,34 @@ from api.tools.task_tools import TaskTools
 
 
 class TestCandidateTools:
+
     @pytest.fixture(autouse=True)
-    def _setup(self, session_manager, sample_source_csv, sample_target_csv):
+    def _manage_test_session(
+        self, client, session_manager, sample_source_csv, sample_target_csv
+    ):
+        """Create and clean up a dedicated 'test_session' for this class.
+
+        This uses the API endpoints to mirror real behavior and ensures the
+        class's tests run with a predictable session lifecycle.
+        """
+        create_resp = client.post(
+            "/api/session/create", json={"session_name": "test_session"}
+        )
+        assert create_resp.status_code == 200
+        assert "test_session" in create_resp.get_json().get("sessions", [])
         self.session_manager = session_manager
         self.matching_task = session_manager.get_session("test_session").matching_task
         self.matching_task.update_dataframe(sample_source_csv, sample_target_csv)
         # Prime candidates cache to ensure tools can operate
         self.matching_task.get_candidates()
+
+        yield
+
+        delete_resp = client.post(
+            "/api/session/delete", json={"session_name": "test_session"}
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json().get("message") == "success"
 
     def test_candidate_tools(self):
         candidate_tools = CandidateTools("test_session")
@@ -178,11 +199,22 @@ class TestCandidateTools:
 
 class TestQueryTools:
     @pytest.fixture(autouse=True)
-    def _setup(self, session_manager, sample_source_csv, sample_target_csv):
+    def _setup(self, client, session_manager, sample_source_csv, sample_target_csv):
+        create_resp = client.post(
+            "/api/session/create", json={"session_name": "test_session"}
+        )
+        assert create_resp.status_code == 200
+        assert "test_session" in create_resp.get_json().get("sessions", [])
         self.session_manager = session_manager
         self.matching_task = session_manager.get_session("test_session").matching_task
         self.matching_task.update_dataframe(sample_source_csv, sample_target_csv)
         self.matching_task.get_candidates()
+        yield
+        delete_resp = client.post(
+            "/api/session/delete", json={"session_name": "test_session"}
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json().get("message") == "success"
 
     def test_query_tools(self):
         tools = QueryTools("test_session", memory_retriever=MagicMock())
@@ -200,8 +232,19 @@ class TestQueryTools:
 
 class TestTaskTools:
     @pytest.fixture(autouse=True)
-    def _setup(self, session_manager):
+    def _setup(self, client, session_manager):
+        create_resp = client.post(
+            "/api/session/create", json={"session_name": "test_session"}
+        )
+        assert create_resp.status_code == 200
+        assert "test_session" in create_resp.get_json().get("sessions", [])
         self.session_manager = session_manager
+        yield
+        delete_resp = client.post(
+            "/api/session/delete", json={"session_name": "test_session"}
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json().get("message") == "success"
 
     def test_task_tools(self):
         tools = TaskTools(session_id="test_session")
@@ -227,8 +270,20 @@ class TestSourceScraper:
 
 class TestOnlineResearchTools:
     @pytest.fixture(autouse=True)
-    def _setup(self):
+    def _setup(self, client, session_manager):
+        create_resp = client.post(
+            "/api/session/create", json={"session_name": "test_session"}
+        )
+        assert create_resp.status_code == 200
+        assert "test_session" in create_resp.get_json().get("sessions", [])
+        self.session_manager = session_manager
         self.tools = OnlineResearchTools()
+        yield
+        delete_resp = client.post(
+            "/api/session/delete", json={"session_name": "test_session"}
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json().get("message") == "success"
 
     def test_search_methods(self, monkeypatch):
         class Resp:

@@ -11,10 +11,12 @@ def test_compute_checksum_and_cache_roundtrip(tmp_path):
     utils.ONTOLOGY_CACHE_DIR = str(tmp_path / "ontologies")
 
     # Create a simple dataframe
-    df = pd.DataFrame({
-        "A": [1, 2, 3],
-        "B": ["x", "y", "z"],
-    })
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3],
+            "B": ["x", "y", "z"],
+        }
+    )
 
     checksum = utils.compute_dataframe_checksum(df)
     assert isinstance(checksum, str) and len(checksum) == 64
