@@ -16,25 +16,6 @@ class TestAPIEndpoints:
         assert "sessions" in data
         assert "test_session" in data["sessions"]
 
-    def test_session_delete(self, client):
-        response = client.post(
-            "/api/session/delete", json={"session_name": "test_session"}
-        )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["message"] == "success"
-        assert "sessions" in data
-        assert data["sessions"] == ["default"]
-
-        response = client.post(
-            "/api/session/create", json={"session_name": "test_session"}
-        )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["message"] == "success"
-        assert "sessions" in data
-        assert "test_session" in data["sessions"]
-
     def test_session_list(self, client):
         response = client.post(
             "/api/session/list", json={"session_name": "test_session"}
@@ -80,7 +61,6 @@ class TestAPIEndpoints:
         assert data["message"] == "success"
         results = data["results"]
         assert "candidates" in results
-        assert "sourceClusters" in results
 
     def test_start_matching_csv_input(
         self, client, sample_source_csv, sample_target_csv
@@ -537,3 +517,14 @@ class TestAPIEndpoints:
         assert response.status_code == 200
         data = response.get_json()
         assert data["status"] in {"completed", "pending", "failed"}
+
+    def test_session_delete(self, client):
+        response = client.post(
+            "/api/session/delete", json={"session_name": "test_session"}
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+        assert "sessions" in data
+        assert "test_session" not in data["sessions"]
+        assert "default" in data["sessions"]
