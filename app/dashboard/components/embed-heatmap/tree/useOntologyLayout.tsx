@@ -92,7 +92,7 @@ export const useOntologyLayout = ({
           isClusterLabel: true,
         },
         level: 1,
-        children: parents.map((parent) => {
+        children: parents.map((parent, pi) => {
           const cols = nodes
             .filter((ontology) => ontology.parent === parent)
             .map((ontology) => ontology.name);
@@ -105,20 +105,20 @@ export const useOntologyLayout = ({
           // const parentIsExpanded = expandedNodes.size > 0;
           const layerIsExpanded = expandedNodes.size > 2;
           return {
-            id: `node-${gi}-${parents.indexOf(parent)}`,
+            id: `node-${gi}-${pi}`,
             label: {
               text: parent,
               show: true,
               isClusterLabel: true,
             },
             level: 2,
-            children: cols.map((col) => {
+            children: cols.map((col, ci) => {
               let childIsExpanded = true;
               if (currentExpanding) {
                 childIsExpanded = currentExpanding.targetColumn == col;
               }
               return {
-                id: `attribute-${gi}-${parents.indexOf(parent)}-${cols.indexOf(col)}`,
+                id: `column-${gi}-${pi}-${ci}`,
                 label: {
                   text: col,
                   show: true,
@@ -188,7 +188,7 @@ export const useOntologyLayout = ({
           isClusterLabel: true,
         },
         level: 1,
-        children: parents.map((parent) => {
+        children: parents.map((parent, pi) => {
           const cols = nodes
             .filter((ontology) => ontology.parent === parent)
             .map((ontology) => ontology.name);
@@ -200,20 +200,20 @@ export const useOntologyLayout = ({
           }
           const layerIsExpanded = expandedNodes.size > 2;
           return {
-            id: `node-${gi}-${parents.indexOf(parent)}`,
+            id: `node-${gi}-${pi}`,
             label: {
               text: parent,
               show: true,
               isClusterLabel: true,
             },
             level: 2,
-            children: cols.map((col) => {
+            children: cols.map((col, ci) => {
               let childIsExpanded = true;
               if (currentExpanding) {
                 childIsExpanded = currentExpanding.sourceColumn == col;
               }
               return {
-                id: `attribute-${gi}-${parents.indexOf(parent)}-${cols.indexOf(col)}`,
+                id: `column-${gi}-${pi}-${ci}`,
                 label: {
                   text: col,
                   show: true,

@@ -269,7 +269,7 @@ export function renderSpaceFillingSegments(
     .enter()
     .append('g')
     .attr('class', 'category')
-    .attr('id', d => `category-${d.id}`)
+    .attr('id', d => d.id)
     .attr('transform', d => {
       if (orientation === SpaceFillingOrientation.HORIZONTAL) {
         return `translate(${d.x}, ${categoryPosition})`;
@@ -336,7 +336,7 @@ export function renderSpaceFillingSegments(
       }
     })
     .on('mouseover', function(event, d: CategoryData) {
-      g.select(`#category-${d.id}`)
+      g.select(`#${d.id}`)
         .call(applyHighlightStyleOnCategory, theme);
 
       const childNodes = nodesByCategoryId.get(d.id) || [];
@@ -344,7 +344,7 @@ export function renderSpaceFillingSegments(
       // apply highlight style on nodes
       nodeData.forEach(node => {
         if (childNodes.map(cat => cat.id).includes(node.id)) {
-          g.select(`#node-${node.id}`)
+          g.select(`#${node.id}`)
             .call(applyHighlightStyleOnNode, theme);
           g.select(`#node-category-connection-${node.id}-${d.id}`)
             .call(applyHighlightStyleOnEdge);
@@ -352,7 +352,7 @@ export function renderSpaceFillingSegments(
           const relatedColumns = columnsByNodeId.get(node.id) || [];
           columnData.forEach(column => {
             if (relatedColumns.map(col => col.id).includes(column.id)) {
-              g.select(`#column-${column.id}`)
+              g.select(`#${column.id}`)
                 .call(applyHighlightStyleOnColumn);
 
               g.select(`#edge-${column.id}-${node.id}`)
@@ -360,7 +360,7 @@ export function renderSpaceFillingSegments(
             }
           });
         } else {
-          g.select(`#node-${node.id}`)
+          g.select(`#${node.id}`)
             .call(applyBackgroundStyleOnNode, theme);
 
           g.select(`#node-category-connection-${node.id}-${node.category.id}`)
@@ -369,7 +369,7 @@ export function renderSpaceFillingSegments(
           const relatedColumns = columnsByNodeId.get(node.id) || [];
           columnData.forEach(column => {
             if (relatedColumns.map(col => col.id).includes(column.id)) {
-              g.select(`#column-${column.id}`)
+              g.select(`#${column.id}`)
                 .call(applyBackgroundStyleOnColumn);
 
               g.select(`#edge-${column.id}-${node.id}`)
@@ -380,12 +380,12 @@ export function renderSpaceFillingSegments(
       });
     })
     .on('mouseout', function(event, d: CategoryData) {
-      g.select(`#category-${d.id}`)
+      g.select(`#${d.id}`)
         .call(applyDefaultStyleOnCategory, theme);
 
       // apply default style on node
       nodeData.forEach(node => {
-        g.select(`#node-${node.id}`)
+        g.select(`#${node.id}`)
           .call(applyDefaultStyleOnNode, theme);
 
         g.select(`#node-category-connection-${node.id}-${node.category.id}`)
@@ -394,7 +394,7 @@ export function renderSpaceFillingSegments(
 
       // apply default style on columns and edges
       columnData.forEach(column => {
-        g.select(`#column-${column.id}`)
+        g.select(`#${column.id}`)
           .call(applyDefaultStyleOnColumn);
 
         g.select(`#edge-${column.id}-${column.node.id}`)
@@ -411,7 +411,7 @@ export function renderSpaceFillingSegments(
     .enter()
     .append('g')
     .attr('class', 'node')
-    .attr('id', d => `node-${d.id}`)
+    .attr('id', d => d.id)
     .attr('transform', d => {
       if (orientation === SpaceFillingOrientation.HORIZONTAL) {
         return `translate(${d.x}, ${nodePosition})`;
@@ -483,7 +483,7 @@ export function renderSpaceFillingSegments(
       
       // Only apply hover effects if not selected
       if (!isSelected) {
-        g.select(`#node-${d.id}`)
+        g.select(`#${d.id}`)
           .call(applyHighlightStyleOnNode, theme);
       }
       
@@ -492,13 +492,13 @@ export function renderSpaceFillingSegments(
       // Highlight related columns
       columnData.forEach(column => {
         if (relatedColumns.map(col => col.id).includes(column.id)) {
-          g.select(`#column-${column.id}`)
+          g.select(`#${column.id}`)
             .call(applyHighlightStyleOnColumn);
           
           g.select(`#edge-${column.id}-${d.id}`)
             .call(applyHighlightStyleOnEdge);
         } else {
-          g.select(`#column-${column.id}`)
+          g.select(`#${column.id}`)
             .call(applyBackgroundStyleOnColumn)
           
           g.select(`#edge-${column.id}-${column.node.id}`)
@@ -526,7 +526,7 @@ export function renderSpaceFillingSegments(
       
       // Reset all columns and edges
       columnData.forEach(column => {
-        g.select(`#column-${column.id}`).call(applyDefaultStyleOnColumn);
+        g.select(`#${column.id}`).call(applyDefaultStyleOnColumn);
         g.select(`#edge-${column.id}-${d.id}`).call(applyDefaultStyleOnEdge);
       });
     });

@@ -181,12 +181,12 @@ export function renderEdgeBundling(
       .attr('stroke-dasharray', '0');
     
     // Highlight the connected column and node
-    g.select(`#column-${d.column.id}`)
+    g.select(`#${d.column.id}`)
       .attr('opacity', 1)
       .select('rect')
       .attr('stroke-width', styles.element.highlightStrokeWidth);
     
-    g.select(`#node-${d.node.id}`)
+    g.select(`#${d.node.id}`)
       .attr('opacity', 1)
       .select('rect')
       .attr('stroke-width', styles.element.highlightStrokeWidth);
