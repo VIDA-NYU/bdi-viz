@@ -121,7 +121,7 @@ class Agent:
 
         instructions_with_memory = """
     **Tools you can use:**
-    - `recall_memory`: Recall the history of matches, mismatches, and explanations.
+    - `recall_memory`: Retrive important context like metadata, user specified nodes, etc.
     - `search_false_negatives`: Search for false negatives in the memory.
     - `search_false_positives`: Search for false positives in the memory.
     - `search_mismatches`: Search for mismatches in the memory.
@@ -134,7 +134,7 @@ class Agent:
         b. Similarity between the attribute names,
         c. Consistency of the sample values, and descriptions provided,
         d. The history of false positives and negatives,
-        e. The context from `recall_memory`.
+        e. **Encourage** using the context from `recall_memory`.
         f. The history of false positives and negatives (where the user and agent disagree), matches and mismatches.
     4. Include any additional context or keywords that might support or contradict the current mapping.
     """
