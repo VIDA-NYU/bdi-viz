@@ -95,7 +95,7 @@ export function renderColumns(
     .enter()
     .append('g')
     .attr('class', 'column')
-    .attr('id', d => `column-${d.id}`)
+    .attr('id', d => d.id)
     .attr('transform', d => orientation === ColumnOrientation.HORIZONTAL 
       ? `translate(${d.x}, 0)`
       : `translate(0, ${d.y})`)
@@ -173,7 +173,7 @@ export function renderColumns(
         .attr('stroke-dasharray', '0');
       
       // Highlight the node
-      g.select(`#node-${d.node.id}`)
+      g.select(`#${d.node.id}`)
         .select('rect')
         .attr('stroke-width', styles.column.hoverStrokeWidth);
       
