@@ -79,6 +79,8 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
         setDeleting(name);
         try {
             const remaining = await deleteSession(name);
+            // Always refresh local sessions list, regardless of which session was deleted
+            setSessions(toSessionObjs(remaining));
             if (name == sessionName) {
                 const next = (remaining && remaining.length > 0) ? remaining[0] : 'default';
                 updateSessionName(next);
@@ -89,7 +91,6 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
                 getValueBins({ callback: uniqueValuesCallback });
                 getValueMatches({ callback: valueMatchesCallback });
                 getUserOperationHistory({ callback: userOperationHistoryCallback });
-                setSessions(toSessionObjs(remaining));
             }
         } catch (_) {
             // no-op toast; container handles feedback
