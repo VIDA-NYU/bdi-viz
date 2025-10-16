@@ -59,6 +59,8 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
             setNewSessionName('');
             // ensure local state reflects the just-created session
             updateSessionName(name);
+            // clear stale candidates immediately in UI before fetching new session data
+            callback([]);
             // kick off data refresh for new session
             getCachedResults({ callback: callback });
             getSourceOntology({ callback: sourceOntologyCallback });
@@ -84,6 +86,8 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
             if (name == sessionName) {
                 const next = (remaining && remaining.length > 0) ? remaining[0] : 'default';
                 updateSessionName(next);
+                // clear stale candidates immediately in UI before fetching switched session data
+                callback([]);
                 // refresh data for switched session
                 getCachedResults({ callback: callback });
                 getSourceOntology({ callback: sourceOntologyCallback });
@@ -101,6 +105,8 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
 
     const onUpdate = useCallback((session: Session) => {
         updateSessionName(session.name);
+        // clear stale candidates immediately in UI before fetching selected session data
+        callback([]);
         getCachedResults({ callback: callback });
         getSourceOntology({ callback: sourceOntologyCallback });
         getTargetOntology({ callback: targetOntologyCallback });
