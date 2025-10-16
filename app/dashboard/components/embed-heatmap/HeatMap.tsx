@@ -517,6 +517,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
         <Box sx={{ position: "absolute", top: 160, left: MARGIN.left + 120, zIndex: 999 }}>
           <SourceHierarchyColumnViz
             sourceTreeData={sourceTreeData}
+            sourceOntologies={sourceOntologies}
             currentExpanding={currentExpanding as AggregatedCandidate}
             transform={`translate(${0},${0})`}
             hideTooltip={hideTooltip}
@@ -529,6 +530,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
       <Box sx={{ flexGrow: 1, paddingLeft: 0, flexBasis: "280px", zIndex: 1000 }}>
         <HierarchicalColumnViz
           targetTreeData={targetTreeData}
+          targetOntologies={targetOntologies}
           currentExpanding={currentExpanding as AggregatedCandidate}
           transform={`translate(${MARGIN.left},${0})`}
           hideTooltip={hideTooltip}

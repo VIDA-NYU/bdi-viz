@@ -1,4 +1,5 @@
 import * as d3 from 'd3';
+import { NodeData } from './HierarchyUtils';
 
 /**
  * Color utility functions for data visualization
@@ -145,9 +146,9 @@ export function generateCustomPalette(
  * @param categories Array of category identifiers 
  * @returns Function that maps a category ID to a color
  */
-export function getOptimalCategoryColorScale(categories: string[]): (id: string) => string {
+export function getOptimalCategoryColorScale(totalCategories: string[]): (name: string) => string {
   // Choose the best palette based on number of categories
-  const numCategories = categories.length;
+  const numCategories = totalCategories.length;
   
   let palette: string[];
   if (numCategories <= 8) {
@@ -161,11 +162,49 @@ export function getOptimalCategoryColorScale(categories: string[]): (id: string)
   
   // Create a direct mapping from category to color
   const categoryColorMap = new Map<string, string>();
-  categories.forEach((category, i) => {
+  totalCategories.forEach((category, i) => {
     categoryColorMap.set(category, palette[i % palette.length]);
   });
-  
-  return (id: string): string => {
-    return categoryColorMap.get(id) || palette[0];
+  return (name: string): string => {
+    return categoryColorMap.get(name) || palette[0];
   };
+}
+
+/**
+ * Returns a node color scale that is consistent within category.
+ * Nodes in the same category share a base hue, with small deterministic
+ * variations by node name/id to keep them in the same spectrum.
+ *
+ * Usage: pass the returned function anywhere a `(nodeId) => color` is expected.
+ */
+export function getCategoryConsistentNodeColorScale(
+  categoryColorScale: (name: string) => string,
+  nodes: NodeData[],
+): (name: string) => string {
+
+  const nodesByCategory = new Map<string, NodeData[]>();
+  for (const n of nodes) {
+    if (!nodesByCategory.has(n.category.name)) nodesByCategory.set(n.category.name, []);
+    nodesByCategory.get(n.category.name)!.push(n);
+  }
+  const nodeNameToColor = new Map<string, string>();
+  for (const [categoryName, nodes] of nodesByCategory.entries()) {
+    const base = d3.color(categoryColorScale(categoryName));
+    const baseHsl = base ? d3.hsl(base) : d3.hsl('#888');
+    const nodesLength = nodes.length;
+    nodes.forEach((node, index) => {
+      // Hue jitter
+      const hueJitter = index * 80 / nodesLength;
+
+      const color = d3.hsl(
+        (baseHsl.h + hueJitter - 40) % 360,
+        baseHsl.s * 0.9,
+        baseHsl.l * 0.9
+      ).formatHex();
+
+      nodeNameToColor.set(node.name, color);
+    });
+  }
+
+  return (name: string): string => nodeNameToColor.get(name) || categoryColorScale(nodes[0].category.name || 'default');
 }

@@ -8,10 +8,11 @@ import { renderEdgeBundlingVertical } from './EdgeBundling';
 import { renderColumnsHorizontal } from './ColumnRenderer.tsx';
 import { getHierarchyData } from './HierarchyUtils';
 import { TreeNode } from '../../tree/types';
-import { getOptimalCategoryColorScale } from './ColorUtils.ts';
+import { getCategoryConsistentNodeColorScale, getOptimalCategoryColorScale } from './ColorUtils.ts';
 
 interface HierarchicalColumnVizProps {
   targetTreeData: TreeNode[];
+  targetOntologies?: Ontology[];
   currentExpanding?: any; // Using any to match your existing code
   transform: string;
   hideTooltip: () => void;
@@ -22,6 +23,7 @@ const MARGIN = { top: 40, right: 70, bottom: 20, left: 70 };
 
 const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({ 
   targetTreeData, 
+  targetOntologies,
   currentExpanding,
   transform,
   hideTooltip,
@@ -65,6 +67,19 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     categoryData 
   } = useMemo(() => getHierarchyData(targetTreeData, layoutConfig), [targetTreeData, layoutConfig]);
 
+  const targetCategories = useMemo(() => {
+    if (targetOntologies) {
+      return targetOntologies.reduce((acc, ontology) => {
+        if (!acc.includes(ontology.grandparent)) {
+          acc.push(ontology.grandparent);
+        }
+        return acc;
+      }, [] as string[]);
+    } else {
+      return categoryData.map(category => category.name);
+    }
+  }, [targetOntologies, categoryData]);
+
   // Calculate spacing and positions
   const columnsY = useMemo(() => 0, []);
   const nodeY = useMemo(() => columnsY + layoutConfig.columnHeight + layoutConfig.columnSpacing, [columnsY, layoutConfig.columnHeight, layoutConfig.columnSpacing]);
@@ -75,9 +90,8 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
     0 // Initial value
   ), [columnData]);
 
-  const nodeColorScale = useMemo(() => getOptimalCategoryColorScale(
-    nodeData.map(c => c.id)
-  ), [nodeData]);
+  const categoryColorScale = useMemo(() => getOptimalCategoryColorScale(targetCategories), [targetCategories]);
+  const nodeColorScale = useMemo(() => getCategoryConsistentNodeColorScale(categoryColorScale, nodeData), [categoryColorScale, nodeData]);
 
   // Render function
   const renderVisualization = useCallback(() => {
@@ -98,6 +112,7 @@ const HierarchicalColumnViz: React.FC<HierarchicalColumnVizProps> = ({
       }, 
       categoryY, 
       nodeY,
+      categoryColorScale,
       nodeColorScale,
       selectedTargetNodes,
       setSelectedTargetNodes

@@ -16,7 +16,7 @@ export function renderColumns(
   layoutConfig: LayoutConfig,
   columnsPosition: number,
   currentExpanding: any,
-  nodeColorScale: (id: string) => string,
+  nodeColorScale: (name: string) => string,
   globalQuery?: string,
   orientation: ColumnOrientation = ColumnOrientation.HORIZONTAL,
   setSourceColumns?: (columns: string[]) => void
@@ -110,7 +110,7 @@ export function renderColumns(
         .attr('height', columnHeight)
         .attr('rx', styles.column.cornerRadius)
         .attr('fill', styles.column.fill)
-        .attr('stroke', nodeColorScale(d.node.id))
+        .attr('stroke', nodeColorScale(d.node.name))
         .attr('stroke-width', styles.column.strokeWidth);
       
       // Category indicator bar
@@ -120,7 +120,7 @@ export function renderColumns(
         .attr('width', styles.categoryIndicator.width)
         .attr('height', columnHeight - (styles.categoryIndicator.margin * 2))
         .attr('rx', styles.categoryIndicator.cornerRadius)
-        .attr('fill', nodeColorScale(d.node.id))
+        .attr('fill', nodeColorScale(d.node.name))
         .attr('opacity', styles.categoryIndicator.opacity);
       
       // Calculate available text width
@@ -264,7 +264,7 @@ export function renderColumnsHorizontal(
   layoutConfig: LayoutConfig,
   columnsY: number,
   currentExpanding: any,
-  nodeColorScale: (id: string) => string,
+  nodeColorScale: (name: string) => string,
   globalQuery?: string
 ) {
   return renderColumns(
@@ -286,7 +286,7 @@ export function renderColumnsVertical(
   layoutConfig: LayoutConfig,
   columnsX: number,
   currentExpanding: any,
-  nodeColorScale: (id: string) => string,
+  nodeColorScale: (name: string) => string,
   setSourceColumns: (columns: string[]) => void,
   globalQuery?: string
 ) {
