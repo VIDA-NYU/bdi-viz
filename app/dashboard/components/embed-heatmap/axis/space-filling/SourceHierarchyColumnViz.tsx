@@ -2,7 +2,7 @@ import React, { useRef, useMemo, useCallback, useContext } from 'react';
 import * as d3 from 'd3';
 import { useTheme } from '@mui/material';
 import { getHierarchyData } from './HierarchyUtils';
-import { getOptimalCategoryColorScale } from './ColorUtils';
+import { getCategoryConsistentNodeColorScale, getOptimalCategoryColorScale } from './ColorUtils';
 import { TreeNode } from '../../tree/types';
 import HighlightGlobalContext from '@/app/lib/highlight/highlight-context';
 import { renderEdgeBundlingHorizontal } from './EdgeBundling';
@@ -11,6 +11,7 @@ import { renderColumnsVertical } from './ColumnRenderer';
 
 interface SourceHierarchyColumnVizProps {
   sourceTreeData: TreeNode[];
+  sourceOntologies?: Ontology[];
   currentExpanding?: any;
   transform: string;
   hideTooltip: () => void;
@@ -22,6 +23,7 @@ const MARGIN = { top: 40, right: 20, bottom: 20, left: 70 };
 
 const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
   sourceTreeData,
+  sourceOntologies,
   currentExpanding,
   transform,
   hideTooltip,
@@ -52,6 +54,19 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
   // Process tree data
   const { columnData, nodeData, categoryData } = getHierarchyData(sourceTreeData, layoutConfig);
 
+  const sourceCategories = useMemo(() => {
+    if (sourceOntologies) {
+      return sourceOntologies.reduce((acc, ontology) => {
+        if (!acc.includes(ontology.grandparent)) {
+          acc.push(ontology.grandparent);
+        }
+        return acc;
+      }, [] as string[]);
+    } else {
+      return categoryData.map(category => category.name);
+    }
+  }, [sourceOntologies, categoryData]);
+
   const columnsX = 100;
   const nodeX = 70;
   const categoryX = 45;
@@ -61,8 +76,9 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
     0 // Initial value
   ), [columnData]);
 
-  // Color scale
-  const nodeColorScale = getOptimalCategoryColorScale(nodeData.map(c => c.id));
+  // Color scale: keep nodes within the same category similar
+  const categoryColorScale = getOptimalCategoryColorScale(sourceCategories);
+  const nodeColorScale = getCategoryConsistentNodeColorScale(categoryColorScale, nodeData);
 
   // Render function
   const renderVisualization = useCallback(() => {
@@ -83,6 +99,7 @@ const SourceHierarchyColumnViz: React.FC<SourceHierarchyColumnVizProps> = ({
       },
       categoryX,
       nodeX,
+      categoryColorScale,
       nodeColorScale,
       selectedSourceNodes,
       setSelectedSourceNodes

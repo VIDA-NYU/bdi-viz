@@ -1,7 +1,6 @@
 import { Selection } from 'd3';
 import { CategoryData, ColumnData, LabeledNode, LayoutConfig, NodeData, highlightText } from './HierarchyUtils.tsx';
 import * as d3 from 'd3';
-import { getOptimalCategoryColorScale } from './ColorUtils.ts';
 import { 
   applyDefaultStyleOnColumn,
   applyDefaultStyleOnEdge,
@@ -12,7 +11,6 @@ import {
   applyBackgroundStyleOnEdge,
   applyHighlightStyleOnEdge,
   applyBackgroundStyleOnColumn,
-  applyBackgroundStyleOnCategory,
   applyHighlightStyleOnCategory,
   applyDefaultStyleOnCategory
 } from './InteractionUtils.ts';
@@ -209,16 +207,13 @@ export function renderSpaceFillingSegments(
   layoutConfig: LayoutConfig,
   categoryPosition: number,
   nodePosition: number,
-  nodeColorScale: (id: string) => string,
+  categoryColorScale: (name: string) => string,
+  nodeColorScale: (name: string) => string,
   selectedNodes: SelectedNode[],
   setSelectedNodes: (nodes: SelectedNode[]) => void,
   orientation: SpaceFillingOrientation = SpaceFillingOrientation.HORIZONTAL
 ) {
   const { theme, globalQuery, hierarchyHeight } = layoutConfig;
-  
-  // Create a color scale for categories
-  const categoryIds = [...new Set(categoryData.map(category => category.id))];
-  const categoryColorScale = getOptimalCategoryColorScale(categoryIds);
 
   // Position the segments
   const positionedNodeSegments = calculateNodeSegments(nodeData, layoutConfig, false, undefined, orientation);
@@ -286,8 +281,8 @@ export function renderSpaceFillingSegments(
         .attr('height', orientation === SpaceFillingOrientation.HORIZONTAL ? segmentHeight : d.height)
         .attr('rx', 3)
         .attr('fill', (() => {
-          const color = d3.color(categoryColorScale(d.id));
-          return color ? color.darker(0).toString() : categoryColorScale(d.id);
+          const color = d3.color(categoryColorScale(d.name));
+          return color ? color.darker(0).toString() : categoryColorScale(d.name);
         })())
         .attr('stroke', theme.palette.text.primary)
         .attr('stroke-width', 1)
@@ -428,8 +423,8 @@ export function renderSpaceFillingSegments(
         .attr('height', orientation === SpaceFillingOrientation.HORIZONTAL ? segmentHeight : d.height)
         .attr('rx', 2)
         .attr('fill', (() => {
-          const color = d3.color(nodeColorScale(d.id));
-          return color ? color.darker(selectedNodesStringList.includes(d.name) ? 0.4 : 0).toString() : nodeColorScale(d.id);
+          const color = d3.color(nodeColorScale(d.name));
+          return color ? color.darker(selectedNodesStringList.includes(d.name) ? 0.4 : 0).toString() : nodeColorScale(d.name);
         })())
         .attr('stroke', selectedNodesStringList.includes(d.name) ? theme.palette.primary.main : theme.palette.text.primary)
         .attr('stroke-width', selectedNodesStringList.includes(d.name) ? 3 : 1)
@@ -512,8 +507,8 @@ export function renderSpaceFillingSegments(
         d3.select(this)
           .select('rect')
           .attr('fill', (() => {
-            const color = d3.color(nodeColorScale(d.id));
-            return color ? color.darker(0).toString() : nodeColorScale(d.id);
+            const color = d3.color(nodeColorScale(d.name));
+            return color ? color.darker(0).toString() : nodeColorScale(d.name);
           })())
           .attr('stroke-width', 1)
           .attr('stroke', theme.palette.text.primary);
@@ -560,7 +555,7 @@ export function renderSpaceFillingSegments(
       .attr('class', 'node-category-connection')
       .attr('d', path)
       .attr('fill', 'none')
-      .attr('stroke', nodeColorScale(node.id))
+      .attr('stroke', nodeColorScale(node.name))
       .attr('stroke-width', 1.5)
       .attr('stroke-opacity', 0.7);
   });
@@ -581,7 +576,8 @@ export function renderSpaceFillingSegmentsHorizontal(
   layoutConfig: LayoutConfig,
   categoryY: number,
   nodeY: number,
-  nodeColorScale: (id: string) => string,
+  categoryColorScale: (name: string) => string,
+  nodeColorScale: (name: string) => string,
   selectedTargetNodes: SelectedNode[],
   setSelectedTargetNodes: (nodes: SelectedNode[]) => void
 ) {
@@ -593,6 +589,7 @@ export function renderSpaceFillingSegmentsHorizontal(
     layoutConfig,
     categoryY,
     nodeY,
+    categoryColorScale,
     nodeColorScale,
     selectedTargetNodes,
     setSelectedTargetNodes,
@@ -609,7 +606,8 @@ export function renderSpaceFillingSegmentsVertical(
   layoutConfig: LayoutConfig,
   categoryX: number,
   nodeX: number,
-  nodeColorScale: (id: string) => string,
+  categoryColorScale: (name: string) => string,
+  nodeColorScale: (name: string) => string,
   selectedSourceNodes: SelectedNode[],
   setSelectedSourceNodes: (nodes: SelectedNode[]) => void
 ) {
@@ -621,6 +619,7 @@ export function renderSpaceFillingSegmentsVertical(
     layoutConfig,
     categoryX,
     nodeX,
+    categoryColorScale,
     nodeColorScale,
     selectedSourceNodes,
     setSelectedSourceNodes,
