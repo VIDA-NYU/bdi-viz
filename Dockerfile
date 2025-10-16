@@ -26,10 +26,6 @@ COPY --chown=yfw215:yfw215 ./package.json ./package.json
 COPY --chown=yfw215:yfw215 ./requirements.txt ./requirements.txt
 COPY --chown=yfw215:yfw215 ./api ./api
 COPY --chown=yfw215:yfw215 ./app ./app
-COPY --chown=yfw215:yfw215 ./.source.csv ./.source.csv
-COPY --chown=yfw215:yfw215 ./.target.csv ./.target.csv
-COPY --chown=yfw215:yfw215 ./.source.json ./.source.json
-COPY --chown=yfw215:yfw215 ./.target.json ./.target.json
 # Add any other needed files/folders (e.g., fonts, if used by Next.js)
 COPY --chown=yfw215:yfw215 ./app/fonts ./app/fonts
 
@@ -44,7 +40,7 @@ COPY --chown=yfw215:yfw215 .cache/ontologies /home/bdi-viz-react/.cache/ontologi
 COPY --chown=yfw215:yfw215 .cache/explanations /home/bdi-viz-react/.cache/explanations
 
 # Create directories and set ownership for chroma db and redis cache
-RUN mkdir -p /home/bdi-viz-react/chroma_db && chown -R yfw215:yfw215 /home/bdi-viz-react/chroma_db
+RUN mkdir -p /home/bdi-viz-react/api/sessions/default/chroma_db && chown -R yfw215:yfw215 /home/bdi-viz-react/api/sessions/default/chroma_db
 RUN mkdir -p /home/bdi-viz-react/.cache/redis && chown -R yfw215:yfw215 /home/bdi-viz-react/.cache/redis
 
 # Create celery log file
