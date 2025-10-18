@@ -80,6 +80,15 @@ def create_app() -> Flask:
     celery_init_app(app)
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
     app.logger.setLevel(logging.INFO)
+    # Constrain thread pools for numerical/BLAS libs to reduce CPU/memory spikes
+    try:
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+        os.environ.setdefault("MKL_NUM_THREADS", "1")
+        os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+        os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+    except Exception:
+        pass
     # On startup, scan sessions directory and register existing sessions
     try:
         from .utils import SESSIONS_ROOT
@@ -207,6 +216,48 @@ def session_create():
                 break
     except Exception:
         pass
+
+    # Pre-warm: ensure embeddings are loaded and Chroma collections created.
+    try:
+        _ = get_memory_retriever(session)
+    except Exception:
+        pass
+
+    # If a shared schema chroma_db exists, copy it into the new session to avoid first-time build
+    try:
+        from .utils import get_session_dir
+
+        api_dir = os.path.dirname(os.path.abspath(__file__))
+        shared_chroma = os.path.join(api_dir, "chroma_db")
+        dest_dir = os.path.join(get_session_dir(session, create=True), "chroma_db")
+        if os.path.isdir(shared_chroma):
+            if not os.path.exists(dest_dir) or not os.listdir(dest_dir):
+                import shutil as _sh
+
+                # copytree requires dest to not exist; emulate copy if it does
+                if not os.path.exists(dest_dir):
+                    _sh.copytree(shared_chroma, dest_dir)
+                else:
+                    # copy files recursively
+                    for root, dirs, files in os.walk(shared_chroma):
+                        rel = os.path.relpath(root, shared_chroma)
+                        tgt_root = (
+                            os.path.join(dest_dir, rel) if rel != "." else dest_dir
+                        )
+                        os.makedirs(tgt_root, exist_ok=True)
+                        for d in dirs:
+                            os.makedirs(os.path.join(tgt_root, d), exist_ok=True)
+                        for f in files:
+                            src_f = os.path.join(root, f)
+                            dst_f = os.path.join(tgt_root, f)
+                            try:
+                                if not os.path.exists(dst_f):
+                                    _sh.copy2(src_f, dst_f)
+                            except Exception:
+                                pass
+    except Exception:
+        pass
+
     return {"message": "success", "sessions": SESSION_MANAGER.get_active_sessions()}
 
 

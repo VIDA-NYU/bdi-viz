@@ -119,7 +119,7 @@ def get_shared_embeddings() -> HuggingFaceEmbeddings:
         )
         encode_kwargs = {"normalize_embeddings": True}
         try:
-            bs = int(os.getenv("EMBED_BATCH_SIZE", "0"))
+            bs = int(os.getenv("EMBED_BATCH_SIZE", "32"))
             if bs > 0:
                 encode_kwargs["batch_size"] = bs
         except Exception:
@@ -278,9 +278,9 @@ class MemoryRetriever:
                 name=f"agent_memory_{ns}",
                 metadata={
                     "hnsw:space": "cosine",
-                    "hnsw:construction_ef": 100,
+                    "hnsw:construction_ef": 64,
                     "hnsw:search_ef": 100,
-                    "hnsw:M": 16,
+                    "hnsw:M": 12,
                 },
             )
 
@@ -351,14 +351,16 @@ class MemoryRetriever:
             pass
         if not to_add_idx:
             return
-        with self._lock:
-            for i in range(0, len(to_add_idx), batch_size):
-                batch_indices = to_add_idx[i : i + batch_size]
-                batch_ids = [ids[j] for j in batch_indices]
-                batch_docs = [docs[j] for j in batch_indices]
-                batch_metas = [metas[j] for j in batch_indices]
-                try:
-                    vecs = self.embeddings.embed_documents(batch_docs)
+        for i in range(0, len(to_add_idx), batch_size):
+            batch_indices = to_add_idx[i : i + batch_size]
+            batch_ids = [ids[j] for j in batch_indices]
+            batch_docs = [docs[j] for j in batch_indices]
+            batch_metas = [metas[j] for j in batch_indices]
+            try:
+                # Perform embedding outside of lock to avoid blocking other writes
+                vecs = self.embeddings.embed_documents(batch_docs)
+                # Lock only around the collection add and counter update
+                with self._lock:
                     coll.add(
                         ids=batch_ids,
                         documents=batch_docs,
@@ -366,8 +368,8 @@ class MemoryRetriever:
                         embeddings=vecs,
                     )
                     self._increase_namespace_count("schema", len(batch_ids))
-                except Exception as e:
-                    logger.warning(f"Failed to batch add schema items: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to batch add schema items: {e}")
 
     def get_validation_tools(self, with_memory: bool):
         tools = [
@@ -873,13 +875,53 @@ Explanations: {formatted_explanations}
 
         with self._lock:
             embedding = self.embeddings.embed_documents([page_content])[0]
-            collection.add(
-                ids=[id],
-                documents=[page_content],
-                metadatas=[metadata],
-                embeddings=[embedding],
-            )
-            self._increase_namespace_count(namespace, 1)
+            try:
+                collection.add(
+                    ids=[id],
+                    documents=[page_content],
+                    metadatas=[metadata],
+                    embeddings=[embedding],
+                )
+                self._increase_namespace_count(namespace, 1)
+            except Exception as e:
+                msg = str(e).lower()
+                # Handle transient sqlite open errors by recreating client/collections once
+                if "unable to open database file" in msg:
+                    try:
+                        session_dir = get_session_dir(self.session_id, create=True)
+                        chroma_dir = os.path.join(session_dir, "chroma_db")
+                        os.makedirs(chroma_dir, exist_ok=True)
+                        self.client = chromadb.PersistentClient(path=chroma_dir)
+                        # Rebind collections
+                        self.collections = {}
+                        for ns in self.supported_namespaces:
+                            self.collections[ns] = self.client.get_or_create_collection(
+                                name=f"agent_memory_{ns}",
+                                metadata={
+                                    "hnsw:space": "cosine",
+                                    "hnsw:construction_ef": 100,
+                                    "hnsw:search_ef": 100,
+                                    "hnsw:M": 16,
+                                },
+                            )
+                        # Retry once
+                        collection = self.collections.get(
+                            namespace, self.collections["user_memory"]
+                        )
+                        collection.add(
+                            ids=[id],
+                            documents=[page_content],
+                            metadatas=[metadata],
+                            embeddings=[embedding],
+                        )
+                        self._increase_namespace_count(namespace, 1)
+                    except Exception as e2:
+                        logger.warning(
+                            f"Retry add failed for namespace '{namespace}' due to DB error: {e2}"
+                        )
+                        return
+                else:
+                    raise
 
     def _search_vector_store(
         self,
@@ -939,24 +981,36 @@ Explanations: {formatted_explanations}
         self.namespace_counts[namespace] = 0
 
 
-_GLOBAL_MEMORY_RETRIEVER: Optional[MemoryRetriever] = None
-_GLOBAL_MEMORY_LOCK = threading.RLock()
+_SESSION_STORES: Dict[str, MemoryRetriever] = {}
+_SESSION_LOCK = threading.RLock()
 
 
-def get_memory_retriever(session_id: str = "default"):
-    global _GLOBAL_MEMORY_RETRIEVER
-    with _GLOBAL_MEMORY_LOCK:
-        if _GLOBAL_MEMORY_RETRIEVER is None:
+def get_memory_retriever(session_id: str = "default") -> MemoryRetriever:
+    global _SESSION_STORES
+    with _SESSION_LOCK:
+        store = _SESSION_STORES.get(session_id)
+        if store is None:
             logger.info(
-                f"🧠Memory: Initializing shared memory retriever at session '{session_id}'..."
+                f"🧠Memory: Initializing memory retriever for session '{session_id}'..."
             )
-            _GLOBAL_MEMORY_RETRIEVER = MemoryRetriever(session_id=session_id)
-        else:
-            _GLOBAL_MEMORY_RETRIEVER.switch_session(session_id)
-        return _GLOBAL_MEMORY_RETRIEVER
+            store = MemoryRetriever(session_id=session_id)
+            _SESSION_STORES[session_id] = store
+        return store
 
 
 def delete_memory_retriever(session_id: str = "default"):
-    global _GLOBAL_MEMORY_RETRIEVER
-    # No-op: We keep a single shared retriever; switching session retargets paths.
+    global _SESSION_STORES
+    with _SESSION_LOCK:
+        store = _SESSION_STORES.pop(session_id, None)
+        if store is not None:
+            try:
+                # Best-effort: clear data and drop client references
+                store.clear_namespaces(store.supported_namespaces)
+            except Exception:
+                pass
+            try:
+                store.collections = {}
+                store.client = None
+            except Exception:
+                pass
     return None

@@ -36,6 +36,17 @@ from .pydantic import (
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
+# Global guard to avoid concurrent ontology ingestion per session
+_ONTOLOGY_LOADING_LOCK = None
+_ONTOLOGY_LOADING_SESSIONS = None
+try:
+    import threading as _threading
+
+    _ONTOLOGY_LOADING_LOCK = _threading.RLock()
+    _ONTOLOGY_LOADING_SESSIONS = set()
+except Exception:
+    pass
+
 
 class Agent:
     def __init__(
@@ -421,6 +432,27 @@ Important:
 
     def remember_ontology(self, ontology: Dict[str, AttributeProperties]) -> None:
         logger.info(f"🧠Memory: Remembering the ontology...")
+        # Avoid duplicate loads if schema already populated or ingestion in progress
+        try:
+            if self.store.get_namespace_count("schema") > 0:
+                logger.info(
+                    "🧠Memory: Schema already present; skipping ontology remember."
+                )
+                return
+        except Exception:
+            pass
+
+        session_id = getattr(self.store, "session_id", "default")
+        entered = False
+        if _ONTOLOGY_LOADING_LOCK is not None:
+            with _ONTOLOGY_LOADING_LOCK:
+                if session_id in _ONTOLOGY_LOADING_SESSIONS:
+                    logger.info(
+                        f"🧠Memory: Ontology ingestion already in progress for session '{session_id}', skipping."
+                    )
+                    return
+                _ONTOLOGY_LOADING_SESSIONS.add(session_id)
+                entered = True
         try:
             # Prefer batch insert for performance
             props: List[Dict[str, Any]] = []
@@ -430,6 +462,7 @@ Important:
                     props.append(prop.model_dump())
                 else:
                     props.append(prop)
+            # Use a conservative default batch size to reduce CPU/RAM spikes
             batch_size = 16
             try:
                 from os import getenv
@@ -454,6 +487,10 @@ Important:
                     self.store.put_target_schema(prop)
                 except Exception:
                     continue
+        finally:
+            if entered and _ONTOLOGY_LOADING_LOCK is not None:
+                with _ONTOLOGY_LOADING_LOCK:
+                    _ONTOLOGY_LOADING_SESSIONS.discard(session_id)
         logger.info(f"🧠Memory: Ontology remembered!")
 
     def invoke(
