@@ -7,6 +7,7 @@ import time
 import traceback
 from enum import Enum
 from typing import Any, Callable, Dict, Hashable, List, Optional
+import re
 
 from dotenv import load_dotenv
 from langchain.output_parsers import PydanticOutputParser
@@ -755,15 +756,8 @@ class RapidFuzzMatcher():
                             continue
                         for msg in messages_update:
                             if isinstance(msg, AIMessage):
-                                content_text = (
-                                    msg.content
-                                    if isinstance(msg.content, str)
-                                    else str(msg.content)
-                                )
-                                if content_text:
-                                    self._emit_event(
-                                        "delta", {"content": content_text}, node_name
-                                    )
+                                logger.info(f"msg: {msg}")
+
                                 tool_calls = getattr(msg, "tool_calls", None) or []
                                 if tool_calls:
                                     calls_render = []
@@ -778,8 +772,76 @@ class RapidFuzzMatcher():
                                         except Exception:
                                             pass
                                     self._emit_event(
-                                        "tool", {"calls": calls_render}, node_name
+                                        "tool",
+                                        {
+                                            "tool": {
+                                                "phase": "call",
+                                                "calls": calls_render,
+                                            }
+                                        },
+                                        node_name,
                                     )
+                                    continue
+                                # Normalize AIMessage into a consistent AgentState payload
+                                agent_state_payload: Dict[str, Any] = {
+                                    "message": "",
+                                    "next_agents": [],
+                                    "candidates": [],
+                                    "candidates_to_append": [],
+                                    "task_id": (
+                                        getattr(self._state, "task_id", None)
+                                        if hasattr(self, "_state")
+                                        else None
+                                    ),
+                                    "matcher_task_id": (
+                                        getattr(self._state, "matcher_task_id", None)
+                                        if hasattr(self, "_state")
+                                        else None
+                                    ),
+                                }
+
+                                def _extract_json_block(
+                                    text: str,
+                                ) -> Optional[Dict[str, Any]]:
+                                    try:
+                                        # Find fenced code block with optional language tag
+                                        m = re.search(
+                                            r"```(?:json)?\n([\s\S]*?)\n```", text
+                                        )
+                                        if m:
+                                            return json.loads(m.group(1))
+                                    except Exception:
+                                        pass
+                                    try:
+                                        # Try raw JSON as fallback
+                                        return json.loads(text)
+                                    except Exception:
+                                        return None
+
+                                content_as_str = (
+                                    msg.content
+                                    if isinstance(msg.content, str)
+                                    else str(msg.content)
+                                )
+                                parsed = (
+                                    _extract_json_block(content_as_str)
+                                    if isinstance(content_as_str, str)
+                                    else None
+                                )
+
+                                if parsed and isinstance(parsed, dict):
+                                    try:
+                                        # Merge parsed dict onto defaults
+                                        agent_state_payload.update(parsed)
+                                    except Exception:
+                                        pass
+                                else:
+                                    agent_state_payload["message"] = content_as_str
+
+                                self._emit_event(
+                                    "delta", {"state": agent_state_payload}, node_name
+                                )
+
                             elif isinstance(msg, ToolMessage):
                                 tool_name = getattr(msg, "name", "tool") or "tool"
                                 tool_text = (
@@ -796,9 +858,12 @@ class RapidFuzzMatcher():
                                 self._emit_event(
                                     "tool",
                                     {
-                                        "name": tool_name,
-                                        "content": tool_text,
-                                        "is_error": is_error,
+                                        "tool": {
+                                            "phase": "result",
+                                            "name": tool_name,
+                                            "content": tool_text,
+                                            "is_error": is_error,
+                                        }
                                     },
                                     node_name,
                                 )
