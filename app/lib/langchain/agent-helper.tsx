@@ -140,11 +140,13 @@ const agentSearchOntology = async (query: string, candidate?: Candidate) => {
         const httpAgent = new http.Agent({ keepAlive: true });
         const httpsAgent = new https.Agent({ keepAlive: true });
 
-        const resp = await axios.post("/api/agent/explore", {
-            session_name: getSessionName(),
-            candidate: candidate || undefined,
-            query,
-        }, {
+        const resp = await axios.get("/api/agent/explore", {
+            params: {
+                session_name: getSessionName(),
+                query,
+                sourceColumn: candidate?.sourceColumn,
+                targetColumn: candidate?.targetColumn,
+            },
             httpAgent,
             httpsAgent,
             timeout: 10000000, // Set timeout to unlimited
@@ -156,4 +158,86 @@ const agentSearchOntology = async (query: string, candidate?: Candidate) => {
     }
 }
 
-export { candidateExplanationRequest, agentSuggestValueMappings, agentThumbRequest, agentGetRelatedSources, agentSearchOntology };
+// SSE streaming for LangGraph agent updates
+type AgentStreamEvent = {
+    kind: "delta" | "tool" | "final" | "error" | "done" | string;
+    node?: string;
+    content?: string;
+    calls?: Array<{ name?: string; args?: any }>; // for tool intents
+    name?: string; // tool result name
+    is_error?: boolean;
+};
+
+type AgentStreamHandlers = {
+    onDelta?: (content: string, node?: string) => void;
+    onTool?: (payload: any, node?: string) => void; // receives calls or tool result
+    onFinal?: (state: any) => void;
+    onError?: (error: any) => void;
+    onDone?: () => void;
+};
+
+const agentStream = (
+    query: string,
+    opts?: { sourceColumn?: string; targetColumn?: string },
+    handlers?: AgentStreamHandlers
+) => {
+    const params = new URLSearchParams({
+        session_name: getSessionName() || "default",
+        query: query || "",
+    });
+    if (opts?.sourceColumn) params.set("sourceColumn", opts.sourceColumn);
+    if (opts?.targetColumn) params.set("targetColumn", opts.targetColumn);
+
+    const base = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/$/, '');
+    const url = `${base || ''}/api/agent/explore?${params.toString()}`;
+    const es = new EventSource(url, { withCredentials: false });
+
+    const safeParse = (e: MessageEvent) => {
+        try {
+            return JSON.parse(e.data);
+        } catch (err) {
+            return { raw: e.data };
+        }
+    };
+
+    es.addEventListener("delta", (e: MessageEvent) => {
+        const data = safeParse(e) as AgentStreamEvent;
+        const text = (data as any).content || (data as any).text;
+        if (text && handlers?.onDelta) handlers.onDelta(text, data.node);
+    });
+
+    es.addEventListener("tool", (e: MessageEvent) => {
+        const data = safeParse(e) as AgentStreamEvent;
+        if (handlers?.onTool) handlers.onTool(data, data.node);
+    });
+
+    es.addEventListener("final", (e: MessageEvent) => {
+        const data = safeParse(e);
+        if (handlers?.onFinal) handlers.onFinal(data);
+    });
+
+    es.addEventListener("error", (e: MessageEvent) => {
+        const data = safeParse(e);
+        if (handlers?.onError) handlers.onError(data);
+    });
+
+    es.addEventListener("done", () => {
+        if (handlers?.onDone) handlers.onDone();
+        es.close();
+    });
+
+    // In case server sends generic events
+    es.onerror = (err) => {
+        if (handlers?.onError) handlers.onError(err);
+    };
+
+    return es; // caller can close if needed
+};
+
+export { 
+    candidateExplanationRequest,
+    agentSuggestValueMappings,
+    agentThumbRequest,
+    agentGetRelatedSources,
+    agentStream,
+ };

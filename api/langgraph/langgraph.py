@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from langchain.output_parsers import PydanticOutputParser
 from langchain.tools import BaseTool
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -154,6 +154,8 @@ class LangGraphAgent:
         self._state = self._init_state()
         self.graph = self._build_graph()
         self.retries = retries
+        # Optional event callback for streaming updates: fn(kind: str, payload: Any, node: str)
+        self._event_cb: Optional[Callable[[str, Any, str], None]] = None
 
     def _summarize_with_llm(
         self,
@@ -273,6 +275,7 @@ class LangGraphAgent:
                 self._supervisor_prompt,
                 supervisor_tools,
                 self.worker_llm,
+                node_name="supervisor",
             ),
         )
 
@@ -285,6 +288,7 @@ class LangGraphAgent:
                 self._ontology_prompt,
                 ontology_agent_tools,
                 self.master_llm,
+                node_name="ontology_agent",
             ),
         )
 
@@ -298,6 +302,7 @@ class LangGraphAgent:
                 self._candidate_prompt,
                 candidate_agent_tools,
                 self.worker_llm,
+                node_name="candidate_agent",
             ),
         )
 
@@ -308,6 +313,7 @@ class LangGraphAgent:
                 self._task_prompt,
                 task_agent_tools,
                 self.master_llm,
+                node_name="task_agent",
             ),
         )
 
@@ -336,7 +342,11 @@ class LangGraphAgent:
         return workflow.compile()
 
     def _create_agent_node(
-        self, prompt_template: str, tools: List[BaseTool], llm: BaseChatModel
+        self,
+        prompt_template: str,
+        tools: List[BaseTool],
+        llm: BaseChatModel,
+        node_name: str,
     ) -> Callable:
         """Create an agent node with conversation-aware templates."""
 
@@ -361,7 +371,12 @@ class LangGraphAgent:
             )
 
             agent_state = self._invoke(
-                prompt, tools, AgentState, llm, self.memory_retriever
+                prompt,
+                tools,
+                AgentState,
+                llm,
+                self.memory_retriever,
+                node_name=node_name,
             )
             return agent_state
 
@@ -628,6 +643,7 @@ class RapidFuzzMatcher():
         output_structure: BaseModel,
         llm: BaseChatModel,
         store: MemoryRetriever,
+        node_name: str,
     ) -> BaseModel:
         output_parser = PydanticOutputParser(pydantic_object=output_structure)
         prompt = f"""
@@ -647,7 +663,11 @@ class RapidFuzzMatcher():
             try:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
-                        self._stream_responses, agent_executor, prompt, self.session_id
+                        self._stream_responses,
+                        agent_executor,
+                        prompt,
+                        self.session_id,
+                        node_name,
                     )
                     # Reduced timeout to 2 minutes for better error handling
                     responses = future.result(timeout=120)
@@ -704,16 +724,90 @@ class RapidFuzzMatcher():
 
                 return self._init_state()
 
+    def _emit_event(self, kind: str, payload: Any, node: str) -> None:
+        try:
+            if self._event_cb:
+                self._event_cb(kind, payload, node)
+        except Exception:
+            pass
+
     def _stream_responses(
-        self, agent_executor, prompt: str, session_id: str
+        self, agent_executor, prompt: str, session_id: str, node_name: str
     ) -> List[Any]:
-        """Stream responses from agent executor."""
-        return list(
-            agent_executor.stream(
+        """Stream responses from agent executor and forward events via callback while collecting updates."""
+        updates: List[Any] = []
+        try:
+            for update in agent_executor.stream(
                 {"messages": [HumanMessage(content=prompt)]},
                 {"configurable": {"thread_id": f"bdiviz-{session_id}"}},
-            )
-        )
+            ):
+                updates.append(update)
+                try:
+                    if not isinstance(update, dict):
+                        continue
+                    for _node, node_update in update.items():
+                        messages_update = (
+                            node_update.get("messages")
+                            if isinstance(node_update, dict)
+                            else None
+                        )
+                        if not messages_update:
+                            continue
+                        for msg in messages_update:
+                            if isinstance(msg, AIMessage):
+                                content_text = (
+                                    msg.content
+                                    if isinstance(msg.content, str)
+                                    else str(msg.content)
+                                )
+                                if content_text:
+                                    self._emit_event(
+                                        "delta", {"content": content_text}, node_name
+                                    )
+                                tool_calls = getattr(msg, "tool_calls", None) or []
+                                if tool_calls:
+                                    calls_render = []
+                                    for call in tool_calls:
+                                        try:
+                                            calls_render.append(
+                                                {
+                                                    "name": call.get("name"),
+                                                    "args": call.get("args"),
+                                                }
+                                            )
+                                        except Exception:
+                                            pass
+                                    self._emit_event(
+                                        "tool", {"calls": calls_render}, node_name
+                                    )
+                            elif isinstance(msg, ToolMessage):
+                                tool_name = getattr(msg, "name", "tool") or "tool"
+                                tool_text = (
+                                    msg.content
+                                    if isinstance(msg.content, str)
+                                    else str(msg.content)
+                                )
+                                extra = getattr(msg, "additional_kwargs", {}) or {}
+                                is_error = bool(
+                                    extra.get("is_error")
+                                    or extra.get("error")
+                                    or (extra.get("status") == "error")
+                                )
+                                self._emit_event(
+                                    "tool",
+                                    {
+                                        "name": tool_name,
+                                        "content": tool_text,
+                                        "is_error": is_error,
+                                    },
+                                    node_name,
+                                )
+                except Exception:
+                    # Swallow event forwarding errors to not break main flow
+                    pass
+        except Exception:
+            pass
+        return updates
 
     def invoke(
         self,
@@ -729,7 +823,6 @@ class RapidFuzzMatcher():
         calls, enabling the agent to ask clarifying questions and provide
         contextual responses. To start a fresh session, pass reset=True.
         """
-        from datetime import datetime
 
         # Start a new session only when explicitly requested or on first run
         if reset or self._state is None:
@@ -765,6 +858,29 @@ class RapidFuzzMatcher():
         self._state = updated_state
 
         return self._state.model_dump()
+
+    # Convenience runner that emits streaming events via callbacks while executing the workflow
+    def run_with_stream(
+        self,
+        query: str,
+        source_column: Optional[str] = None,
+        target_column: Optional[str] = None,
+        reset: bool = False,
+        event_cb: Optional[Callable[[str, Any, str], None]] = None,
+    ) -> Dict[str, Any]:
+        prev_cb = self._event_cb
+        self._event_cb = event_cb
+        try:
+            final_state = self.invoke(query, source_column, target_column, reset)
+            # Send a final event with summary/state for clients
+            if self._event_cb:
+                try:
+                    self._event_cb("final", final_state, "final")
+                except Exception:
+                    pass
+            return final_state
+        finally:
+            self._event_cb = prev_cb
 
 
 # Lazy initialization per session
