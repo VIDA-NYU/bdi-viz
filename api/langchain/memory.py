@@ -283,6 +283,25 @@ class MemoryRetriever:
                     "hnsw:M": 12,
                 },
             )
+        # Sync namespace counters with existing persisted collections so searches
+        # don't incorrectly report empty memory on fresh process/session loads.
+        try:
+            for ns, coll in self.collections.items():
+                count = 0
+                try:
+                    # Prefer fast count() when available
+                    count = int(coll.count())  # type: ignore[attr-defined]
+                except Exception:
+                    try:
+                        ids = coll.get().get("ids", [])
+                        count = len(ids) if ids is not None else 0
+                    except Exception:
+                        count = 0
+                if ns in self.namespace_counts:
+                    self.namespace_counts[ns] = count
+        except Exception:
+            # Best-effort; if it fails, default counters remain as initialized
+            pass
 
     def switch_session(self, session_id: str) -> None:
         with self._lock:
