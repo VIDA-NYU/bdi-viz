@@ -8,6 +8,7 @@ import {
     Paper,
     Divider,
     InputAdornment,
+    Button,
 } from '@mui/material';
 import UnifiedTooltip from '@/app/lib/ui/UnifiedTooltip';
 import SendIcon from '@mui/icons-material/Send';
@@ -15,18 +16,28 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SettingsGlobalContext from '@/app/lib/settings/settings-context';
 import { pollForMatchingStatus, pollForMatcherStatus, getValueMatches, getValueBins, getTargetOntology, getCachedResults, getUserOperationHistory } from '@/app/lib/heatmap/heatmap-helper';
 import { agentStream } from '@/app/lib/langchain/agent-helper';
 
 interface ChatMessage {
     id: string;
-    type: 'user' | 'agent' | 'tool';
+    type: 'user' | 'agent' | 'tool' | 'thinking';
     content: string;
     timestamp: Date;
     agentState?: AgentState;
     files?: File[];
     node?: string;
+    tool?: {
+        phase: 'call' | 'result';
+        calls?: Array<{ name?: string; args?: any }>;
+        name?: string;
+        content?: string;
+        is_error?: boolean;
+    };
 }
 
 interface OntologySearchPopupProps {
@@ -50,6 +61,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const fileInputRef = useRef<HTMLInputElement>(null);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const { ontologySearchPopupOpen, setOntologySearchPopupOpen } = useContext(
@@ -64,24 +76,38 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
     }, [chatHistory]);
 
     // Append agent delta message
-    const appendAgentDelta = (text: string, node?: string) => {
+    const appendAgentDelta = (state: any, node?: string) => {
+        console.log("agent delta: ", state);
         const msg: ChatMessage = {
             id: `${Date.now()}-${Math.random()}`,
-            type: 'agent',
-            content: text,
+            type: 'thinking',
+            content: state.message,
             timestamp: new Date(),
             node,
+            agentState: state as AgentState,
         };
         setChatHistory(prev => [...prev, msg]);
     };
 
     // Append tool event as foldable-ish line
     const appendToolEvent = (payload: any, node?: string) => {
+        const tool = (() => {
+            if (payload?.phase || payload?.name || payload?.calls) return payload;
+            if (payload?.tool) return payload.tool;
+            if (payload?.calls) return { phase: 'call', calls: payload.calls };
+            return {
+                phase: 'result',
+                name: payload?.name,
+                content: payload?.content,
+                is_error: !!payload?.is_error,
+            };
+        })();
+
         const pretty = (() => {
             try {
-                return JSON.stringify(payload, null, 2);
+                return JSON.stringify(tool, null, 2);
             } catch {
-                return String(payload);
+                return String(tool);
             }
         })();
         const msg: ChatMessage = {
@@ -90,6 +116,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
             content: pretty,
             timestamp: new Date(),
             node,
+            tool,
         };
         setChatHistory(prev => [...prev, msg]);
     };
@@ -120,19 +147,33 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                     targetColumn: selectedCandidate?.targetColumn,
                 },
                 {
-                    onDelta: (text, node) => appendAgentDelta(text, node),
+                    onDelta: (state, node) => appendAgentDelta(state, node),
                     onTool: (payload, node) => appendToolEvent(payload, node),
                     onFinal: (state: any) => {
                         try {
                             const agentState = state as AgentState;
-                            const message: ChatMessage = {
-                                id: `${Date.now()}-final`,
-                                type: 'agent',
-                                content: agentState?.message || 'Completed.',
-                                timestamp: new Date(),
-                                agentState,
-                            };
-                            setChatHistory(prev => [...prev, message]);
+                            const finalContent = agentState?.message || 'Completed.';
+                            setChatHistory(prev => {
+                                const last = prev[prev.length - 1];
+                                if (last && last.type === 'thinking' && (last.content || '').trim() === finalContent.trim()) {
+                                    // Upgrade last thinking message to final agent message
+                                    const upgraded: ChatMessage = {
+                                        ...last,
+                                        type: 'agent',
+                                        content: finalContent,
+                                        agentState,
+                                    };
+                                    return [...prev.slice(0, -1), upgraded];
+                                }
+                                const message: ChatMessage = {
+                                    id: `${Date.now()}-final`,
+                                    type: 'agent',
+                                    content: finalContent,
+                                    timestamp: new Date(),
+                                    agentState,
+                                };
+                                return [...prev, message];
+                            });
                             getCachedResults({ callback });
                             getUserOperationHistory({ callback: userOperationHistoryCallback });
                             if ((agentState as any)?.task_id) {
@@ -253,17 +294,145 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 </Typography>
             </Box>
             
-            <Paper
-                sx={{
-                    p: 1.5,
-                    backgroundColor: message.type === 'user' ? '#e3f2fd' : message.type === 'tool' ? '#fff8e1' : '#f3e5f5',
-                    ml: 2,
-                }}
-            >
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                    {message.content}
-                </Typography>
-                
+            {(() => {
+                // For thinking messages, avoid Paper entirely
+                if (message.type === 'thinking') {
+                    const text = typeof message.content === 'string' ? message.content : String(message.content);
+                    return (
+                        <Box sx={{ ml: 2 }}>
+                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: 'grey.600' }}>
+                                {text}
+                            </Typography>
+                        </Box>
+                    );
+                }
+
+                const isToolError = message.type === 'tool' && message.tool?.is_error;
+                const paperBg = message.type === 'user'
+                    ? '#e3f2fd'
+                    : message.type === 'tool'
+                        ? (isToolError ? '#ffebee' : '#fff8e1')
+                        : '#f3e5f5';
+                return (
+                    <Paper
+                        sx={{
+                            p: 1.5,
+                            backgroundColor: paperBg,
+                            ml: 2,
+                        }}
+                    >
+                {/* Content with expandable UI for non-agent messages */}
+                {(() => {
+                    const isAgent = message.type === 'agent';
+                    const text = typeof message.content === 'string' ? message.content : String(message.content);
+                    const isLong = (text?.length || 0) > 300 || (text?.split('\n').length || 0) > 8;
+                    const expanded = expandedIds.has(message.id);
+                    const bg = paperBg;
+
+                    if (isAgent) {
+                        return (
+                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                {text}
+                            </Typography>
+                        );
+                    }
+
+                    // Compact JSON cards for all tool calls/results
+                    if (message.type === 'tool') {
+                        const t = message.tool;
+                        const header = t?.phase === 'call'
+                            ? 'Tool call'
+                            : (t?.phase === 'result' ? (t?.name ? `Tool result: ${t.name}` : 'Tool result') : 'Tool');
+                        return (
+                            <Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <Typography variant="caption" sx={{ fontWeight: 600, color: t?.is_error ? '#c62828' : (t?.phase === 'call' ? '#9c27b0' : '#cc6600') }}>
+                                        {header}
+                                    </Typography>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => navigator.clipboard?.writeText(text)}
+                                        aria-label="Copy"
+                                    >
+                                        <ContentCopyIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
+                                <Box
+                                    sx={{
+                                        mt: 0.5,
+                                        p: 1,
+                                        borderRadius: 1,
+                                        backgroundColor: 'action.hover',
+                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                        fontSize: '0.75rem',
+                                        maxHeight: 180,
+                                        overflow: 'auto',
+                                        whiteSpace: 'pre',
+                                        lineHeight: 1.4,
+                                    }}
+                                    component="pre"
+                                >
+                                    {text}
+                                </Box>
+                            </Box>
+                        );
+                    }
+
+                    return (
+                        <>
+                            <Box sx={{ position: 'relative' }}>
+                                <Box sx={{ maxHeight: expanded ? 'none' : 140, overflow: 'hidden' }}>
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                        {text}
+                                    </Typography>
+                                </Box>
+                                {!expanded && isLong && (
+                                    <Box sx={{
+                                        position: 'absolute',
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        height: 40,
+                                        background: `linear-gradient(to bottom, rgba(255,255,255,0) 0%, ${bg} 100%)`,
+                                    }} />
+                                )}
+                            </Box>
+                            {isLong && (
+                                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: 0.5 }}>
+                                    <Button
+                                        size="small"
+                                        onClick={() => {
+                                            const next = new Set(expandedIds);
+                                            if (expanded) next.delete(message.id); else next.add(message.id);
+                                            setExpandedIds(next);
+                                        }}
+                                        startIcon={expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                                    >
+                                        {expanded ? 'Show less' : 'Show more'}
+                                    </Button>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => navigator.clipboard?.writeText(text)}
+                                        aria-label="Copy"
+                                    >
+                                        <ContentCopyIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
+                            )}
+                        </>
+                    );
+                })()}
+
+                {/* Next agent */}
+                {message.agentState?.next_agents && message.agentState.next_agents.length > 0 && (
+                    <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#cc6600' }}>
+                            Next agent: {message.agentState.next_agents.join(', ')}
+                        </Typography>
+                    </Box>
+                )}
+
+                {/* Files */}
                 {message.files && message.files.length > 0 && (
                     <Box sx={{ mt: 1 }}>
                         {message.files.map((file, index) => (
@@ -288,7 +457,9 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                         }
                     </Box>
                 )}
-            </Paper>
+                    </Paper>
+                );
+            })()}
         </Box>
     );
 

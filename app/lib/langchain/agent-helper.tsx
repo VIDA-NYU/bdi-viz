@@ -162,14 +162,18 @@ const agentSearchOntology = async (query: string, candidate?: Candidate) => {
 type AgentStreamEvent = {
     kind: "delta" | "tool" | "final" | "error" | "done" | string;
     node?: string;
+    // Normalized envelopes from backend
+    state?: any; // AgentState for delta/final
+    tool?: { phase: "call" | "result"; calls?: Array<{ name?: string; args?: any }>; name?: string; content?: string; is_error?: boolean };
+    // Back-compat fields
     content?: string;
-    calls?: Array<{ name?: string; args?: any }>; // for tool intents
-    name?: string; // tool result name
+    calls?: Array<{ name?: string; args?: any }>;
+    name?: string;
     is_error?: boolean;
 };
 
 type AgentStreamHandlers = {
-    onDelta?: (content: string, node?: string) => void;
+    onDelta?: (state: any, node?: string) => void;
     onTool?: (payload: any, node?: string) => void; // receives calls or tool result
     onFinal?: (state: any) => void;
     onError?: (error: any) => void;
@@ -202,18 +206,21 @@ const agentStream = (
 
     es.addEventListener("delta", (e: MessageEvent) => {
         const data = safeParse(e) as AgentStreamEvent;
-        const text = (data as any).content || (data as any).text;
-        if (text && handlers?.onDelta) handlers.onDelta(text, data.node);
+        if (data?.state && handlers?.onDelta) {
+            handlers.onDelta(data.state, data.node);
+        } else {
+            console.error("Invalid delta event:", data);
+        }
     });
 
     es.addEventListener("tool", (e: MessageEvent) => {
         const data = safeParse(e) as AgentStreamEvent;
-        if (handlers?.onTool) handlers.onTool(data, data.node);
+        if (handlers?.onTool) handlers.onTool(data.tool ?? data, data.node);
     });
 
     es.addEventListener("final", (e: MessageEvent) => {
-        const data = safeParse(e);
-        if (handlers?.onFinal) handlers.onFinal(data);
+        const data = safeParse(e) as AgentStreamEvent;
+        if (handlers?.onFinal) handlers.onFinal(data.state ?? data);
     });
 
     es.addEventListener("error", (e: MessageEvent) => {

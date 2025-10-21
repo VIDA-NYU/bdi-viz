@@ -1407,18 +1407,54 @@ def agent_stream():
             if not item:
                 continue
             kind, payload, node = item
-            app.logger.info(
-                f"[STREAMING] Agent stream event: {kind}, {payload}, {node}"
-            )
+            # app.logger.info(
+            #     f"[STREAMING] Agent stream event: {kind}, {payload}, {node}"
+            # )
             if kind == "done":
                 yield sse("done", {"ok": True})
                 break
             elif kind == "delta":
-                yield sse("delta", {"node": node, **(payload or {})})
+                # Normalize: always wrap agent state under `state`
+                state = payload.get("state") if isinstance(payload, dict) else None
+                if state is None:
+                    # Backward compatibility: promote content to state.message
+                    content = (
+                        payload.get("content") if isinstance(payload, dict) else None
+                    )
+                    state = {
+                        "message": (
+                            content if isinstance(content, str) else str(content)
+                        ),
+                        "query": query,
+                        "conversation_summary": "",
+                        "source_column": source_col,
+                        "target_column": target_col,
+                        "next_agents": [],
+                        "candidates": [],
+                        "candidates_to_append": [],
+                    }
+                yield sse("delta", {"node": node, "state": state})
             elif kind == "tool":
-                yield sse("tool", {"node": node, **(payload or {})})
+                # Normalize: always wrap tool envelope under `tool`
+                tool = payload.get("tool") if isinstance(payload, dict) else None
+                if tool is None and isinstance(payload, dict):
+                    # Back-compat for older shapes
+                    if "calls" in payload:
+                        tool = {"phase": "call", "calls": payload.get("calls")}
+                    else:
+                        tool = {
+                            "phase": "result",
+                            "name": payload.get("name"),
+                            "content": payload.get("content"),
+                            "is_error": payload.get("is_error", False),
+                        }
+                yield sse("tool", {"node": node, "tool": tool})
             elif kind == "final":
-                yield sse("final", {"node": node, **(payload or {})})
+                # Final returns the full state already; wrap it consistently
+                state = (
+                    payload if isinstance(payload, dict) else {"message": str(payload)}
+                )
+                yield sse("final", {"node": node, "state": state})
             elif kind == "error":
                 yield sse("error", {"node": node, **(payload or {})})
             else:
