@@ -15,17 +15,18 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
-import { agentSearchOntology } from '@/app/lib/langchain/agent-helper';
 import SettingsGlobalContext from '@/app/lib/settings/settings-context';
 import { pollForMatchingStatus, pollForMatcherStatus, getValueMatches, getValueBins, getTargetOntology, getCachedResults, getUserOperationHistory } from '@/app/lib/heatmap/heatmap-helper';
+import { agentStream } from '@/app/lib/langchain/agent-helper';
 
 interface ChatMessage {
     id: string;
-    type: 'user' | 'agent';
+    type: 'user' | 'agent' | 'tool';
     content: string;
     timestamp: Date;
     agentState?: AgentState;
     files?: File[];
+    node?: string;
 }
 
 interface OntologySearchPopupProps {
@@ -62,6 +63,37 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
         }
     }, [chatHistory]);
 
+    // Append agent delta message
+    const appendAgentDelta = (text: string, node?: string) => {
+        const msg: ChatMessage = {
+            id: `${Date.now()}-${Math.random()}`,
+            type: 'agent',
+            content: text,
+            timestamp: new Date(),
+            node,
+        };
+        setChatHistory(prev => [...prev, msg]);
+    };
+
+    // Append tool event as foldable-ish line
+    const appendToolEvent = (payload: any, node?: string) => {
+        const pretty = (() => {
+            try {
+                return JSON.stringify(payload, null, 2);
+            } catch {
+                return String(payload);
+            }
+        })();
+        const msg: ChatMessage = {
+            id: `${Date.now()}-${Math.random()}`,
+            type: 'tool',
+            content: pretty,
+            timestamp: new Date(),
+            node,
+        };
+        setChatHistory(prev => [...prev, msg]);
+    };
+
     const handleSearch = async () => {
         if (!query.trim() && selectedFiles.length === 0) return;
 
@@ -78,66 +110,76 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
         setQuery('');
         setSelectedFiles([]);
 
+        // Start streaming
+        let es: EventSource | null = null;
         try {
-            const result = await agentSearchOntology(query, selectedCandidate);
-            if (result) {
-                const agentMessage: ChatMessage = {
-                    id: (Date.now() + 1).toString(),
-                    type: 'agent',
-                    content: result.message || 'Search completed.',
-                    timestamp: new Date(),
-                    agentState: result,
-                };
-                setChatHistory(prev => [...prev, agentMessage]);
-                getCachedResults({ callback });
-                getUserOperationHistory({ callback: userOperationHistoryCallback });
-                if (result.candidates || result.candidates_to_append) {
-                    getTargetOntology({ callback: ontologyCallback });
-                    getValueBins({ callback: uniqueValuesCallback });
-                    getValueMatches({ callback: valueMatchesCallback });
-                }
-                if (result.task_id) {
-                    setIsLoadingGlobal(true);
-                    pollForMatchingStatus({
-                        taskId: result.task_id,
-                        onResult: (result) => {
-                            console.log("Matching task completed with result:", result);
-                            getTargetOntology({ callback: ontologyCallback });
-                            getValueBins({ callback: uniqueValuesCallback });
-                            getValueMatches({ callback: valueMatchesCallback });
-                            setIsLoadingGlobal(false);
-                        },
-                        onError: (error) => {
-                            console.error("Matching task failed with error:", error);
-                            setIsLoadingGlobal(false);
-                        },
-                        taskStateCallback: (taskState) => {
-                            console.log("Task state:", taskState);
-                            setTaskStateFor('matching', taskState);
+            es = agentStream(
+                query,
+                {
+                    sourceColumn: selectedCandidate?.sourceColumn,
+                    targetColumn: selectedCandidate?.targetColumn,
+                },
+                {
+                    onDelta: (text, node) => appendAgentDelta(text, node),
+                    onTool: (payload, node) => appendToolEvent(payload, node),
+                    onFinal: (state: any) => {
+                        try {
+                            const agentState = state as AgentState;
+                            const message: ChatMessage = {
+                                id: `${Date.now()}-final`,
+                                type: 'agent',
+                                content: agentState?.message || 'Completed.',
+                                timestamp: new Date(),
+                                agentState,
+                            };
+                            setChatHistory(prev => [...prev, message]);
+                            getCachedResults({ callback });
+                            getUserOperationHistory({ callback: userOperationHistoryCallback });
+                            if ((agentState as any)?.task_id) {
+                                setIsLoadingGlobal(true);
+                                pollForMatchingStatus({
+                                    taskId: (agentState as any).task_id,
+                                    onResult: () => {
+                                        getTargetOntology({ callback: ontologyCallback });
+                                        getValueBins({ callback: uniqueValuesCallback });
+                                        getValueMatches({ callback: valueMatchesCallback });
+                                        setIsLoadingGlobal(false);
+                                    },
+                                    onError: () => setIsLoadingGlobal(false),
+                                    taskStateCallback: (ts) => setTaskStateFor('matching', ts),
+                                });
+                            } else if ((agentState as any)?.matcher_task_id) {
+                                setIsLoadingGlobal(true);
+                                pollForMatcherStatus({
+                                    taskId: (agentState as any).matcher_task_id,
+                                    onResult: () => {
+                                        getTargetOntology({ callback: ontologyCallback });
+                                        getValueBins({ callback: uniqueValuesCallback });
+                                        getValueMatches({ callback: valueMatchesCallback });
+                                        setIsLoadingGlobal(false);
+                                    },
+                                    onError: () => setIsLoadingGlobal(false),
+                                    taskStateCallback: (ts) => setTaskStateFor('new_matcher', ts),
+                                });
+                            }
+                        } catch (e) {
+                            // noop
                         }
-                    });
-                } else if (result.matcher_task_id) {
-                    setIsLoadingGlobal(true);
-                    pollForMatcherStatus({
-                        taskId: result.matcher_task_id,
-                        onResult: (result) => {
-                            console.log("Matcher task completed with result:", result);
-                            getTargetOntology({ callback: ontologyCallback });
-                            getValueBins({ callback: uniqueValuesCallback });
-                            getValueMatches({ callback: valueMatchesCallback });
-                            setIsLoadingGlobal(false);
-                        },
-                        onError: (error) => {
-                            console.error("Matcher task failed with error:", error);
-                            setIsLoadingGlobal(false);
-                        },
-                        taskStateCallback: (taskState) => {
-                            console.log("Task state:", taskState);
-                            setTaskStateFor('new_matcher', taskState);
-                        }
-                    });
+                    },
+                    onError: () => {
+                        const errorMessage: ChatMessage = {
+                            id: `${Date.now()}-err`,
+                            type: 'agent',
+                            content: 'Sorry, there was an error processing your request.',
+                            timestamp: new Date(),
+                        };
+                        setChatHistory(prev => [...prev, errorMessage]);
+                    },
+                    onDone: () => {
+                        setLoading(false);
+                    },
                 }
-            }
+            );
         } catch (error) {
             const errorMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),
@@ -146,8 +188,9 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 timestamp: new Date(),
             };
             setChatHistory(prev => [...prev, errorMessage]);
+            setLoading(false);
+            if (es) es.close();
         }
-        setLoading(false);
     };
 
     const handleKeyPress = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -200,18 +243,20 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
                 {message.type === 'user' ? (
                     <PersonIcon sx={{ fontSize: 16, mr: 0.5, color: '#1976d2' }} />
+                ) : message.type === 'tool' ? (
+                    <SmartToyIcon sx={{ fontSize: 16, mr: 0.5, color: '#ff9800' }} />
                 ) : (
                     <SmartToyIcon sx={{ fontSize: 16, mr: 0.5, color: '#9c27b0' }} />
                 )}
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {message.timestamp.toLocaleTimeString()}
+                    {message.timestamp.toLocaleTimeString()} {message.node ? `· ${message.node}` : ''}
                 </Typography>
             </Box>
             
             <Paper
                 sx={{
                     p: 1.5,
-                    backgroundColor: message.type === 'user' ? '#e3f2fd' : '#f3e5f5',
+                    backgroundColor: message.type === 'user' ? '#e3f2fd' : message.type === 'tool' ? '#fff8e1' : '#f3e5f5',
                     ml: 2,
                 }}
             >
@@ -408,7 +453,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                                 </Box>
                             </InputAdornment>
                         ),
-                        style: { fontSize: '0.875rem' } // Ensure font size is applied here
+                        style: { fontSize: '0.875rem' }
                     }}
                 />
                 <input

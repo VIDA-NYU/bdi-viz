@@ -94,7 +94,7 @@ class Agent:
             if self._llm_model is not None:
                 self._llm = self._llm_model
             else:
-                self._llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+                self._llm = ChatOpenAI(model="gpt-5-nano", temperature=0)
         return self._llm
 
     def explain(

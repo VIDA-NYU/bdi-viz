@@ -5,11 +5,12 @@ import shutil
 import sys
 import threading
 from typing import List, Tuple
+import queue
 from uuid import uuid4
 
 import pandas as pd
 from celery import Celery, Task
-from flask import Flask, request
+from flask import Flask, request, Response, stream_with_context
 
 # Lazy import the agent to save resources
 from .langchain.pydantic import AgentResponse
@@ -1327,38 +1328,111 @@ def agent_explanation():
     return response
 
 
-@app.route("/api/agent/explore", methods=["POST"])
-def agent_explore():
-    session = extract_session_name(request)
-    matching_task = SESSION_MANAGER.get_session(session).matching_task
+# @app.route("/api/agent/explore", methods=["POST"])
+# def agent_explore():
+#     session = extract_session_name(request)
 
-    data = request.json
-    query = data["query"]
-    candidate = data.get("candidate", None)
+#     data = request.json
+#     query = data["query"]
+#     candidate = data.get("candidate", None)
 
-    if candidate:
-        source_col = candidate["sourceColumn"]
-        target_col = candidate["targetColumn"]
-        source_values = matching_task.get_source_unique_values(source_col)
-        target_values = matching_task.get_target_unique_values(target_col)
-    else:
-        source_col = None
-        target_col = None
-        source_values = None
-        target_values = None
+#     if candidate:
+#         source_col = candidate["sourceColumn"]
+#         target_col = candidate["targetColumn"]
+#     else:
+#         source_col = None
+#         target_col = None
 
-    candidate = {
-        "sourceColumn": source_col,
-        "targetColumn": target_col,
-        "sourceValues": source_values,
-        "targetValues": target_values,
-    }
+#     agent = get_langgraph_agent(session)
+#     response = agent.invoke(query, source_col, target_col)
+#     app.logger.critical(f"Response: {response}")
+
+#     return response
+
+
+@app.route("/api/agent/explore", methods=["GET"])
+def agent_stream():
+    """Server-Sent Events endpoint to stream LangGraph agent updates (thoughts + tool calls/results)."""
+    session = request.args.get("session_name", "default")
+    query = request.args.get("query", "")
+    source_col = request.args.get("sourceColumn", None)
+    target_col = request.args.get("targetColumn", None)
+
+    if not query:
+        return {"status": "error", "message": "Missing query"}, 400
 
     agent = get_langgraph_agent(session)
-    response = agent.invoke(query, source_col, target_col)
-    app.logger.critical(f"Response: {response}")
 
-    return response
+    ev_queue: "queue.Queue" = queue.Queue()
+
+    def _event_cb(kind: str, payload: dict, node: str) -> None:
+        try:
+            ev_queue.put((kind, payload or {}, node or ""))
+        except Exception:
+            pass
+
+    def _run_agent():
+        try:
+            agent.run_with_stream(
+                query=query,
+                source_column=source_col,
+                target_column=target_col,
+                reset=False,
+                event_cb=_event_cb,
+            )
+        except Exception as e:
+            try:
+                ev_queue.put(("error", {"message": str(e)}, "agent"))
+            except Exception:
+                pass
+        finally:
+            try:
+                ev_queue.put(("done", {}, "agent"))
+            except Exception:
+                pass
+
+    th = threading.Thread(target=_run_agent, daemon=True)
+    th.start()
+
+    def _gen():
+        def sse(event: str, data: dict):
+            payload = json.dumps(data, ensure_ascii=False)
+            return f"event: {event}\ndata: {payload}\n\n"
+
+        # Send an initial event to open the stream promptly and defeat proxy buffering
+        yield sse("ready", {"ok": True})
+
+        while True:
+            item = ev_queue.get()
+            if not item:
+                continue
+            kind, payload, node = item
+            app.logger.info(
+                f"[STREAMING] Agent stream event: {kind}, {payload}, {node}"
+            )
+            if kind == "done":
+                yield sse("done", {"ok": True})
+                break
+            elif kind == "delta":
+                yield sse("delta", {"node": node, **(payload or {})})
+            elif kind == "tool":
+                yield sse("tool", {"node": node, **(payload or {})})
+            elif kind == "final":
+                yield sse("final", {"node": node, **(payload or {})})
+            elif kind == "error":
+                yield sse("error", {"node": node, **(payload or {})})
+            else:
+                yield sse("event", {"node": node, **(payload or {}), "kind": kind})
+
+    headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "Content-Type": "text/event-stream",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+    }
+
+    return Response(stream_with_context(_gen()), headers=headers)
 
 
 @app.route("/api/agent/outer-source", methods=["POST"])
