@@ -617,10 +617,13 @@ def load_ontology(
 
 
 def load_property(
-    target_column: str, session: Optional[str] = "default"
+    target_column: str, is_target: bool = True, session: Optional[str] = "default"
 ) -> Optional[Dict[str, Any]]:
     try:
-        path = get_session_file(session, "target.json", create_dir=False)
+        if is_target:
+            path = get_session_file(session, "target.json", create_dir=False)
+        else:
+            path = get_session_file(session, "source.json", create_dir=False)
         with open(path, "r") as f:
             ontology_flat = json.load(f)
 

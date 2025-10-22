@@ -143,6 +143,28 @@ export const useDashboardCandidates = (): DashboardCandidateState => {
         return () => controller.abort();
     }, [selectedCandidate]);
 
+    // Clear selected candidate (and dependent state) when the session changes
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const clearOnSessionChange = () => {
+            setSelectedCandidate(undefined);
+            setGdcAttribute(undefined);
+        };
+
+        const onStorage = (e: StorageEvent) => {
+            if (e.key === "bdiviz_session_name") clearOnSessionChange();
+        };
+
+        window.addEventListener("bdiviz:session", clearOnSessionChange);
+        window.addEventListener("storage", onStorage);
+
+        return () => {
+            window.removeEventListener("bdiviz:session", clearOnSessionChange);
+            window.removeEventListener("storage", onStorage);
+        };
+    }, []);
+
     // Initial data loading
     useEffect(() => {
         const controller = new AbortController();

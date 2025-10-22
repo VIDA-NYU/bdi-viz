@@ -35,6 +35,7 @@ class QueryTools:
             description="""
             Read the values for a specific target attribute.
             Args:
+                session_id (str): The current session ID.
                 target_attribute (str): The target biomedical attribute to
                 read.
             Returns:
@@ -48,6 +49,7 @@ class QueryTools:
             description="""
             Read the description for a specific target attribute.
             Args:
+                session_id (str): The current session ID.
                 target_attribute (str): The target biomedical attribute to
                 read.
             Returns:
@@ -61,10 +63,24 @@ class QueryTools:
             description="""
             Read the values for a specific source attribute.
             Args:
+                session_id (str): The current session ID.
                 source_attribute (str): The source biomedical attribute to
                 read.
             Returns:
                 List[str]: All values for the source attribute.
+            """.strip(),
+        )
+
+        self.read_source_description_tool = StructuredTool.from_function(
+            func=self._read_source_description,
+            name="read_source_description",
+            description="""
+            Read the description for a specific source attribute.
+            Args:
+                session_id (str): The current session ID.
+                source_attribute (str): The source biomedical attribute to read.
+            Returns:
+                str: The description for the source attribute.
             """.strip(),
         )
 
@@ -75,6 +91,7 @@ class QueryTools:
             self.read_source_values_tool,
             self.read_target_values_tool,
             self.read_target_description_tool,
+            self.read_source_description_tool,
             self.memory_retriever.remember_this_tool,
             self.memory_retriever.recall_memory_tool,
         ]
@@ -145,17 +162,20 @@ class QueryTools:
         )
         return results
 
-    def _read_target_values(self, target_attribute: str) -> List[str]:
+    def _read_target_values(self, session_id: str, target_attribute: str) -> List[str]:
         """
         Read the values for a specific target attribute.
 
         Args:
+            session_id (str): The current session ID.
             target_attribute (str): The target biomedical attribute to read.
         Returns:
             List[str]: All values for the target attribute.
         """
         results = []  # Initialize results to avoid UnboundLocalError
-        target_properties = load_property(target_attribute)
+        target_properties = load_property(
+            target_attribute, is_target=True, session=session_id
+        )
         if target_properties is not None:
             if "enum" in target_properties:
                 target_values = target_properties["enum"]
@@ -168,23 +188,27 @@ class QueryTools:
         else:
             results = self.matching_task.get_target_unique_values(target_attribute)
         logger.info(
-            "🧰Tool called: read_target_values for %s found %s values",
+            "🧰Tool called: read_target_values for session %s, target %s found %s values",
+            session_id,
             target_attribute,
             len(results),
         )
         return results
 
-    def _read_source_values(self, source_attribute: str) -> List[str]:
+    def _read_source_values(self, session_id: str, source_attribute: str) -> List[str]:
         """
         Read the values for a specific source attribute.
 
         Args:
+            session_id (str): The current session ID.
             source_attribute (str): The source biomedical attribute to read.
         Returns:
             List[str]: All values for the source attribute.
         """
         results = []  # Initialize results to avoid UnboundLocalError
-        source_properties = load_property(source_attribute)
+        source_properties = load_property(
+            source_attribute, is_target=False, session=session_id
+        )
         if source_properties is not None:
             if "enum" in source_properties:
                 source_values = source_properties["enum"]
@@ -197,29 +221,63 @@ class QueryTools:
         else:
             results = self.matching_task.get_source_unique_values(source_attribute)
         logger.info(
-            "🧰Tool called: read_source_values for %s found %s values",
+            "🧰Tool called: read_source_values for session %s, source %s found %s values",
+            session_id,
             source_attribute,
             len(results),
         )
         return results
 
-    def _read_target_description(self, target_attribute: str) -> str:
+    def _read_target_description(self, session_id: str, target_attribute: str) -> str:
         """
         Read the description for a specific target attribute.
 
         Args:
+            session_id (str): The current session ID.
             target_attribute (str): The target biomedical attribute to read.
         Returns:
             str: The description for the target attribute.
         """
         results = ""  # Initialize results to avoid UnboundLocalError
-        target_properties = load_property(target_attribute)
+        target_properties = load_property(
+            target_attribute, is_target=True, session=session_id
+        )
         if target_properties is not None:
             if "description" in target_properties:
                 results = target_properties["description"]
             # If no description property, results remains empty string
         # If target_properties is None, results remains empty string
         logger.info(
-            f"🧰Tool called: read_target_description for {target_attribute} found: {results[:10]}...",
+            "🧰Tool called: read_target_description for session %s, target %s found: %s...",
+            session_id,
+            target_attribute,
+            results[:10],
+        )
+        return results
+
+    def _read_source_description(self, session_id: str, source_attribute: str) -> str:
+        """
+        Read the description for a specific source attribute.
+
+        Args:
+            session_id (str): The current session ID.
+            source_attribute (str): The source biomedical attribute to read.
+        Returns:
+            str: The description for the source attribute.
+        """
+        results = ""  # Initialize results to avoid UnboundLocalError
+        source_properties = load_property(
+            source_attribute, is_target=False, session=session_id
+        )
+        if source_properties is not None:
+            if "description" in source_properties:
+                results = source_properties["description"]
+            # If no description property, results remains empty string
+        # If source_properties is None, results remains empty string
+        logger.info(
+            "🧰Tool called: read_source_description for session %s, source %s found: %s...",
+            session_id,
+            source_attribute,
+            results[:10],
         )
         return results
