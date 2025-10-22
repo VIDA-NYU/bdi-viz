@@ -10,16 +10,19 @@ import {
     InputAdornment,
     Button,
 } from '@mui/material';
+import axios from 'axios';
 import UnifiedTooltip from '@/app/lib/ui/UnifiedTooltip';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SettingsGlobalContext from '@/app/lib/settings/settings-context';
+import { getSessionName } from '@/app/lib/settings/session';
 import { pollForMatchingStatus, pollForMatcherStatus, getValueMatches, getValueBins, getTargetOntology, getCachedResults, getUserOperationHistory } from '@/app/lib/heatmap/heatmap-helper';
 import { agentStream } from '@/app/lib/langchain/agent-helper';
 
@@ -68,12 +71,143 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
         SettingsGlobalContext
     );
     const { setIsLoadingGlobal, setTaskStateFor } = useContext(SettingsGlobalContext);
+    const [panelWidth, setPanelWidth] = useState<number>(350);
 
     useEffect(() => {
         if (chatEndRef.current) {
             chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     }, [chatHistory]);
+
+    // Persist chat history per session in localStorage
+    const STORAGE_KEY_PREFIX = 'bdiviz_chat_history_';
+    const WIDTH_KEY_PREFIX = 'bdiviz_chat_width_';
+
+    const loadChatHistoryForSession = () => {
+        try {
+            const session = (typeof window !== 'undefined' ? getSessionName() : undefined) || 'default';
+            const raw = typeof window !== 'undefined' ? window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${session}`) : null;
+            if (!raw) {
+                setChatHistory([]);
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                const restored: ChatMessage[] = parsed.map((m: any) => {
+                    const ts = m?.timestamp ? new Date(m.timestamp) : new Date();
+                    // Do not attempt to restore File objects; omit files on restore
+                    const { files: _ignored, ...rest } = m || {};
+                    return { ...rest, timestamp: ts } as ChatMessage;
+                });
+                setChatHistory(restored);
+            } else {
+                setChatHistory([]);
+            }
+        } catch {
+            // ignore corrupt storage
+            setChatHistory([]);
+        }
+    };
+
+    const handleClearChat = async () => {
+        try {
+            const session = (typeof window !== 'undefined' ? getSessionName() : undefined) || 'default';
+            // Clear local persisted chat for this session
+            if (typeof window !== 'undefined') {
+                window.localStorage.removeItem(`${STORAGE_KEY_PREFIX}${session}`);
+            }
+            setChatHistory([]);
+            // Reset backend agent conversation summary/state
+            await axios.post('/api/agent/reset', { session_name: session });
+        } catch (e) {
+            // noop on error; local clear already applied
+            console.error('Failed to reset agent state:', e);
+        }
+    };
+
+    useEffect(() => {
+        // Initial load
+        loadChatHistoryForSession();
+        // Load saved width
+        try {
+            const session = (typeof window !== 'undefined' ? getSessionName() : undefined) || 'default';
+            const raw = typeof window !== 'undefined' ? window.localStorage.getItem(`${WIDTH_KEY_PREFIX}${session}`) : null;
+            const clampWidth = (w: number) => {
+                const min = 260;
+                const max = typeof window !== 'undefined' ? Math.min(900, Math.floor(window.innerWidth * 0.9)) : 900;
+                return Math.min(max, Math.max(min, w));
+            };
+            if (raw) {
+                const num = parseInt(raw, 10);
+                if (!Number.isNaN(num)) setPanelWidth(clampWidth(num));
+            }
+        } catch {}
+        // Reload on session change
+        const onSessionChange = () => loadChatHistoryForSession();
+        if (typeof window !== 'undefined') {
+            window.addEventListener('bdiviz:session', onSessionChange);
+        }
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('bdiviz:session', onSessionChange);
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        try {
+            const session = (typeof window !== 'undefined' ? getSessionName() : undefined) || 'default';
+            const serializable = chatHistory.map(({ timestamp, files, ...rest }) => ({
+                ...rest,
+                // store ISO string for timestamp
+                timestamp: (timestamp instanceof Date ? timestamp.toISOString() : new Date(timestamp).toISOString()),
+            }));
+            if (typeof window !== 'undefined') {
+                window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${session}`, JSON.stringify(serializable));
+            }
+        } catch {
+            // ignore write errors
+        }
+    }, [chatHistory]);
+
+    // Drag-to-resize handlers
+    const onResizeMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        try {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startWidth = panelWidth;
+            const clampWidth = (w: number) => {
+                const min = 260;
+                const max = typeof window !== 'undefined' ? Math.min(900, Math.floor(window.innerWidth * 0.9)) : 900;
+                return Math.min(max, Math.max(min, w));
+            };
+            const onMove = (ev: MouseEvent) => {
+                const delta = startX - ev.clientX; // dragging left increases width
+                setPanelWidth(clampWidth(startWidth + delta));
+            };
+            const onUp = () => {
+                try {
+                    const session = (typeof window !== 'undefined' ? getSessionName() : undefined) || 'default';
+                    if (typeof window !== 'undefined') {
+                        window.localStorage.setItem(`${WIDTH_KEY_PREFIX}${session}`, String(panelWidth));
+                    }
+                } catch {}
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                try {
+                    document.body.style.cursor = '';
+                    (document.body.style as any).userSelect = '';
+                } catch {}
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            try {
+                document.body.style.cursor = 'col-resize';
+                (document.body.style as any).userSelect = 'none';
+            } catch {}
+        } catch {}
+    };
 
     // Append agent delta message
     const appendAgentDelta = (state: any, node?: string) => {
@@ -175,8 +309,8 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                                 return [...prev, message];
                             });
                             getCachedResults({ callback });
-                            getUserOperationHistory({ callback: userOperationHistoryCallback });
                             if ((agentState as any)?.task_id) {
+                                // Matching task
                                 setIsLoadingGlobal(true);
                                 pollForMatchingStatus({
                                     taskId: (agentState as any).task_id,
@@ -190,6 +324,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                                     taskStateCallback: (ts) => setTaskStateFor('matching', ts),
                                 });
                             } else if ((agentState as any)?.matcher_task_id) {
+                                // New matcher task
                                 setIsLoadingGlobal(true);
                                 pollForMatcherStatus({
                                     taskId: (agentState as any).matcher_task_id,
@@ -202,9 +337,16 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                                     onError: () => setIsLoadingGlobal(false),
                                     taskStateCallback: (ts) => setTaskStateFor('new_matcher', ts),
                                 });
+                            } else {
+                                // User operations or other non-matching tasks
+                                getTargetOntology({ callback: ontologyCallback });
+                                getValueBins({ callback: uniqueValuesCallback });
+                                getValueMatches({ callback: valueMatchesCallback });
+                                getUserOperationHistory({ callback: userOperationHistoryCallback });
                             }
                         } catch (e) {
                             // noop
+                            console.error("Error processing agent state:", e);
                         }
                     },
                     onError: () => {
@@ -231,6 +373,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
             setChatHistory(prev => [...prev, errorMessage]);
             setLoading(false);
             if (es) es.close();
+            console.error("Error processing agent state:", error);
         }
     };
 
@@ -471,7 +614,7 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 position: 'fixed',
                 right: 0,
                 top: 0,
-                width: '350px',
+                width: `${panelWidth}px`,
                 height: '100vh',
                 backgroundColor: 'background.paper',
                 borderLeft: 1,
@@ -482,6 +625,19 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 boxShadow: '-2px 0 8px rgba(0,0,0,0.1)',
             }}
         >
+            {/* Resize handle */}
+            <Box
+                onMouseDown={onResizeMouseDown}
+                sx={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 6,
+                    cursor: 'col-resize',
+                    '&:hover': { backgroundColor: 'action.hover' },
+                }}
+            />
             {/* Header */}
             <Box
                 sx={{
@@ -496,12 +652,21 @@ const OntologySearchPopup: React.FC<OntologySearchPopupProps> = ({
                 <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 500 }}>
                     Harmonization Assistant
                 </Typography>
-                <IconButton
-                    size="small"
-                    onClick={() => setOntologySearchPopupOpen(false)}
-                >
-                    <CloseIcon fontSize="small" />
-                </IconButton>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <UnifiedTooltip title="Clear chat history">
+                        <span>
+                            <IconButton size="small" onClick={handleClearChat}>
+                                <DeleteForeverOutlinedIcon fontSize="small" />
+                            </IconButton>
+                        </span>
+                    </UnifiedTooltip>
+                    <IconButton
+                        size="small"
+                        onClick={() => setOntologySearchPopupOpen(false)}
+                    >
+                        <CloseIcon fontSize="small" />
+                    </IconButton>
+                </Box>
             </Box>
 
             {/* Chat History */}

@@ -617,16 +617,12 @@ def load_ontology(
 
 
 def load_property(
-    target_column: str, session: Optional[str] = None
+    target_column: str, session: Optional[str] = "default"
 ) -> Optional[Dict[str, Any]]:
     try:
-        if session:
-            path = get_session_file(session, "target.json", create_dir=False)
-            with open(path, "r") as f:
-                ontology_flat = json.load(f)
-        else:
-            with open(".target.json", "r") as f:
-                ontology_flat = json.load(f)
+        path = get_session_file(session, "target.json", create_dir=False)
+        with open(path, "r") as f:
+            ontology_flat = json.load(f)
 
         property = None
         if target_column in ontology_flat:

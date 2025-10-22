@@ -1504,6 +1504,26 @@ def agent_thumb():
     return {"message": "success"}
 
 
+@app.route("/api/agent/reset", methods=["POST"])
+def agent_reset():
+    """Reset the LangGraph agent's conversation state (e.g., conversation_summary) for the session."""
+    session = extract_session_name(request)
+    try:
+        agent = get_langgraph_agent(session)
+        # Reset agent state
+        agent.reset_state()
+        # Also clear relevant namespaces in memory to avoid context leakage
+        try:
+            memory_retriever = get_memory_retriever(session)
+            # Keep embeddings but clear conversational/user memories
+            memory_retriever.clear_namespaces(["user_memory"])
+        except Exception:
+            pass
+        return {"message": "success"}
+    except Exception as e:
+        return {"message": "failure", "error": str(e)}, 500
+
+
 @app.route("/api/user-operation/apply", methods=["POST"])
 def user_operation():
     session = extract_session_name(request)
