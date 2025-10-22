@@ -397,7 +397,9 @@ class MatchingTask:
                     continue
 
                 target_col = candidate["targetColumn"]
-                property_obj = load_property(target_col, session=self.session_name)
+                property_obj = load_property(
+                    target_col, is_target=True, session=self.session_name
+                )
                 if property_obj is None:
                     continue
 
@@ -1206,7 +1208,9 @@ class MatchingTask:
         Retrieve unique values for a target column. If the column is found in the target ontology
         and has enums, return those. Otherwise, return unique values from the dataframe.
         """
-        target_description = load_property(target_col, session=self.session_name)
+        target_description = load_property(
+            target_col, is_target=True, session=self.session_name
+        )
         if target_description and "enum" in target_description:
             target_values = target_description["enum"] or []
         elif self.target_df is not None and target_col in self.target_df.columns:

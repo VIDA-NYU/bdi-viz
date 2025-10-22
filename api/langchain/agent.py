@@ -109,7 +109,7 @@ class Agent:
             with_memory = False
 
         target_description = load_property(
-            candidate["targetColumn"], session=self.session_id
+            candidate["targetColumn"], is_target=True, session=self.session_id
         )
         target_values = candidate["targetValues"]
         if target_description is not None and "enum" in target_description:
