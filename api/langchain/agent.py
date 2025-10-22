@@ -54,6 +54,7 @@ class Agent:
         memory_retriever: MemoryRetriever,
         llm_model: Optional[BaseChatModel] = None,
         retries: int = 3,
+        session_id: str = "default",
     ) -> None:
         # OR claude-3-5-sonnet-20240620
         # self.llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
@@ -66,7 +67,7 @@ class Agent:
         self._llm_model = llm_model
 
         # Thread id can be session-qualified by the caller if desired
-        self.agent_config = {"configurable": {"thread_id": "bdiviz-1"}}
+        self.agent_config = {"configurable": {"thread_id": f"bdiviz-{session_id}"}}
 
         # self.memory = MemorySaver()
         self.store = memory_retriever
@@ -87,6 +88,8 @@ class Agent:
 
         self.retries = retries
 
+        self.session_id = session_id
+
     @property
     def llm(self):
         # Lazy initialization of LLM to save resources
@@ -105,7 +108,7 @@ class Agent:
         if self.store.get_namespace_count("user_memory") <= 0:
             with_memory = False
 
-        target_description = load_property(candidate["targetColumn"])
+        target_description = load_property(candidate["targetColumn"], session=self.session_id)
         target_values = candidate["targetValues"]
         if target_description is not None and "enum" in target_description:
             target_enum = target_description["enum"]
@@ -574,5 +577,5 @@ def get_agent(memory_retriever: MemoryRetriever, session_id: str = "default") ->
             llm_model = ChatOpenAI(model="gpt-5-nano")
         else:
             raise ValueError(f"Invalid LLM provider: {llm_provider}")
-        AGENTS[session_id] = Agent(memory_retriever, llm_model=llm_model)
+        AGENTS[session_id] = Agent(memory_retriever, llm_model=llm_model, session_id=session_id)
     return AGENTS[session_id]
