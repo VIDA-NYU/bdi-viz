@@ -367,13 +367,115 @@ class TestAPIEndpoints:
 
     def test_agent_explore_endpoint(self, client):
         with patch("api.index.get_langgraph_agent") as mock_get_agent:
-            mock_agent = MagicMock()
-            mock_agent.invoke.return_value = {"result": "explored"}
-            mock_get_agent.return_value = mock_agent
-            response = client.post("/api/agent/explore", json={"query": "q"})
+            class DummyAgent:
+                def run_with_stream(self, query, source_column=None, target_column=None, reset=False, event_cb=None):
+                    if event_cb:
+                        event_cb(
+                            "delta",
+                            {
+                                "state": {
+                                    "message": "thinking",
+                                    "next_agents": [],
+                                    "candidates": [],
+                                    "candidates_to_append": [],
+                                }
+                            },
+                            "supervisor",
+                        )
+                        event_cb("final", {"result": "explored"}, "final")
+                    return {"result": "explored"}
+
+            mock_get_agent.return_value = DummyAgent()
+            response = client.get(
+                "/api/agent/explore",
+                query_string={"session_name": "test_session", "query": "q"},
+            )
             assert response.status_code == 200
-            data = response.get_json()
-            assert data.get("result") == "explored"
+            # SSE stream content type
+            assert "text/event-stream" in response.content_type
+            body = response.get_data(as_text=True)
+            assert "event: ready" in body
+            assert "event: final" in body
+            assert '"result": "explored"' in body
+
+    def test_agent_explore_tool_events(self, client):
+        with patch("api.index.get_langgraph_agent") as mock_get_agent:
+            class DummyAgent:
+                def run_with_stream(
+                    self,
+                    query,
+                    source_column=None,
+                    target_column=None,
+                    reset=False,
+                    event_cb=None,
+                ):
+                    if event_cb:
+                        # Agent thinking (delta)
+                        event_cb(
+                            "delta",
+                            {
+                                "state": {
+                                    "message": "thinking",
+                                    "next_agents": [],
+                                    "candidates": [],
+                                    "candidates_to_append": [],
+                                }
+                            },
+                            "supervisor",
+                        )
+                        # Tool call (phase=call)
+                        event_cb(
+                            "tool",
+                            {
+                                "tool": {
+                                    "phase": "call",
+                                    "calls": [
+                                        {
+                                            "name": "search_ontology",
+                                            "args": {"query": "histology"},
+                                        }
+                                    ],
+                                }
+                            },
+                            "ontology_agent",
+                        )
+                        # Tool result (phase=result)
+                        event_cb(
+                            "tool",
+                            {
+                                "tool": {
+                                    "phase": "result",
+                                    "name": "read_source_candidates",
+                                    "content": "[]",
+                                    "is_error": False,
+                                }
+                            },
+                            "candidate_agent",
+                        )
+                        # Final
+                        event_cb("final", {"result": "done"}, "final")
+                    return {"result": "done"}
+
+            mock_get_agent.return_value = DummyAgent()
+            response = client.get(
+                "/api/agent/explore",
+                query_string={"session_name": "test_session", "query": "q"},
+            )
+            assert response.status_code == 200
+            assert "text/event-stream" in response.content_type
+            body = response.get_data(as_text=True)
+            # Agent message covered
+            assert "event: delta" in body
+            assert '"message": "thinking"' in body
+            # Tool call covered
+            assert "event: tool" in body
+            assert '"phase": "call"' in body
+            assert '"search_ontology"' in body
+            # Tool result covered
+            assert '"phase": "result"' in body
+            assert '"read_source_candidates"' in body
+            # Final covered
+            assert "event: final" in body
 
     def test_agent_outer_source_endpoint(
         self, client, sample_source_csv, sample_target_csv
