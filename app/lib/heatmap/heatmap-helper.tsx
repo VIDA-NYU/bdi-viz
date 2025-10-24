@@ -601,6 +601,8 @@ const getCandidatesResult = (prop: getCandidatesResultProps) => {
                     prop.callbackCsv(results as string);
                 } else if (prop.format === "json") {
                     prop.callbackJson(results as string);
+                } else if (prop.format === "mapping_csv_4col") {
+                    prop.callbackCsv(results as string);
                 }
                 return;
             } else {

@@ -236,6 +236,29 @@ class TestAPIEndpoints:
         assert isinstance(data["results"], list)
         assert len(data["results"]) > 0
 
+    def test_candidates_results_mapping_csv_4col(
+        self, client, sample_source_csv, sample_target_csv
+    ):
+        default_task = SESSION_MANAGER.get_session("test_session").matching_task
+        default_task.update_dataframe(sample_source_csv, sample_target_csv)
+        # Seed accepted candidate and value mapping quickly via groundtruth
+        groundtruth_mappings = [
+            ("Gender", "gender", "Male", "male"),
+            ("Gender", "gender", "Female", "female"),
+        ]
+        default_task.get_candidates(
+            groundtruth_pairs=[], groundtruth_mappings=groundtruth_mappings
+        )
+        response = client.post(
+            "/api/candidates/results", json={"format": "mapping_csv_4col"}
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["message"] == "success"
+        text = data["results"]
+        assert "source_attribute,target_attribute,source_value,target_value" in text
+        assert "Gender,gender,Male,male" in text
+
     def test_get_matchers(self, client, sample_source_csv, sample_target_csv):
         default_task = SESSION_MANAGER.get_session("test_session").matching_task
         default_task.update_dataframe(sample_source_csv, sample_target_csv)

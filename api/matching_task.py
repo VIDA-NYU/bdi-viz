@@ -1585,6 +1585,67 @@ class MatchingTask:
             )
         return ret
 
+    def get_accepted_mappings_csv_4col(self) -> str:
+        """Export accepted value mappings as a CSV string with columns:
+        source_attribute, target_attribute, source_value, target_value
+
+        Rows with empty or missing target_value are skipped.
+        """
+        # Build a fast lookup for accepted pairs
+        accepted_pairs = set()
+        for candidate in self.get_cached_candidates():
+            if candidate.get("status") == "accepted":
+                accepted_pairs.add(
+                    (candidate.get("sourceColumn"), candidate.get("targetColumn"))
+                )
+
+        rows: List[Dict[str, Any]] = []
+        vm = self.get_value_matches()
+        for src, tgt in accepted_pairs:
+            if src not in vm:
+                continue
+            src_uniques = vm[src].get("source_unique_values", [])
+            tgt_list = vm[src].get("targets", {}).get(tgt, [])
+            # Align by index; skip blanks
+            for i, s_val in enumerate(src_uniques):
+                t_val = tgt_list[i] if i < len(tgt_list) else ""
+                if t_val is None or str(t_val).strip() == "":
+                    continue
+                rows.append(
+                    {
+                        "source_attribute": src,
+                        "target_attribute": tgt,
+                        "source_value": str(s_val),
+                        "target_value": str(t_val),
+                    }
+                )
+
+        try:
+            import pandas as _pd
+
+            df = _pd.DataFrame(
+                rows,
+                columns=[
+                    "source_attribute",
+                    "target_attribute",
+                    "source_value",
+                    "target_value",
+                ],
+            )
+            return df.to_csv(index=False)
+        except Exception:
+            # Fallback simple CSV building
+            header = (
+                "source_attribute,target_attribute,source_value,target_value\n"
+            )
+            body = "\n".join(
+                [
+                    f"{r['source_attribute']},{r['target_attribute']},{r['source_value']},{r['target_value']}"
+                    for r in rows
+                ]
+            )
+            return header + body + ("\n" if body else "")
+
     def set_source_mapped_values(
         self, source_col: str, from_val: str, to_val: str
     ) -> None:

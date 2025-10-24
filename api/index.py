@@ -1019,6 +1019,10 @@ def get_candidates_results():
 
         results_csv = results.to_csv(index=True)
         return {"message": "success", "results": results_csv}
+    elif format == "mapping_csv_4col":
+        # Export as 4-column mapping CSV
+        csv_text = matching_task.get_accepted_mappings_csv_4col()
+        return {"message": "success", "results": csv_text}
     elif format == "json":
         results = matching_task.get_accepted_mappings()
         return {"message": "success", "results": results}
