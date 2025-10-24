@@ -496,6 +496,7 @@ def run_matching_task(
     session: str,
     nodes: List[str] = [],
     groundtruth_pairs: List[Tuple[str, str]] = [],
+    groundtruth_mappings: List[Tuple[str, str, str, str]] = [],
 ):
     try:
         app.logger.critical(
@@ -530,7 +531,9 @@ def run_matching_task(
             # Target ontology is now handled by a dedicated task when needed
 
             candidates = matching_task.get_candidates(
-                task_state=task_state, groundtruth_pairs=groundtruth_pairs
+                task_state=task_state,
+                groundtruth_pairs=groundtruth_pairs,
+                groundtruth_mappings=groundtruth_mappings,
             )
 
             return {"status": "completed", "candidates_count": len(candidates)}
@@ -552,8 +555,8 @@ def run_matching_task(
 def start_matching():
     session = extract_session_name(request)
 
-    source_df, target_df, target_json, groundtruth_pairs = extract_data_from_request(
-        request
+    source_df, target_df, target_json, groundtruth_pairs, groundtruth_mappings = (
+        extract_data_from_request(request)
     )
 
     if source_df is None:
@@ -649,7 +652,7 @@ def start_matching():
 
     # Matching task should not wait for ontology tasks
     task = run_matching_task.apply_async(
-        (session, [], groundtruth_pairs),
+        (session, [], groundtruth_pairs, groundtruth_mappings or []),
         queue="matching",
     )
     return {

@@ -184,9 +184,13 @@ class QueryTools:
                 results = target_values
             else:
                 # If no enum property, fall back to matching_task
-                results = self.matching_task.get_target_unique_values(target_attribute, n=200)
+                results = self.matching_task.get_target_unique_values(
+                    target_attribute, n=200
+                )
         else:
-            results = self.matching_task.get_target_unique_values(target_attribute, n=200)
+            results = self.matching_task.get_target_unique_values(
+                target_attribute, n=200
+            )
         logger.info(
             "🧰Tool called: read_target_values for session %s, target %s found %s values",
             session_id,
@@ -217,9 +221,13 @@ class QueryTools:
                 results = source_values
             else:
                 # If no enum property, fall back to matching_task
-                results = self.matching_task.get_source_unique_values(source_attribute, n=200)
+                results = self.matching_task.get_source_unique_values(
+                    source_attribute, n=200
+                )
         else:
-            results = self.matching_task.get_source_unique_values(source_attribute, n=200)
+            results = self.matching_task.get_source_unique_values(
+                source_attribute, n=200
+            )
         logger.info(
             "🧰Tool called: read_source_values for session %s, source %s found %s values",
             session_id,

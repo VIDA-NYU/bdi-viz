@@ -59,7 +59,7 @@ export const TreeNodeComponent: React.FC<TreeNodeProps> = ({
         x={orientation === 'horizontal' ? 10 / 2 : -5}
         y={orientation === 'horizontal' ? -5 : 10 / 2}
         textAnchor={orientation === 'horizontal' ? 'middle' : 'end'}
-        dominantBaseline={orientation === 'horizontal' ? 'baseline' : 'middle'}
+        dominantBaseline={orientation === 'horizontal' ? 'alphabetic' : 'middle'}
         fontSize={12}
         transform={orientation === 'horizontal' ? 'rotate(-45)' : ''}
       >

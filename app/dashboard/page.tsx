@@ -392,6 +392,7 @@ export default function Dashboard() {
                         setSelectedCandidate={setSelectedCandidateByTargetColumnCallback}
                         handleValueMatches={handleValueMatches}
                         valueMatches={valueMatches}
+                        metaData={metaData}
                     />
                     <Box sx={{ position: 'absolute', right: 320, display: 'flex', alignItems: 'center' }}>
                         <Typography sx={{ fontSize: "0.7rem", fontWeight: "300", marginRight: 0 }}>Expand On Hover</Typography>

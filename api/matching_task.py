@@ -266,6 +266,7 @@ class MatchingTask:
         is_candidates_cached: bool = True,
         task_state: Optional[TaskState] = None,
         groundtruth_pairs: Optional[List[Tuple[str, str]]] = None,
+        groundtruth_mappings: Optional[List[Tuple[str, str, str, str]]] = None,
     ) -> Dict[str, list]:
         with self.lock:
             if self.source_df is None or self.target_df is None:
@@ -318,12 +319,14 @@ class MatchingTask:
             )
 
             # Check if we can use the cached JSON file
-            if groundtruth_pairs is not None and len(groundtruth_pairs) > 0:
+            if (groundtruth_pairs is not None and len(groundtruth_pairs) > 0) or (
+                groundtruth_mappings is not None and len(groundtruth_mappings) > 0
+            ):
                 task_state._update_task_state(
                     progress=40,
                     current_step="Generating candidates with groundtruth",
                     completed_steps=3,
-                    log_message="Generating candidates with groundtruth.",
+                    log_message="Generating candidates with groundtruth pairs or mappings.",
                 )
                 candidates = self._generate_candidates_with_groundtruth(
                     source_hash,
@@ -331,6 +334,7 @@ class MatchingTask:
                     is_candidates_cached,
                     task_state,
                     groundtruth_pairs,
+                    groundtruth_mappings,
                 )
             elif self._is_cache_valid(cached_json, source_hash, target_hash):
                 self.cached_candidates = cached_json
@@ -661,65 +665,107 @@ class MatchingTask:
         is_candidates_cached: bool,
         task_state: TaskState,
         groundtruth_pairs: List[Tuple[str, str]],
+        groundtruth_mappings: List[Tuple[str, str, str, str]],
     ) -> List[Dict[str, Any]]:
         # Define generation steps for better logging
         generation_steps = [
-            "Generating embeddings",
-            "Identifying candidate quadrants",
-            "Running matchers",
-            "Generating value matches",
+            "Preparing ground truth",
+            "Building candidates",
+            "Applying value mappings",
         ]
 
-        # Step 3: Apply candidate quadrants
         task_state._update_task_state(
-            current_step=generation_steps[1],
-            log_message="Identifying candidate quadrants.",
+            current_step=generation_steps[0],
+            log_message="Parsing ground truth input.",
         )
 
-        # Collect candidates from different sources
-        layered_candidates = []
+        layered_candidates: List[Dict[str, Any]] = []
 
-        # Step 4: Run matchers
-        task_state._update_task_state(
-            current_step=generation_steps[2],
-            log_message="Adding groundtruth candidates.",
-        )
+        # If value-level mappings are provided, prefer them and avoid automatic value matching
+        if groundtruth_mappings and len(groundtruth_mappings) > 0:
+            # Build unique (source, target) pairs from mappings
+            seen_pairs = set()
+            unique_pairs: List[Tuple[str, str]] = []
+            for s_attr, t_attr, _, _ in groundtruth_mappings:
+                key = (s_attr, t_attr)
+                if key not in seen_pairs:
+                    seen_pairs.add(key)
+                    unique_pairs.append(key)
 
-        # Add candidates from groundtruth pairs
-        for groundtruth_pair in groundtruth_pairs:
-            layered_candidates.append(
-                {
-                    "sourceColumn": groundtruth_pair[0],
-                    "targetColumn": groundtruth_pair[1],
-                    "score": 1.0,
-                    "matcher": "groundtruth",
-                    "status": "accepted",
-                }
+            task_state._update_task_state(
+                current_step=generation_steps[1],
+                log_message="Adding ground truth candidates (with value mappings).",
             )
-        task_state._update_task_state(
-            progress=90, log_message="All groundtruth candidates added."
-        )
 
-        # Step 5: Generate value matches
-        task_state._update_task_state(
-            current_step=generation_steps[3],
-            log_message="Generating value matches for candidates.",
-        )
-
-        # Generate value matches for each candidate
-        for idx, candidate in enumerate(layered_candidates):
-            self._generate_value_matches(
-                candidate["sourceColumn"], candidate["targetColumn"]
-            )
-            if idx % 10 == 0:
-                task_state._update_task_state(
-                    log_message=f"Generated value matches for {idx+1}/{len(layered_candidates)} candidates.",
-                    replace_last_log=True,
+            for s_attr, t_attr in unique_pairs:
+                layered_candidates.append(
+                    {
+                        "sourceColumn": s_attr,
+                        "targetColumn": t_attr,
+                        "score": 1.0,
+                        "matcher": "groundtruth",
+                        "status": "accepted",
+                    }
                 )
 
-        task_state._update_task_state(
-            progress=95, log_message="Value matches generated for all candidates."
-        )
+            # Ensure a mapping list exists for each pair, but do not auto-generate
+            for s_attr, t_attr in unique_pairs:
+                # Initialize empty mapping list aligned to source uniques
+                source_uniques = self.cached_candidates["value_matches"][s_attr][
+                    "source_unique_values"
+                ]
+                self.cached_candidates["value_matches"][s_attr]["targets"][t_attr] = [
+                    ""
+                ] * len(source_uniques)
+
+            task_state._update_task_state(
+                current_step=generation_steps[2],
+                log_message="Applying value-level ground truth mappings.",
+            )
+
+            # Fill specified mappings
+            for s_attr, t_attr, s_val, t_val in groundtruth_mappings:
+                try:
+                    self.set_target_value_match(s_attr, str(s_val), t_attr, str(t_val))
+                except Exception:
+                    continue
+
+            task_state._update_task_state(
+                progress=95, log_message="Ground truth mappings applied."
+            )
+
+        else:
+            # Pairs-only mode: add candidates and auto-generate value matches for them
+            task_state._update_task_state(
+                current_step=generation_steps[1],
+                log_message="Adding ground truth column pairs.",
+            )
+
+            for s_attr, t_attr in groundtruth_pairs:
+                layered_candidates.append(
+                    {
+                        "sourceColumn": s_attr,
+                        "targetColumn": t_attr,
+                        "score": 1.0,
+                        "matcher": "groundtruth",
+                        "status": "accepted",
+                    }
+                )
+
+            task_state._update_task_state(
+                current_step=generation_steps[2],
+                log_message="Generating default value matches for ground truth pairs.",
+            )
+
+            for idx, candidate in enumerate(layered_candidates):
+                self._generate_value_matches(
+                    candidate["sourceColumn"], candidate["targetColumn"]
+                )
+                if idx % 10 == 0:
+                    task_state._update_task_state(
+                        log_message=f"Generated value matches for {idx+1}/{len(layered_candidates)} candidates.",
+                        replace_last_log=True,
+                    )
 
         # Update cache if needed
         if is_candidates_cached:

@@ -185,7 +185,11 @@ const ValueMatchingUploadForm: React.FC<{
             <Box sx={{ mb: 2 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>Upload files for value matching (with ground truth)</Typography>
                 <Typography variant="body2" color="text.secondary">
-                    Provide your source dataset, optional target reference, and a ground truth mapping CSV with two columns: source attribute, target attribute.
+                    Provide your source dataset, optional target reference, and a ground truth CSV.
+                    You can upload either:
+                    1) 2 columns [source_attribute, target_attribute] to assert column mappings, or
+                    2) 4 columns [source_attribute, target_attribute, source_value, target_value] to assert value mappings.
+                    When provided, the system skips automated schema/value matching and uses your ground truth.
                 </Typography>
             </Box>
 
@@ -221,7 +225,9 @@ const ValueMatchingUploadForm: React.FC<{
                         C. Ground Truth Mapping CSV <Chip size="small" color="error" label="Required" sx={{ ml: 1 }} />
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Two columns: first is source attribute name, second is target attribute name.
+                        Supported formats:
+                        - 2 columns: source_attribute, target_attribute
+                        - 4 columns: source_attribute, target_attribute, source_value, target_value
                     </Typography>
                     <Dropzone required name="groundtruth-csv" label="Ground Truth CSV" fileKind="csv" />
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>Example format:</Typography>
@@ -230,16 +236,22 @@ const ValueMatchingUploadForm: React.FC<{
                             <TableRow>
                                 <TableCell>source_attribute</TableCell>
                                 <TableCell>target_attribute</TableCell>
+                                <TableCell>source_value</TableCell>
+                                <TableCell>target_value</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             <TableRow>
-                                <TableCell>Gender</TableCell>
+                                <TableCell>sex</TableCell>
                                 <TableCell>gender</TableCell>
+                                <TableCell>F</TableCell>
+                                <TableCell>female</TableCell>
                             </TableRow>
                             <TableRow>
                                 <TableCell>Ethnicity_Self_Identify</TableCell>
                                 <TableCell>race</TableCell>
+                                <TableCell>White</TableCell>
+                                <TableCell>white</TableCell>
                             </TableRow>
                         </TableBody>
                     </Table>

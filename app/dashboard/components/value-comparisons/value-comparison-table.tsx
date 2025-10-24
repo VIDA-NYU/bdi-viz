@@ -1,12 +1,13 @@
 import { useMemo, useContext, useEffect, useState, useCallback, useRef, useLayoutEffect } from "react";
 import { useTheme } from "@mui/material/styles";
-import { Box, Popover, IconButton, Stack, TextField, Tooltip, Typography, Switch, FormControlLabel, Divider } from "@mui/material";
+import { Box, Popover, IconButton, Stack, TextField, Tooltip, Typography, Divider, Button, Checkbox, FormControlLabel } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import EditIcon from "@mui/icons-material/Edit";
 import UndoIcon from "@mui/icons-material/Undo";
 import HighlightGlobalContext from "@/app/lib/highlight/highlight-context";
-import { updateSourceValue, updateTargetMatchValue, getGDCAttribute } from "@/app/lib/heatmap/heatmap-helper";
+import { updateSourceValue, updateTargetMatchValue, getGDCAttribute, getValueMatches } from "@/app/lib/heatmap/heatmap-helper";
 import { BasicChip, HighlightedChip } from "../../layout/components";
+import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 
 interface ValueComparisonTableProps {
     valueMatches: ValueMatch[];
@@ -54,6 +55,10 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     const [searchText, setSearchText] = useState("");
     const [selectedEnumContext, setSelectedEnumContext] = useState<{ row: any; targetColumn: string } | null>(null);
     const sourceCellRefs = useRef<Map<number, HTMLElement | null>>(new Map());
+    // Columns UI
+    const [columnsAnchorEl, setColumnsAnchorEl] = useState<HTMLElement | null>(null);
+    const [columnsSearch, setColumnsSearch] = useState<string>("");
+    const [columnVisibilityModel, setColumnVisibilityModel] = useState<Record<string, boolean>>({});
 
     const candidate = useMemo(() => {
         let candidate = selectedCandidate;
@@ -78,15 +83,8 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
             return valueMatch.sourceValues.map((sourceValue, index) => {
                 const rowObj: Record<string, any> = {
                     id: index,
-                    // Use our helper component to display both original and edited values on the source column
                     [`${valueMatch.sourceColumn}(source)`.replace(/\./g, "")]:  valueMatch.sourceMappedValues[index],
                     "SourceOriginalValues": sourceValue,
-                    // (
-                    //     <SourceValueDisplay
-                    //         original={sourceValue}
-                    //         edited={valueMatch.sourceMappedValues[index]}
-                    //     />
-                    // ),
                 };
                 const targetValueMatches = targetColumns
                     .map((targetColumn) =>
@@ -104,6 +102,26 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         }
         return [];
     }, [valueMatches, weightedAggregatedCandidates, candidate]);
+
+    // Build dynamic column keys in display order
+    const dynamicColumnKeys = useMemo(() => {
+        if (!rows.length) return [] as string[];
+        const keys = Object.keys(rows[0]).filter((k) => k !== "id" && k !== "SourceOriginalValues");
+        return keys;
+    }, [rows]);
+
+    // Initialize column visibility when keys change
+    useEffect(() => {
+        if (!dynamicColumnKeys.length) return;
+        setColumnVisibilityModel((prev) => {
+            const next = { ...prev };
+            dynamicColumnKeys.forEach((k) => {
+                if (!(k in next)) next[k] = true;
+            });
+            // hide nothing by default
+            return next;
+        });
+    }, [dynamicColumnKeys.join("|")]);
 
     // fetch enums lazily when opening the editor for a specific target column
 
@@ -123,13 +141,6 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         setSearchText("");
         setSelectedEnumContext(null);
     }, []);
-
-    // Build dynamic column keys in display order
-    const dynamicColumnKeys = useMemo(() => {
-        if (!rows.length) return [] as string[];
-        const keys = Object.keys(rows[0]).filter((k) => k !== "id" && k !== "SourceOriginalValues");
-        return keys;
-    }, [rows]);
 
     // Sticky column measurements for 2 left-pinned columns: source, target
     const tableContainerRef = useRef<HTMLDivElement | null>(null);
@@ -157,7 +168,6 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     const [editingValue, setEditingValue] = useState<string>("");
     const [editingTarget, setEditingTarget] = useState<{ rowId: number; key: string } | null>(null);
     const [editingTargetValue, setEditingTargetValue] = useState<string>("");
-    const [localFilter, setLocalFilter] = useState<string>("");
     const [showOnlyEdited, setShowOnlyEdited] = useState<boolean>(false);
 
     const filteredEnums = useMemo(() => {
@@ -189,8 +199,10 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         if (sourceKey && keys.includes(sourceKey)) order.push(sourceKey);
         if (candidate?.targetColumn && keys.includes(candidate.targetColumn)) order.push(candidate.targetColumn);
         const remaining = keys.filter((k) => !order.includes(k));
-        return [...order, ...remaining];
-    }, [rows, sourceKey, candidate]);
+        const ordered = [...order, ...remaining];
+        // apply visibility model
+        return ordered.filter((k) => columnVisibilityModel[k] !== false);
+    }, [rows, sourceKey, candidate, columnVisibilityModel]);
 
     const commitEditIfNeeded = useCallback((row: any) => {
         if (!candidate || editingRowId === null) return;
@@ -209,18 +221,6 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         return String(row[sourceKey]) !== String(row["SourceOriginalValues"] ?? "");
     }, [sourceKey]);
 
-    const editedCount = useMemo(() => rows.filter((r) => isRowEdited(r)).length, [rows, isRowEdited]);
-
-    const visibleRows = useMemo(() => {
-        const filtered = rows.filter((row) => {
-            if (showOnlyEdited && !isRowEdited(row)) return false;
-            if (!localFilter) return true;
-            const values = Object.values(row).map((v) => String(v ?? "").toLowerCase());
-            return values.some((v) => v.includes(localFilter.toLowerCase()));
-        });
-        return filtered;
-    }, [rows, showOnlyEdited, localFilter, isRowEdited]);
-
     return (
         <div style={{ display: "flex", flexDirection: "column" }}>
             <style>
@@ -233,6 +233,8 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                     }
                     .MuiTableCell-head {
                         max-width: 300px !important;
+                        font-weight: 700 !important;
+                        font-family: "Roboto","Helvetica","Arial",sans-serif !important;
                     }
                     .table-container { overflow: auto; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; width: 100%; }
                     table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; table-layout: fixed; font-size: 0.92rem; }
@@ -248,27 +250,42 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
             </style>
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1, px: 2 }}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    {candidate?.sourceColumn && (
+                        <Typography variant="caption" color="text.secondary">Source: {candidate.sourceColumn}</Typography>
+                    )}
+                    <Divider orientation="vertical" flexItem />
                     {candidate?.targetColumn && (
                         <Typography variant="caption" color="text.secondary">Target: {candidate.targetColumn}</Typography>
                     )}
-                    <Divider orientation="vertical" flexItem />
-                    <Typography variant="caption" color="text.secondary">Rows: {visibleRows.length}</Typography>
-                    <Typography variant="caption" color="text.secondary">Edited: {editedCount}</Typography>
                 </Stack>
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                    <TextField
-                        size="small"
-                        placeholder="Filter rows"
-                        value={localFilter}
-                        onChange={(e) => setLocalFilter(e.target.value)}
-                        InputProps={{ startAdornment: (<SearchIcon fontSize="small" />) }}
-                    />
-                    <FormControlLabel
-                        control={<Switch size="small" checked={showOnlyEdited} onChange={(e) => setShowOnlyEdited(e.target.checked)} />}
-                        label={<Typography variant="caption">Only edited</Typography>}
-                    />
+                    <Button size="small" startIcon={<ViewColumnIcon />} onClick={(e) => setColumnsAnchorEl(e.currentTarget)}>Columns</Button>
+                    <Button size="small" onClick={() => getValueMatches({ callback: handleValueMatches })}>Refresh</Button>
                 </Stack>
             </Box>
+
+            <Popover
+                open={Boolean(columnsAnchorEl)}
+                anchorEl={columnsAnchorEl}
+                onClose={() => setColumnsAnchorEl(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+            >
+                <Box sx={{ p: 2, width: 280 }}>
+                    <Stack spacing={1}>
+                        <Typography variant="subtitle2">Visible columns</Typography>
+                        <TextField size="small" placeholder="Search columns" value={columnsSearch} onChange={(e) => setColumnsSearch(e.target.value)} InputProps={{ startAdornment: (<SearchIcon fontSize="small" />) }} />
+                        <Box sx={{ maxHeight: 240, overflowY: 'auto' }}>
+                            <Stack>
+                                {dynamicColumnKeys.filter((k) => !columnsSearch || k.toLowerCase().includes(columnsSearch.toLowerCase())).map((k) => (
+                                    <FormControlLabel key={k} control={<Checkbox size="small" checked={columnVisibilityModel[k] !== false} onChange={(e) => setColumnVisibilityModel((prev) => ({ ...prev, [k]: e.target.checked }))} />} label={<Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{k}</Typography>} />
+                                ))}
+                            </Stack>
+                        </Box>
+                    </Stack>
+                </Box>
+            </Popover>
+
             <div ref={tableContainerRef} className={"table-container"}>
                 <table>
                     <thead>
@@ -306,7 +323,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                         </tr>
                     </thead>
                     <tbody>
-                        {visibleRows.map((row) => (
+                        {rows.map((row) => (
                             <tr key={row.id}>
                                 {displayedColumnKeys.map((key) => {
                                     const isSource = sourceKey && key === sourceKey;
@@ -460,7 +477,9 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                                         size="small"
                                                         className="cell-btn"
                                                         aria-label="edit enum"
+                                                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
                                                         onClick={(e) => {
+                                                            e.preventDefault();
                                                             e.stopPropagation();
                                                             if (!candidate) return;
                                                             openEnumsPopover(row, key, e.currentTarget as HTMLElement);
@@ -516,7 +535,9 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                                 color="info"
                                                 size="small"
                                                 sx={{ fontSize: "0.65rem" }}
-                                                onClick={() => applyEnumToRow(e)}
+                                                clickable
+                                                onMouseDown={(ev) => { ev.preventDefault(); ev.stopPropagation(); applyEnumToRow(e); }}
+                                                onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); applyEnumToRow(e); }}
                                             />
                                         </span>
                                     </Tooltip>

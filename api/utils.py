@@ -85,6 +85,7 @@ def extract_data_from_request(request):
     target_df = None
     target_json = None
     groundtruth_pairs = None
+    groundtruth_mappings = None
 
     if request.form is None:
         return None
@@ -121,9 +122,16 @@ def extract_data_from_request(request):
             groundtruth_csv = form["groundtruth_csv"]
             groundtruth_csv_string_io = StringIO(groundtruth_csv)
             groundtruth_df = pd.read_csv(groundtruth_csv_string_io, sep=",")
-            groundtruth_pairs = parse_ground_truth_pairs(groundtruth_df)
+            # Prefer 4-column value mappings if present; otherwise fall back to 2-column pairs
+            try:
+                groundtruth_mappings = parse_ground_truth_mappings(groundtruth_df)
+                # Derive pairs from mappings for candidate generation
+                gt_pairs_set = set((s, t) for s, t, _, _ in groundtruth_mappings)
+                groundtruth_pairs = list(gt_pairs_set)
+            except Exception:
+                groundtruth_pairs = parse_ground_truth_pairs(groundtruth_df)
 
-    return source_df, target_df, target_json, groundtruth_pairs
+    return source_df, target_df, target_json, groundtruth_pairs, groundtruth_mappings
 
 
 # ----------------------
@@ -298,6 +306,34 @@ def parse_ground_truth_pairs(df: pd.DataFrame) -> List[Tuple[str, str]]:
     if df.shape[1] != 2:
         raise ValueError("Ground truth CSV must have exactly 2 columns")
     return [(df.iloc[i, 0], df.iloc[i, 1]) for i in range(df.shape[0])]
+
+
+def parse_ground_truth_mappings(df: pd.DataFrame) -> List[Tuple[str, str, str, str]]:
+    """Parse a 4-column ground truth CSV with headers:
+    source_attribute, target_attribute, source_value, target_value (case-insensitive).
+
+    Returns a list of tuples: (source_attribute, target_attribute, source_value, target_value).
+    Raises if required columns are missing.
+    """
+    # Normalize column names to lower for matching
+    lower_cols = [str(c).strip().lower() for c in df.columns]
+    required = ["source_attribute", "target_attribute", "source_value", "target_value"]
+    col_map = {}
+    for req in required:
+        if req in lower_cols:
+            col_map[req] = lower_cols.index(req)
+        else:
+            # If any are missing, signal to caller that this is not a 4-col mapping CSV
+            raise ValueError("Ground truth 4-column headers not found")
+
+    mappings: List[Tuple[str, str, str, str]] = []
+    for i in range(df.shape[0]):
+        s_attr = str(df.iloc[i, col_map["source_attribute"]])
+        t_attr = str(df.iloc[i, col_map["target_attribute"]])
+        s_val = str(df.iloc[i, col_map["source_value"]])
+        t_val = str(df.iloc[i, col_map["target_value"]])
+        mappings.append((s_attr, t_attr, s_val, t_val))
+    return mappings
 
 
 @check_cache_dir
