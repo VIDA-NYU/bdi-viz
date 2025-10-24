@@ -179,14 +179,14 @@ class QueryTools:
         if target_properties is not None:
             if "enum" in target_properties:
                 target_values = target_properties["enum"]
-                if len(target_values) >= 200:
-                    target_values = random.sample(target_values, 200)
+                if len(target_values) >= 20:
+                    target_values = random.sample(target_values, 20)
                 results = target_values
             else:
                 # If no enum property, fall back to matching_task
-                results = self.matching_task.get_target_unique_values(target_attribute, n=200)
+                results = self.matching_task.get_target_unique_values(target_attribute)
         else:
-            results = self.matching_task.get_target_unique_values(target_attribute, n=200)
+            results = self.matching_task.get_target_unique_values(target_attribute)
         logger.info(
             "🧰Tool called: read_target_values for session %s, target %s found %s values",
             session_id,
@@ -212,14 +212,14 @@ class QueryTools:
         if source_properties is not None:
             if "enum" in source_properties:
                 source_values = source_properties["enum"]
-                if len(source_values) >= 200:
-                    source_values = random.sample(source_values, 200)
+                if len(source_values) >= 20:
+                    source_values = random.sample(source_values, 20)
                 results = source_values
             else:
                 # If no enum property, fall back to matching_task
-                results = self.matching_task.get_source_unique_values(source_attribute, n=200)
+                results = self.matching_task.get_source_unique_values(source_attribute)
         else:
-            results = self.matching_task.get_source_unique_values(source_attribute, n=200)
+            results = self.matching_task.get_source_unique_values(source_attribute)
         logger.info(
             "🧰Tool called: read_source_values for session %s, source %s found %s values",
             session_id,
