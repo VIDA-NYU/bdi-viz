@@ -648,7 +648,6 @@ class RapidFuzzMatcher():
     ) -> BaseModel:
         output_parser = PydanticOutputParser(pydantic_object=output_structure)
         prompt = f"""
-        **Current session ID: {self.session_id}**
         Return JSON matching this schema:
         {output_parser.get_format_instructions()}
         

@@ -999,7 +999,7 @@ def get_property():
     session = extract_session_name(request)
     target_col = request.json["targetColumn"]
 
-    property = load_property(target_col, is_target=True, session=session)
+    property = load_property(target_col, session=session)
 
     return {"message": "success", "property": property}
 
