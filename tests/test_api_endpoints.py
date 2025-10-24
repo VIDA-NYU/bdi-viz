@@ -115,6 +115,37 @@ class TestAPIEndpoints:
         data = response.get_json()
         assert "task_id" in data
 
+    def test_start_matching_with_groundtruth_value_mappings(
+        self, client, sample_source_csv, sample_target_csv
+    ):
+        """POST /api/matching/start with 4-column groundtruth should enqueue and prefer mappings."""
+
+        source_csv = sample_source_csv.to_csv(index=False)
+        target_csv = sample_target_csv.to_csv(index=False)
+        groundtruth_csv = (
+            "source_attribute,target_attribute,source_value,target_value\n"
+            "Gender,gender,Male,male\n"
+            "Gender,gender,Female,female\n"
+        )
+        form = {
+            "type": "csv_input",
+            "source_csv": source_csv,
+            "target_csv": target_csv,
+            "groundtruth_csv": groundtruth_csv,
+            "source_csv_name": "mock_source.csv",
+            "target_csv_name": "mock_target.csv",
+            "groundtruth_csv_name": "mock_groundtruth_values.csv",
+        }
+
+        response = client.post(
+            "/api/matching/start",
+            data=form,
+            content_type="multipart/form-data",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "task_id" in data
+
     def test_matching_status_pending(self, client):
         """POST /api/matching/status returns pending for unknown task id."""
 

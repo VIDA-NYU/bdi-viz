@@ -142,6 +142,57 @@ class TestMatchingTask:
             assert src in value_matches
             assert tgt in value_matches[src]["targets"]
 
+    def test_get_candidates_with_groundtruth_mappings(
+        self,
+        session_manager,
+        sample_source_csv,
+        sample_target_csv,
+    ):
+        """When groundtruth_mappings are provided, only the mapped pairs become candidates
+        and the specified value mappings are applied without auto-matching.
+        """
+
+        matching_task = session_manager.get_session("test_session").matching_task
+
+        matching_task.update_dataframe(sample_source_csv, sample_target_csv)
+
+        groundtruth_mappings = [
+            ("Gender", "gender", "Male", "male"),
+            ("Gender", "gender", "Female", "female"),
+        ]
+
+        task_state = TaskState(
+            task_type="matching",
+            task_id="test_session",
+            new_task=True,
+        )
+
+        candidates = matching_task.get_candidates(
+            task_state=task_state,
+            groundtruth_pairs=[],
+            groundtruth_mappings=groundtruth_mappings,
+        )
+
+        # Assert only the provided pair is present once
+        pair_set = {(c["sourceColumn"], c["targetColumn"]) for c in candidates}
+        assert pair_set == {("Gender", "gender")}
+
+        # Assert status and matcher
+        for c in candidates:
+            assert c["status"] == "accepted"
+            assert c["matcher"] == "groundtruth"
+
+        # Assert the provided value mappings are applied
+        vm_all = matching_task.get_value_matches()
+        assert "Gender" in vm_all
+        assert "gender" in vm_all["Gender"]["targets"]
+        src_uniques = vm_all["Gender"]["source_unique_values"]
+        target_list = vm_all["Gender"]["targets"]["gender"]
+
+        for s_val, t_val in [("Male", "male"), ("Female", "female")]:
+            idx = src_uniques.index(s_val if s_val in src_uniques else str(s_val))
+            assert target_list[idx] == t_val
+
     def test_candidate_manipulation(
         self,
         session_manager,
