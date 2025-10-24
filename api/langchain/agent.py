@@ -108,9 +108,7 @@ class Agent:
         if self.store.get_namespace_count("user_memory") <= 0:
             with_memory = False
 
-        target_description = load_property(
-            candidate["targetColumn"], session=self.session_id
-        )
+        target_description = load_property(candidate["targetColumn"], session=self.session_id)
         target_values = candidate["targetValues"]
         if target_description is not None and "enum" in target_description:
             target_enum = target_description["enum"]
@@ -579,7 +577,5 @@ def get_agent(memory_retriever: MemoryRetriever, session_id: str = "default") ->
             llm_model = ChatOpenAI(model="gpt-5-nano")
         else:
             raise ValueError(f"Invalid LLM provider: {llm_provider}")
-        AGENTS[session_id] = Agent(
-            memory_retriever, llm_model=llm_model, session_id=session_id
-        )
+        AGENTS[session_id] = Agent(memory_retriever, llm_model=llm_model, session_id=session_id)
     return AGENTS[session_id]

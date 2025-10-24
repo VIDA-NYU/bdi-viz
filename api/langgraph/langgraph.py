@@ -947,14 +947,6 @@ class RapidFuzzMatcher():
         finally:
             self._event_cb = prev_cb
 
-    # Public API: reset conversation/state for this agent instance
-    def reset_state(self) -> None:
-        try:
-            self._state = self._init_state()
-        except Exception:
-            # Best-effort; swallow errors to avoid crashing caller
-            self._state = self._init_state()
-
 
 # Lazy initialization per session
 LANGGRAPH_AGENTS: Dict[str, LangGraphAgent] = {}
