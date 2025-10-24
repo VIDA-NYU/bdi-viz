@@ -1524,16 +1524,10 @@ class MatchingTask:
                     "targetColumn": target_col,
                     "valueMatches": [
                         {
-                            "from": from_val,
-                            "to": (
-                                to_val
-                                if source_mapped_values[index] == from_val
-                                else source_mapped_values[index]
-                            ),
+                            "from": source_mapped_values[index],
+                            "to": value_matches[index],
                         }
-                        for index, (from_val, to_val) in enumerate(
-                            zip(source_unique_values, value_matches)
-                        )
+                        for index in range(len(source_unique_values))
                     ],
                 }
             )
