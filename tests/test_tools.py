@@ -225,9 +225,14 @@ class TestQueryTools:
         source_attr = cached[0]["sourceColumn"]
         target_attr = cached[0]["targetColumn"]
         assert isinstance(tools._read_source_candidates(source_attr), list)
-        assert isinstance(tools._read_source_values(source_attr), list)
-        assert isinstance(tools._read_target_values(target_attr), list)
-        assert isinstance(tools._read_target_description(target_attr), str)
+        assert isinstance(tools._read_source_values("test_session", source_attr), list)
+        assert isinstance(tools._read_target_values("test_session", target_attr), list)
+        assert isinstance(
+            tools._read_target_description("test_session", target_attr), str
+        )
+        assert isinstance(
+            tools._read_source_description("test_session", source_attr), str
+        )
 
 
 class TestTaskTools:

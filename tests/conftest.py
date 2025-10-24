@@ -353,8 +353,14 @@ def _mock_load_ontology(
         ]
 
 
-def _mock_load_property(target_column: str, session: Optional[str] = None):
-    return MOCK_TARGET_ONTOLOGY[target_column]
+def _mock_load_property(
+    target_column: str,
+    is_target: bool = True,
+    session: Optional[str] = None,
+):
+    if is_target:
+        return MOCK_TARGET_ONTOLOGY.get(target_column)
+    return MOCK_SOURCE_ONTOLOGY.get(target_column)
 
 
 @pytest.fixture(scope="session", autouse=True)

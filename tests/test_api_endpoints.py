@@ -277,6 +277,22 @@ class TestAPIEndpoints:
             data = response.get_json()
             assert data["message"] == "success"
 
+    def test_agent_reset(self, client):
+        with patch("api.index.get_langgraph_agent") as mock_get_agent, patch(
+            "api.index.get_memory_retriever"
+        ) as mock_get_mem:
+            mock_agent = MagicMock()
+            mock_get_agent.return_value = mock_agent
+            mock_memory = MagicMock()
+            mock_get_mem.return_value = mock_memory
+
+            response = client.post("/api/agent/reset", json={})
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data["message"] == "success"
+            mock_agent.reset_state.assert_called_once()
+            mock_memory.clear_namespaces.assert_called_with(["user_memory"])
+
     def test_user_operation_apply(self, client):
         with patch("api.index.get_agent") as mock_get_agent:
             mock_agent = MagicMock()
@@ -367,8 +383,16 @@ class TestAPIEndpoints:
 
     def test_agent_explore_endpoint(self, client):
         with patch("api.index.get_langgraph_agent") as mock_get_agent:
+
             class DummyAgent:
-                def run_with_stream(self, query, source_column=None, target_column=None, reset=False, event_cb=None):
+                def run_with_stream(
+                    self,
+                    query,
+                    source_column=None,
+                    target_column=None,
+                    reset=False,
+                    event_cb=None,
+                ):
                     if event_cb:
                         event_cb(
                             "delta",
@@ -400,6 +424,7 @@ class TestAPIEndpoints:
 
     def test_agent_explore_tool_events(self, client):
         with patch("api.index.get_langgraph_agent") as mock_get_agent:
+
             class DummyAgent:
                 def run_with_stream(
                     self,
