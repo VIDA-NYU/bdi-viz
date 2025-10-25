@@ -121,7 +121,13 @@ def extract_data_from_request(request):
         if "groundtruth_csv" in form:
             groundtruth_csv = form["groundtruth_csv"]
             groundtruth_csv_string_io = StringIO(groundtruth_csv)
-            groundtruth_df = pd.read_csv(groundtruth_csv_string_io, sep=",")
+            # Preserve blanks as empty strings; avoid automatic NA parsing
+            groundtruth_df = pd.read_csv(
+                groundtruth_csv_string_io,
+                sep=",",
+                dtype=str,
+                keep_default_na=False,
+            )
             # Prefer 4-column value mappings if present; otherwise fall back to 2-column pairs
             try:
                 groundtruth_mappings = parse_ground_truth_mappings(groundtruth_df)
@@ -328,10 +334,19 @@ def parse_ground_truth_mappings(df: pd.DataFrame) -> List[Tuple[str, str, str, s
 
     mappings: List[Tuple[str, str, str, str]] = []
     for i in range(df.shape[0]):
-        s_attr = str(df.iloc[i, col_map["source_attribute"]])
-        t_attr = str(df.iloc[i, col_map["target_attribute"]])
-        s_val = str(df.iloc[i, col_map["source_value"]])
-        t_val = str(df.iloc[i, col_map["target_value"]])
+        s_attr = (df.iloc[i, col_map["source_attribute"]] or "").strip()
+        t_attr = (df.iloc[i, col_map["target_attribute"]] or "").strip()
+        s_val_raw = df.iloc[i, col_map["source_value"]]
+        t_val_raw = df.iloc[i, col_map["target_value"]]
+        # Normalize NaN/None to empty string; ensure str type without 'nan'
+        try:
+            s_val = ("" if pd.isna(s_val_raw) else str(s_val_raw)).strip()
+        except Exception:
+            s_val = (str(s_val_raw) if s_val_raw is not None else "").strip()
+        try:
+            t_val = ("" if pd.isna(t_val_raw) else str(t_val_raw)).strip()
+        except Exception:
+            t_val = (str(t_val_raw) if t_val_raw is not None else "").strip()
         mappings.append((s_attr, t_attr, s_val, t_val))
     return mappings
 

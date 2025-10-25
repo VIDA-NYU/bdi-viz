@@ -23,7 +23,7 @@ export async function GET(
       return new Response("Not found", { status: 404 });
     }
     const csv = await fs.promises.readFile(filePath);
-    return new Response(csv, {
+    return new Response(csv.toString(), {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",

@@ -708,15 +708,28 @@ class MatchingTask:
                     }
                 )
 
-            # Ensure a mapping list exists for each pair, but do not auto-generate
+            # Build source_unique_values purely from groundtruth mappings (even for numeric)
+            values_by_source: Dict[str, List[str]] = {}
+            for s_attr, _t_attr, s_val, _t_val in groundtruth_mappings:
+                sval = "" if s_val is None else str(s_val)
+                arr = values_by_source.setdefault(s_attr, [])
+                if sval not in arr:
+                    arr.append(sval)
+
+            # Override source uniques and init empty targets per pair
             for s_attr, t_attr in unique_pairs:
-                # Initialize empty mapping list aligned to source uniques
-                source_uniques = self.cached_candidates["value_matches"][s_attr][
-                    "source_unique_values"
-                ]
-                self.cached_candidates["value_matches"][s_attr]["targets"][t_attr] = [
-                    ""
-                ] * len(source_uniques)
+                src_vals = values_by_source.get(s_attr, [])
+                vm = self.cached_candidates["value_matches"].setdefault(
+                    s_attr,
+                    {
+                        "source_unique_values": [],
+                        "source_mapped_values": [],
+                        "targets": {},
+                    },
+                )
+                vm["source_unique_values"] = list(src_vals)
+                vm["source_mapped_values"] = list(src_vals)
+                vm["targets"][t_attr] = [""] * len(src_vals)
 
             task_state._update_task_state(
                 current_step=generation_steps[2],
@@ -726,7 +739,12 @@ class MatchingTask:
             # Fill specified mappings
             for s_attr, t_attr, s_val, t_val in groundtruth_mappings:
                 try:
-                    self.set_target_value_match(s_attr, str(s_val), t_attr, str(t_val))
+                    self.set_target_value_match(
+                        s_attr,
+                        str(s_val) if s_val is not None else "",
+                        t_attr,
+                        str(t_val) if t_val is not None else "",
+                    )
                 except Exception:
                     continue
 
@@ -1635,9 +1653,7 @@ class MatchingTask:
             return df.to_csv(index=False)
         except Exception:
             # Fallback simple CSV building
-            header = (
-                "source_attribute,target_attribute,source_value,target_value\n"
-            )
+            header = "source_attribute,target_attribute,source_value,target_value\n"
             body = "\n".join(
                 [
                     f"{r['source_attribute']},{r['target_attribute']},{r['source_value']},{r['target_value']}"
