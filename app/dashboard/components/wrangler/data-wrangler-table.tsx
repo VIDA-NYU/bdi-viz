@@ -134,9 +134,20 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
     const valueToMapped: Record<string, string> = {};
     for (let i = 0; i < sourceValues.length; i++) {
       const fromVal = String(sourceValues[i] ?? "");
-      const toVal = targetValues[i] !== undefined && targetValues[i] !== null && String(targetValues[i]).length > 0
-        ? String(targetValues[i])
-        : String(mappedSourceValues[i] ?? "");
+      const rawTarget = targetValues[i];
+      let toVal = "";
+      if (rawTarget !== undefined && rawTarget !== null) {
+        const s = String(rawTarget).trim();
+        const sl = s.toLowerCase();
+        // When target is empty/NaN/None, keep it empty. Do not fall back to source.
+        if (s.length > 0 && sl !== "nan" && sl !== "none") {
+          toVal = s;
+        } else {
+          toVal = "";
+        }
+      } else {
+        toVal = "";
+      }
       if (fromVal.length > 0) valueToMapped[fromVal] = toVal;
     }
 

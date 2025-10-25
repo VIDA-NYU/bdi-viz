@@ -218,7 +218,9 @@ class MatchingTask:
                 # self.cached_candidates["nodes"] = []
                 logger.info("[MatchingTask] Target dataframe updated!")
 
-        self._initialize_value_matches()
+        # Initialize value matches once both dataframes are ready
+        if self.source_df is not None and self.target_df is not None:
+            self._initialize_value_matches()
 
     def set_nodes(self, nodes: List[str]) -> None:
         """Set the nodes to filter target data by."""
@@ -736,15 +738,27 @@ class MatchingTask:
                 log_message="Applying value-level ground truth mappings.",
             )
 
-            # Fill specified mappings
+            # Build fast index map per source attribute to apply mappings in O(1)
+            idx_map_by_source: Dict[str, Dict[str, int]] = {}
+            for s_attr in {s for s, _ in unique_pairs}:
+                src_vals = self.cached_candidates["value_matches"][s_attr][
+                    "source_unique_values"
+                ]
+                idx_map_by_source[s_attr] = {str(v): i for i, v in enumerate(src_vals)}
+
+            # Apply mappings directly without per-item method overhead
             for s_attr, t_attr, s_val, t_val in groundtruth_mappings:
                 try:
-                    self.set_target_value_match(
-                        s_attr,
-                        str(s_val) if s_val is not None else "",
-                        t_attr,
-                        str(t_val) if t_val is not None else "",
-                    )
+                    s_key = str(s_val) if s_val is not None else ""
+                    idx = idx_map_by_source.get(s_attr, {}).get(s_key)
+                    if idx is None:
+                        continue
+                    targets_list = self.cached_candidates["value_matches"][s_attr][
+                        "targets"
+                    ].get(t_attr)
+                    if targets_list is None or idx >= len(targets_list):
+                        continue
+                    targets_list[idx] = str(t_val) if t_val is not None else ""
                 except Exception:
                     continue
 
@@ -779,7 +793,7 @@ class MatchingTask:
                 self._generate_value_matches(
                     candidate["sourceColumn"], candidate["targetColumn"]
                 )
-                if idx % 10 == 0:
+                if idx % 100 == 0:
                     task_state._update_task_state(
                         log_message=f"Generated value matches for {idx+1}/{len(layered_candidates)} candidates.",
                         replace_last_log=True,
@@ -855,10 +869,7 @@ class MatchingTask:
 
     def _generate_value_matches(self, source_column: str, target_column: str) -> None:
         # Skip if already generated
-        if (
-            target_column
-            in self.cached_candidates["value_matches"][source_column]["targets"]
-        ):
+        if target_column in self.cached_candidates["value_matches"][source_column]["targets"]:
             return
 
         source_values = self.cached_candidates["value_matches"][source_column][
