@@ -869,7 +869,10 @@ class MatchingTask:
 
     def _generate_value_matches(self, source_column: str, target_column: str) -> None:
         # Skip if already generated
-        if target_column in self.cached_candidates["value_matches"][source_column]["targets"]:
+        if (
+            target_column
+            in self.cached_candidates["value_matches"][source_column]["targets"]
+        ):
             return
 
         source_values = self.cached_candidates["value_matches"][source_column][

@@ -38,6 +38,7 @@ class QueryTools:
                 session_id (str): The current session ID.
                 target_attribute (str): The target biomedical attribute to
                 read.
+                keywords (List[str]): List of keywords to filter the target values.
             Returns:
                 List[str]: All values for the target attribute.
             """.strip(),
@@ -94,6 +95,14 @@ class QueryTools:
             self.read_source_description_tool,
             self.memory_retriever.remember_this_tool,
             self.memory_retriever.recall_memory_tool,
+        ]
+
+    def get_value_tools(self) -> List[StructuredTool]:
+        return [
+            self.read_source_values_tool,
+            self.read_target_values_tool,
+            self.read_source_description_tool,
+            self.read_target_description_tool,
         ]
 
     def _read_source_candidates(self, source_attribute: str) -> List[Dict[str, Any]]:
@@ -162,13 +171,16 @@ class QueryTools:
         )
         return results
 
-    def _read_target_values(self, session_id: str, target_attribute: str) -> List[str]:
+    def _read_target_values(
+        self, session_id: str, target_attribute: str, keywords: List[str] = None
+    ) -> List[str]:
         """
         Read the values for a specific target attribute.
 
         Args:
             session_id (str): The current session ID.
             target_attribute (str): The target biomedical attribute to read.
+            keywords (List[str]): List of keywords to filter the target values.
         Returns:
             List[str]: All values for the target attribute.
         """
@@ -177,25 +189,36 @@ class QueryTools:
             target_attribute, is_target=True, session=session_id
         )
         if target_properties is not None:
-            if "enum" in target_properties:
-                target_values = target_properties["enum"]
-                if len(target_values) >= 200:
-                    target_values = random.sample(target_values, 200)
-                results = target_values
+            enum_values = target_properties.get("enum")
+            if enum_values:
+                # Ensure list-like and not None
+                target_values = (
+                    list(enum_values) if isinstance(enum_values, set) else enum_values
+                )
             else:
-                # If no enum property, fall back to matching_task
-                results = self.matching_task.get_target_unique_values(
-                    target_attribute, n=200
+                # If no enum values or enum is None/empty, fall back to matching_task
+                target_values = self.matching_task.get_target_unique_values(
+                    target_attribute
                 )
         else:
-            results = self.matching_task.get_target_unique_values(
-                target_attribute, n=200
+            target_values = self.matching_task.get_target_unique_values(
+                target_attribute
             )
+
+        if keywords is not None:
+            target_values = [
+                value
+                for value in target_values
+                if any(keyword in value for keyword in keywords)
+            ]
+        if len(target_values) >= 200:
+            target_values = random.sample(target_values, 200)
+        results = target_values
         logger.info(
-            "🧰Tool called: read_target_values for session %s, target %s found %s values",
-            session_id,
-            target_attribute,
-            len(results),
+            f"🧰Tool called: read_target_values for session {session_id}, "
+            f"target {target_attribute} found {len(results)} values "
+            f"keywords: {keywords} "
+            f"target_values: {target_values}"
         )
         return results
 
@@ -214,13 +237,16 @@ class QueryTools:
             source_attribute, is_target=False, session=session_id
         )
         if source_properties is not None:
-            if "enum" in source_properties:
-                source_values = source_properties["enum"]
+            enum_values = source_properties.get("enum")
+            if enum_values:
+                source_values = (
+                    list(enum_values) if isinstance(enum_values, set) else enum_values
+                )
                 if len(source_values) >= 200:
                     source_values = random.sample(source_values, 200)
                 results = source_values
             else:
-                # If no enum property, fall back to matching_task
+                # If no enum values or enum is None/empty, fall back to matching_task
                 results = self.matching_task.get_source_unique_values(
                     source_attribute, n=200
                 )
