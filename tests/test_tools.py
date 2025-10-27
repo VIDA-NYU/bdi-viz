@@ -1,4 +1,5 @@
 import json
+from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,6 +9,7 @@ from api.tools.online_research_tools import OnlineResearchTools
 from api.tools.query_tools import QueryTools
 from api.tools.source_scraper import scraping_websource
 from api.tools.task_tools import TaskTools
+from api.tools.value_tools import ValueTools
 
 
 class TestCandidateTools:
@@ -378,3 +380,134 @@ class TestOnlineResearchTools:
         )
         data = json.loads(out)
         assert data["total_results"] >= 4
+
+
+class TestValueTools:
+    @pytest.fixture(autouse=True)
+    def _setup(
+        self,
+        client,
+        session_manager,
+        sample_source_csv,
+        sample_target_csv,
+        monkeypatch,
+    ):
+        # Ensure ValueTools uses the same SessionManager instance as tests
+        monkeypatch.setattr(
+            "api.tools.value_tools.SESSION_MANAGER", session_manager, raising=True
+        )
+
+        # Create an isolated test session via API (consistent with other tests)
+        create_resp = client.post(
+            "/api/session/create", json={"session_name": "test_session"}
+        )
+        assert create_resp.status_code == 200
+        assert "test_session" in create_resp.get_json().get("sessions", [])
+
+        # Seed dataframes and prime value matches/candidates
+        self.session_manager = session_manager
+        self.mt = session_manager.get_session("test_session").matching_task
+        self.mt.update_dataframe(sample_source_csv, sample_target_csv)
+        # Generate candidates/value matches for deterministic state
+        self.mt.get_candidates()
+
+        yield
+
+        # Clean up the session
+        delete_resp = client.post(
+            "/api/session/delete", json={"session_name": "test_session"}
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json().get("message") == "success"
+
+    def test_get_tools(self):
+        tools = ValueTools("test_session").get_tools()
+        assert len(tools) == 4
+        names = {t.name for t in tools}
+        assert {
+            "preview_value_map",
+            "apply_value_map",
+            "preview_numeric_lambda",
+            "apply_numeric_lambda",
+        }.issubset(names)
+
+    def test_preview_value_map(self):
+        vt = ValueTools("test_session")
+        mapping: Dict[str, str] = {"Male": "male", "Female": "female"}
+        out = vt.preview_value_map_tool.invoke(
+            {
+                "source_column": "Gender",
+                "target_column": "gender",
+                "mapping": mapping,
+                "sample_n": 10,
+            }
+        )
+        data = json.loads(out)
+        assert data["source_column"] == "Gender"
+        assert data["target_column"] == "gender"
+        assert data["total_previewed"] >= 2
+        # Both unique values should be changed by the mapping
+        assert data["changed_count"] >= 2
+        assert data["covered_in_mapping"] >= 2
+        assert all("before" in ex and "after" in ex for ex in data["examples"])  # type: ignore[index]
+
+    def test_apply_value_map(self):
+        vt = ValueTools("test_session")
+        mapping: Dict[str, str] = {"Male": "male", "Female": "female"}
+        out = vt.apply_value_map_tool.invoke(
+            {
+                "source_column": "Gender",
+                "target_column": "gender",
+                "mapping": mapping,
+            }
+        )
+        data = json.loads(out)
+        assert data["status"] == "ok"
+
+        # Source dataframe values should be updated
+        df = self.mt.get_source_df()
+        assert set(df["Gender"].astype(str).tolist()) == {"male", "female"}
+
+        # Value matches for the pair should reflect the mapping
+        vm = self.mt.get_value_matches()["Gender"]["targets"]["gender"]
+        assert set(vm) >= {"male", "female"}
+
+    def test_preview_numeric_lambda(self):
+        vt = ValueTools("test_session")
+        # Use sample_n <= number of rows to avoid pandas.sample error
+        out = vt.preview_numeric_lambda_tool.invoke(
+            {
+                "source_column": "Age",
+                "target_column": "age",
+                "lambda_code": "lambda x: x/10",
+                "sample_n": 2,
+            }
+        )
+        data = json.loads(out)
+        assert data["source_column"] == "Age"
+        assert data["target_column"] == "age"
+        assert len(data["before_lambda"]) == len(data["after_lambda"]) == 2
+        # After values should be numeric and scaled
+        before_sum = sum(float(v) for v in data["before_lambda"])  # type: ignore[arg-type]
+        after_sum = sum(float(v) for v in data["after_lambda"])  # type: ignore[arg-type]
+        assert pytest.approx(after_sum, rel=1e-3) == before_sum / 10.0
+
+    def test_apply_numeric_lambda(self):
+        vt = ValueTools("test_session")
+        out = vt.apply_numeric_lambda_tool.invoke(
+            {
+                "source_column": "Age",
+                "target_column": "age",
+                "lambda_code": "lambda x: x + 1",
+            }
+        )
+        data = json.loads(out)
+        assert data["status"] == "ok"
+
+        # Source dataframe mutated
+        df = self.mt.get_source_df()
+        assert set(df["Age"].astype(float).tolist()) == {71.0, 84.0}
+
+        # Value matches updated for the pair
+        vm = self.mt.get_value_matches()["Age"]["targets"]["age"]
+        assert set(map(str, vm)) >= {"71.0", "84.0"}
