@@ -41,8 +41,17 @@ class SessionManager:
 
     def get_session(self, session_name: str) -> "Session":
         if session_name not in self.sessions:
-            # Lazily create session to support disk-present or newly referenced sessions
-            self.add_session(session_name)
+            # Only attach sessions that already exist on disk; otherwise fall back to default
+            try:
+                from .utils import SESSIONS_ROOT  # local import to avoid cycles
+
+                session_path = os.path.join(SESSIONS_ROOT, session_name)
+                if os.path.isdir(session_path):
+                    self.add_session(session_name)
+                else:
+                    session_name = "default"
+            except Exception:
+                session_name = "default"
         # Move accessed session to end of queue (most recently used)
         if session_name in self.queue:
             self.queue.remove(session_name)

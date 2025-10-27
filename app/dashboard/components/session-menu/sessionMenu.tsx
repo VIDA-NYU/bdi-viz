@@ -35,19 +35,37 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
     const trimmedNewName = newSessionName.trim();
     const isDuplicate = trimmedNewName.length > 0 && namesSet.has(trimmedNewName);
 
+    const onUpdate = useCallback((session: Session) => {
+        updateSessionName(session.name);
+        // clear stale candidates immediately in UI before fetching selected session data
+        callback([]);
+        getCachedResults({ callback: callback });
+        getSourceOntology({ callback: sourceOntologyCallback });
+        getTargetOntology({ callback: targetOntologyCallback });
+        getValueBins({ callback: uniqueValuesCallback });
+        getValueMatches({ callback: valueMatchesCallback });
+        getUserOperationHistory({ callback: userOperationHistoryCallback });
+    }, [updateSessionName, callback, sourceOntologyCallback, targetOntologyCallback, uniqueValuesCallback, valueMatchesCallback, userOperationHistoryCallback]);
+
     const onRefresh = useCallback(async () => {
         if (isRefreshing) return;
         setIsRefreshing(true);
         try {
-            await listSessions({
+            const fetched = await listSessions({
                 onSession: (names) => {
                     setSessions(toSessionObjs(names));
                 },
             });
+            // If current session no longer exists, switch to default or first available
+            const names = new Set((fetched || []).map((s: any) => typeof s === 'string' ? s : s.name));
+            if (!names.has(sessionName)) {
+                const next = names.size > 0 ? Array.from(names)[0] : 'default';
+                onUpdate({ name: next } as Session);
+            }
         } finally {
             setIsRefreshing(false);
         }
-    }, [setSessions, isRefreshing]);
+    }, [setSessions, isRefreshing, sessionName, onUpdate]);
 
     const onCreate = useCallback(async () => {
         const name = trimmedNewName;
@@ -85,35 +103,16 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
             setSessions(toSessionObjs(remaining));
             if (name == sessionName) {
                 const next = (remaining && remaining.length > 0) ? remaining[0] : 'default';
-                updateSessionName(next);
-                // clear stale candidates immediately in UI before fetching switched session data
-                callback([]);
-                // refresh data for switched session
-                getCachedResults({ callback: callback });
-                getSourceOntology({ callback: sourceOntologyCallback });
-                getTargetOntology({ callback: targetOntologyCallback });
-                getValueBins({ callback: uniqueValuesCallback });
-                getValueMatches({ callback: valueMatchesCallback });
-                getUserOperationHistory({ callback: userOperationHistoryCallback });
+                onUpdate({ name: next } as Session);
             }
         } catch (_) {
             // no-op toast; container handles feedback
         } finally {
             setDeleting(null);
         }
-    }, [setSessions, sessionName, callback, sourceOntologyCallback, targetOntologyCallback, uniqueValuesCallback, valueMatchesCallback, updateSessionName]);
+    }, [setSessions, sessionName, onUpdate]);
 
-    const onUpdate = useCallback((session: Session) => {
-        updateSessionName(session.name);
-        // clear stale candidates immediately in UI before fetching selected session data
-        callback([]);
-        getCachedResults({ callback: callback });
-        getSourceOntology({ callback: sourceOntologyCallback });
-        getTargetOntology({ callback: targetOntologyCallback });
-        getValueBins({ callback: uniqueValuesCallback });
-        getValueMatches({ callback: valueMatchesCallback });
-        getUserOperationHistory({ callback: userOperationHistoryCallback });
-    }, [updateSessionName, callback, sourceOntologyCallback, targetOntologyCallback, uniqueValuesCallback, valueMatchesCallback, userOperationHistoryCallback]);
+    
 
     const onSelectSession = useCallback((e: any) => {
         const name = e.target.value as string;

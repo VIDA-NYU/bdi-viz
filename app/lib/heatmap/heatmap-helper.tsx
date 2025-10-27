@@ -761,14 +761,14 @@ const runRematchTask = async ({ nodes, onResult, onError, taskStateCallback }: R
 // Session sync helpers
 
 const createSession = async (sessionName: string) => {
-    const sessions = await axios.post('/api/session/create', { session_name: sessionName });
+    const sessions = await axios.post('/api/session/create', { session_name: sessionName }, { headers: { 'Cache-Control': 'no-cache' } });
     // Switch current session to the newly created one
     setSessionName(sessionName);
     return sessions;
 };
 
 const listSessions = async ({ onSession }: { onSession: (sessions: Session[]) => void }): Promise<Session[]> => {
-    const response = await axios.post('/api/session/list', {});
+    const response = await axios.post('/api/session/list', {}, { headers: { 'Cache-Control': 'no-cache' } });
     let sessions: Session[] = [];
     if (onSession) {
         if (response.data.sessions) {
@@ -783,7 +783,7 @@ const listSessions = async ({ onSession }: { onSession: (sessions: Session[]) =>
 };
 
 const deleteSession = async (sessionName: string) => {
-    const response = await axios.post('/api/session/delete', { session_name: sessionName });
+    const response = await axios.post('/api/session/delete', { session_name: sessionName }, { headers: { 'Cache-Control': 'no-cache' } });
     return response.data.sessions as string[];
 };
 
