@@ -78,11 +78,11 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
     fetchCsv();
   }, [fetchCsv]);
 
-  // Refetch when the source dataset changes (new task, new upload)
+  // Refetch when the source dataset changes (new task, new upload) or value matches change
   useEffect(() => {
     if (!metaData?.sourceMeta) return;
     fetchCsv();
-  }, [metaData?.sourceMeta?.timestamp, metaData?.sourceMeta?.name, fetchCsv]);
+  }, [metaData?.sourceMeta?.timestamp, metaData?.sourceMeta?.name, fetchCsv, valueMatches]);
 
   const mappedColName = useMemo(() => {
     if (!selectedCandidate) return "";
@@ -128,7 +128,6 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
     const targetVM = match?.targets?.find((t) => t.targetColumn === targetCol);
 
     const sourceValues = match?.sourceValues || [];
-    const mappedSourceValues = match?.sourceMappedValues || [];
     const targetValues = targetVM?.targetValues || [];
 
     const valueToMapped: Record<string, string> = {};

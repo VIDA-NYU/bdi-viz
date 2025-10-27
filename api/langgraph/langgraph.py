@@ -3,11 +3,11 @@ import concurrent.futures
 import json
 import logging
 import os
+import re
 import time
 import traceback
 from enum import Enum
 from typing import Any, Callable, Dict, Hashable, List, Optional
-import re
 
 from dotenv import load_dotenv
 from langchain.output_parsers import PydanticOutputParser
@@ -25,6 +25,7 @@ from ..langchain.memory import MemoryRetriever
 from ..tools.candidate_tools import CandidateTools
 from ..tools.query_tools import QueryTools
 from ..tools.task_tools import TaskTools
+from ..tools.value_tools import ValueTools
 
 load_dotenv()
 
@@ -97,6 +98,7 @@ class AgentType(str, Enum):
     RESEARCH = "research"
     CANDIDATE = "candidate"
     TASK = "task"
+    VALUE = "value"
     FINAL = "final"
 
 
@@ -318,6 +320,20 @@ class LangGraphAgent:
             ),
         )
 
+        value_agent_tools = (
+            QueryTools(self.session_id, self.memory_retriever).get_value_tools()
+            + ValueTools(self.session_id).get_tools()
+        )
+        workflow.add_node(
+            "value_agent",
+            self._create_agent_node(
+                self._value_prompt,
+                value_agent_tools,
+                self.master_llm,
+                node_name="value_agent",
+            ),
+        )
+
         workflow.add_node("final", self._final_node)
 
         # Define routing
@@ -332,12 +348,22 @@ class LangGraphAgent:
                 AgentType.ONTOLOGY: "ontology_agent",
                 AgentType.CANDIDATE: "candidate_agent",
                 AgentType.TASK: "task_agent",
+                AgentType.VALUE: "value_agent",
             },
         )
 
         workflow.add_edge("ontology_agent", "candidate_agent")
+        # workflow.add_conditional_edges(
+        #     "candidate_agent",
+        #     route_to_agents,
+        #     {
+        #         AgentType.FINAL: "final",
+        #         AgentType.VALUE: "value_agent",
+        #     },
+        # )
         workflow.add_edge("candidate_agent", "final")
         workflow.add_edge("task_agent", "final")
+        workflow.add_edge("value_agent", "final")
         workflow.set_entry_point("supervisor")
 
         return workflow.compile()
@@ -423,6 +449,7 @@ class LangGraphAgent:
            - Candidate operations → route to ["candidate"]
            - Rerank/rescore → route to ["candidate"], pass the candidates list to the candidate agent as well
            - Task operations → route to ["task"] (e.g. new task, new matcher, update node filter)
+           - Value mapping/normalization/conversion (e.g., "map values", "normalize codes", "convert units", "apply lambda", "value mapping") → route to ["value"]
            - Information requests → handle directly, set next_agents = []
            - Unclear intent → ask clarification, set next_agents = []
 
@@ -481,8 +508,12 @@ class LangGraphAgent:
            - Why certain candidates align with user's stated goals
            - Any patterns you've noticed in their preferences
 
-        Store results in `candidates_to_append` and set next_agents = ["candidate"]
-        for further processing and presentation to the user.
+        RESPONSE FORMAT (STRICT):
+        - Store results in `candidates_to_append`
+        - Set next_agents = ["candidate"]
+        - Set `message` to your user-facing response
+        - task_id and matcher_task_id should be null
+        - Ensure all fields match the required JSON schema
         """
 
     def _candidate_prompt(self) -> str:
@@ -540,15 +571,52 @@ class LangGraphAgent:
         4. **Update**: Use `update_candidates` with source attribute and re-ranked list.
         5. **Explain**: In `message`, describe changes and reasons.
 
-        RESPONSE PATTERNS:
-                 - "Given your interest in X from earlier, candidate Y might be 
-           ideal"
-        - "Based on your preference for Z, I've prioritized candidates with..."
-        - "I notice you typically prefer A over B, so I recommend..."
-        - "Since you asked about C, here are some related options..."
+        RESPONSE FORMAT (STRICT):
+        Return ONLY a single JSON object conforming to the AgentState schema.
+        - Set `message` to your user-facing response
+        - Set `next_agents = []`
+        - task_id and matcher_task_id should be null
+        - Ensure all fields match the required JSON schema
+        """
 
-        Focus on building a helpful, context-aware dialogue that guides 
-        the user toward effective data matching decisions.
+    def _value_prompt(self) -> str:
+        return """
+        You are a value matching specialist. Helping with the value matching of the matching candidates.
+
+        CURRENT REQUEST: {query}
+        Working Context:
+        - Source: "{source_column}"
+        - Target: "{target_column}"
+        
+        CONVERSATION HISTORY:
+        {conversation_summary}
+
+        WORKFLOW:
+        1. **Context Investigation**
+           - Use `read_source_values` and `read_target_values` to inspect representative values.
+           - **Pass keywords list to `read_target_values` for target values references.**
+           - From conversation history, infer whether the user wants categorical mapping or a numeric conversion.
+
+        2. **Decide Data Type**
+           - Categorical: free-text, enums, booleans.
+           - Numeric: integers/floats that require a formula or unit conversion.
+           - If neither applies, explain briefly and ask for clarification.
+
+        3. **Preview**
+           - Categorical: Call `preview_value_map` with a proposed mapping dict; report changed_count, covered_in_mapping, and show examples.
+           - Numeric: Call `preview_numeric_lambda` with a simple lambda (e.g., "lambda x: x/12"); report before/after arrays.
+           - **If preview is not satisfactory, refine inputs (mapping or lambda) and preview again.**
+
+        4. **Apply**
+           - Categorical: Call `apply_value_map` to mutate the source column and sync caches.
+           - Numeric: Call `apply_numeric_lambda` to mutate the source column.
+
+        RESPONSE FORMAT (STRICT):
+        Return ONLY a single JSON object conforming to the AgentState schema.
+        - Set `message` to your user-facing response
+        - Set `next_agents = []`
+        - task_id and matcher_task_id should be null
+        - Ensure all fields match the required JSON schema
         """
 
     def _task_prompt(self) -> str:
