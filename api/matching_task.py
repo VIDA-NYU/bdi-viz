@@ -20,7 +20,6 @@ from .matcher_weight.weight_updater import WeightUpdater
 from .utils import (
     TaskState,
     get_session_file,
-    is_candidate_for_category,
     load_gdc_ontology,
     load_ontology,
     load_ontology_flat,
@@ -58,6 +57,26 @@ class MatchingTask:
         self._initialize_cache()
         self.history = UserOperationHistory()
         self.weight_updater = None
+
+    def _normalize_numeric_str(self, value: Any) -> str:
+        """
+        Normalize numeric-like values to consistent string forms.
+        - If the value represents an integer (e.g., 24 or 24.0), return "24".
+        - Otherwise, return the original string form.
+        This is used to avoid treating "24" and "24.0" as different categories.
+        """
+        if value is None:
+            return ""
+        s = str(value).strip()
+        # Fast path: avoid work for obviously non-numeric
+        try:
+            f = float(s)
+        except Exception:
+            return s
+        # Only collapse floats that are mathematically integers
+        if np.isfinite(f) and float(f).is_integer():
+            return str(int(f))
+        return s
 
     def _initialize_cache(self) -> None:
         # Try to load existing cache first
@@ -713,7 +732,15 @@ class MatchingTask:
             # Build source_unique_values purely from groundtruth mappings (even for numeric)
             values_by_source: Dict[str, List[str]] = {}
             for s_attr, _t_attr, s_val, _t_val in groundtruth_mappings:
-                sval = "" if s_val is None else str(s_val)
+                # Normalize only for numeric source columns; otherwise keep string
+                if (
+                    self.source_df is not None
+                    and s_attr in self.source_df.columns
+                    and pd.api.types.is_numeric_dtype(self.source_df[s_attr].dtype)
+                ):
+                    sval = self._normalize_numeric_str(s_val)
+                else:
+                    sval = "" if s_val is None else str(s_val)
                 arr = values_by_source.setdefault(s_attr, [])
                 if sval not in arr:
                     arr.append(sval)
@@ -744,12 +771,31 @@ class MatchingTask:
                 src_vals = self.cached_candidates["value_matches"][s_attr][
                     "source_unique_values"
                 ]
-                idx_map_by_source[s_attr] = {str(v): i for i, v in enumerate(src_vals)}
+                if (
+                    self.source_df is not None
+                    and s_attr in self.source_df.columns
+                    and pd.api.types.is_numeric_dtype(self.source_df[s_attr].dtype)
+                ):
+                    idx_map_by_source[s_attr] = {
+                        self._normalize_numeric_str(v): i
+                        for i, v in enumerate(src_vals)
+                    }
+                else:
+                    idx_map_by_source[s_attr] = {
+                        str(v): i for i, v in enumerate(src_vals)
+                    }
 
             # Apply mappings directly without per-item method overhead
             for s_attr, t_attr, s_val, t_val in groundtruth_mappings:
                 try:
-                    s_key = str(s_val) if s_val is not None else ""
+                    if (
+                        self.source_df is not None
+                        and s_attr in self.source_df.columns
+                        and pd.api.types.is_numeric_dtype(self.source_df[s_attr].dtype)
+                    ):
+                        s_key = self._normalize_numeric_str(s_val)
+                    else:
+                        s_key = str(s_val) if s_val is not None else ""
                     idx = idx_map_by_source.get(s_attr, {}).get(s_key)
                     if idx is None:
                         continue
@@ -853,10 +899,7 @@ class MatchingTask:
 
             # Handle numeric columns that can be treated as categorical
             if pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype):
-                if is_candidate_for_category(self.source_df[source_col]):
-                    source_unique_values = self.get_source_unique_values(
-                        source_col, n=300
-                    )
+                source_unique_values = self.get_source_unique_values(source_col, n=300)
             else:
                 source_unique_values = self.get_source_unique_values(source_col)
 
@@ -1270,9 +1313,15 @@ class MatchingTask:
             raise ValueError(
                 f"Source column {source_col} not found in the source dataframe."
             )
-        return sorted(
-            list(self.source_df[source_col].dropna().unique().astype(str)[:n])
-        )
+        series = self.source_df[source_col].dropna()
+        uniques = series.unique()[:n]
+        # For numeric dtypes, collapse integer-like floats (e.g., 24.0 -> "24")
+        if pd.api.types.is_numeric_dtype(series.dtype):
+            normalized = [self._normalize_numeric_str(v) for v in uniques]
+            # De-duplicate after normalization
+            return sorted(list(set(normalized)))
+        # Non-numeric: keep original string forms
+        return sorted([str(v) for v in uniques])
 
     def get_target_value_bins(self, target_col: str) -> List[Dict[str, Any]]:
         if self.target_df is None or target_col not in self.target_df.columns:
@@ -1721,10 +1770,29 @@ class MatchingTask:
             self._generate_value_matches(source_col, target_col)
 
         # Locate index via original unique values list
-        try:
-            idx = source_vm["source_unique_values"].index(str(source_val))
-        except ValueError:
-            # If the exact string is not found, try matching without casting
+        # Prefer normalized lookup for numeric columns to treat "24" and "24.0" as the same
+        is_numeric_source = (
+            self.source_df is not None
+            and source_col in self.source_df.columns
+            and pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype)
+        )
+        search_keys: List[str] = []
+        if is_numeric_source:
+            # Try normalized first, then raw string, then raw object
+            search_keys.append(self._normalize_numeric_str(source_val))
+            search_keys.append(str(source_val))
+        else:
+            search_keys.append(str(source_val))
+        # Attempt lookups in order
+        idx = None
+        for key in search_keys:
+            try:
+                idx = source_vm["source_unique_values"].index(key)
+                break
+            except ValueError:
+                continue
+        if idx is None:
+            # Last fallback: try non-casted object form
             try:
                 idx = source_vm["source_unique_values"].index(source_val)
             except ValueError:
