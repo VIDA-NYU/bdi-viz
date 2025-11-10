@@ -30,6 +30,16 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
   const [columns, setColumns] = useState<GridColDef[]>([]);
   const [loading, setLoading] = useState(false);
   const session = getSessionName();
+  // Normalize numeric-like strings (e.g., "24.0" -> "24") so we can match positions reliably
+  const normalizeNumericLike = useCallback((v: any): string => {
+    const s = String(v ?? "").trim();
+    if (!s) return s;
+    const n = Number(s);
+    if (Number.isFinite(n) && Math.trunc(n) === n) {
+      return String(Math.trunc(n));
+    }
+    return s;
+  }, []);
   // Edit-together state and popup search
   const [editing, setEditing] = useState<{ rowId: number | null; key: string | null; value: string; sourceValue: string | null }>({ rowId: null, key: null, value: "", sourceValue: null });
   const [popover, setPopover] = useState<{ anchorEl: Element | null; search: string; options: string[]; attribute?: GDCAttribute }>({ anchorEl: null, search: "", options: [], attribute: undefined });
@@ -133,6 +143,7 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
     const valueToMapped: Record<string, string> = {};
     for (let i = 0; i < sourceValues.length; i++) {
       const fromVal = String(sourceValues[i] ?? "");
+      const fromNorm = normalizeNumericLike(fromVal);
       const rawTarget = targetValues[i];
       let toVal = "";
       if (rawTarget !== undefined && rawTarget !== null) {
@@ -147,13 +158,20 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
       } else {
         toVal = "";
       }
-      if (fromVal.length > 0) valueToMapped[fromVal] = toVal;
+      if (fromVal.length > 0) {
+        valueToMapped[fromVal] = toVal;
+        // Also map normalized numeric-like key if different (so "24" and "24.0" both resolve)
+        if (fromNorm && fromNorm !== fromVal && valueToMapped[fromNorm] === undefined) {
+          valueToMapped[fromNorm] = toVal;
+        }
+      }
     }
 
     const newRows = rows.map((r) => {
       const srcVal = r[sourceCol];
       const existing = (r as any)[mappedColName];
-      const computed = valueToMapped[String(srcVal ?? "")] ?? "";
+      const rawKey = String(srcVal ?? "");
+      const computed = valueToMapped[rawKey] ?? valueToMapped[normalizeNumericLike(rawKey)] ?? "";
       const mapped = existing !== undefined ? String(existing ?? "") : computed;
       return { ...r, [mappedColName]: mapped };
     });
