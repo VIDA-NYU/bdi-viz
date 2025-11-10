@@ -5,12 +5,14 @@ import queue
 import shutil
 import sys
 import threading
+import io
+import zipfile
 from typing import List, Tuple
 from uuid import uuid4
 
 import pandas as pd
 from celery import Celery, Task
-from flask import Flask, Response, request, stream_with_context
+from flask import Flask, Response, request, stream_with_context, send_file
 
 # Lazy import the agent to save resources
 from .langchain.pydantic import AgentResponse
@@ -20,6 +22,8 @@ from .utils import (
     compute_dataframe_checksum,
     extract_data_from_request,
     extract_session_name,
+    sanitize_session_name,
+    get_session_dir,
     get_session_file,
     load_gdc_property,
     load_property,
@@ -288,6 +292,99 @@ def session_delete():
     # remove session from manager
     SESSION_MANAGER.delete_session(session)
     return {"message": "success", "sessions": SESSION_MANAGER.get_active_sessions()}
+
+
+@app.route("/api/session/export", methods=["GET"])
+def session_export():
+    session_raw = request.args.get("session_name", "default")
+    session = sanitize_session_name(session_raw)
+    try:
+        session_dir = get_session_dir(session, create=False)
+    except Exception:
+        session_dir = None
+    if not session_dir or not os.path.isdir(session_dir):
+        return {"message": "error", "error": f"Session '{session}' not found"}, 404
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(session_dir):
+            for fname in files:
+                abs_path = os.path.join(root, fname)
+                rel_inside = os.path.relpath(abs_path, session_dir)
+                # Do NOT include the session folder in the archive; only contents
+                zf.write(abs_path, arcname=rel_inside)
+    buf.seek(0)
+    filename = f"{session}.zip"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/zip",
+        max_age=0,
+    )
+
+
+@app.route("/api/session/import", methods=["POST"])
+def session_import():
+    if "file" not in request.files and "zip" not in request.files:
+        return {"message": "error", "error": "Missing zip file"}, 400
+    upfile = request.files.get("file") or request.files.get("zip")
+    session_raw = request.form.get("session_name") or ""
+    overwrite = request.form.get("overwrite", "false").lower() in ("1", "true", "yes")
+    session = sanitize_session_name(
+        session_raw or getattr(upfile, "filename", "imported").rsplit(".", 1)[0]
+    )
+    if not upfile:
+        return {"message": "error", "error": "No file uploaded"}, 400
+    try:
+        dest_dir = get_session_dir(session, create=True)
+        if os.path.exists(dest_dir) and os.listdir(dest_dir):
+            if not overwrite:
+                return {
+                    "message": "error",
+                    "error": f"Session '{session}' already exists. Use overwrite to replace.",
+                }, 409
+            shutil.rmtree(dest_dir, ignore_errors=True)
+            os.makedirs(dest_dir, exist_ok=True)
+        with zipfile.ZipFile(upfile.stream) as zf:
+            for member in zf.infolist():
+                name = member.filename
+                if name.endswith("/"):
+                    continue
+                norm = os.path.normpath(name)
+                parts = norm.split(os.sep)
+                # Strip common top-level folders (session name or sessions/<session>)
+                if (
+                    len(parts) > 1
+                    and parts[0] in (session, "default")
+                    and not parts[0].startswith("..")
+                ):
+                    norm = os.path.join(*parts[1:]) if len(parts) > 1 else ""
+                    parts = norm.split(os.sep)
+                if (
+                    len(parts) > 2
+                    and parts[0] == "sessions"
+                    and parts[1] in (session, "default")
+                ):
+                    norm = os.path.join(*parts[2:]) if len(parts) > 2 else ""
+                if norm.startswith("..") or os.path.isabs(norm) or norm == ".":
+                    continue
+                target_path = os.path.join(dest_dir, norm)
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                with zf.open(member) as src, open(target_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+        try:
+            SESSION_MANAGER.create_session(session)
+        except Exception:
+            pass
+        return {
+            "message": "success",
+            "session": session,
+            "sessions": SESSION_MANAGER.get_active_sessions(),
+        }
+    except zipfile.BadZipFile:
+        return {"message": "error", "error": "Invalid zip file"}, 400
+    except Exception as e:
+        return {"message": "error", "error": str(e)}, 500
 
 
 @celery.task(bind=True, name="api.index.infer_source_ontology_task", queue="ontology")

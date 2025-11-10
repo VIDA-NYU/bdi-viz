@@ -787,6 +787,30 @@ const deleteSession = async (sessionName: string) => {
     return response.data.sessions as string[];
 };
 
+// Session export/import
+const exportSessionZip = async (sessionName: string): Promise<Blob> => {
+    const response = await axios.get('/api/session/export', {
+        params: { session_name: sessionName },
+        responseType: 'blob',
+        headers: { 'Cache-Control': 'no-cache' },
+    });
+    return response.data as Blob;
+};
+
+const importSessionFromZip = async (file: File, sessionName: string, overwrite: boolean = false): Promise<string[]> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('session_name', sessionName);
+    if (overwrite) form.append('overwrite', 'true');
+    const response = await axios.post('/api/session/import', form, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+            'Cache-Control': 'no-cache',
+        },
+    });
+    return response.data.sessions as string[];
+};
+
 interface CreateCandidateProps {
     candidate: Candidate;
     callback: (candidates: Candidate[]) => void;
@@ -871,6 +895,8 @@ export {
     createSession,
     listSessions,
     deleteSession,
+    exportSessionZip,
+    importSessionFromZip,
     createCandidate,
     deleteCandidate,
 };

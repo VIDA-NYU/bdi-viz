@@ -5,8 +5,10 @@ import { Box, TextField, IconButton, MenuItem, Tooltip, Select, CircularProgress
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
 import { useSession } from '@/app/lib/settings/session';
-import { createSession, listSessions, deleteSession, getCachedResults, getTargetOntology, getValueBins, getValueMatches, getSourceOntology, getUserOperationHistory } from '@/app/lib/heatmap/heatmap-helper';
+import { createSession, listSessions, deleteSession, getCachedResults, getTargetOntology, getValueBins, getValueMatches, getSourceOntology, getUserOperationHistory, exportSessionZip, importSessionFromZip } from '@/app/lib/heatmap/heatmap-helper';
 
 
 interface SessionMenuProps {
@@ -30,6 +32,9 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
     const [isCreating, setIsCreating] = useState<boolean>(false);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [isExporting, setIsExporting] = useState<boolean>(false);
+    const [isImporting, setIsImporting] = useState<boolean>(false);
+    const [fileInputKey, setFileInputKey] = useState<number>(0); // reset file input
 
     const namesSet = useMemo(() => new Set(sessions.map(s => s.name)), [sessions]);
     const trimmedNewName = newSessionName.trim();
@@ -114,6 +119,76 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
 
     
 
+    const onExport = useCallback(async () => {
+        if (isExporting || !sessionName) return;
+        setIsExporting(true);
+        try {
+            const blob = await exportSessionZip(sessionName);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${sessionName}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } finally {
+            setIsExporting(false);
+        }
+    }, [isExporting, sessionName]);
+
+    const onImportFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        const defaultName = (file.name || 'imported').replace(/\.zip$/i, '');
+        const inputName = prompt('Import session as name:', defaultName);
+        if (inputName === null) { // user cancelled
+            setFileInputKey((k) => k + 1);
+            return;
+        }
+        const targetName = inputName.trim();
+        if (!targetName) {
+            setFileInputKey((k) => k + 1);
+            return;
+        }
+        setIsImporting(true);
+        try {
+            const sessions = await importSessionFromZip(file, targetName, false);
+            setSessions(toSessionObjs(sessions));
+            updateSessionName(targetName);
+            // refresh loaded data for new session
+            callback([]);
+            getCachedResults({ callback: callback });
+            getSourceOntology({ callback: sourceOntologyCallback });
+            getTargetOntology({ callback: targetOntologyCallback });
+            getValueBins({ callback: uniqueValuesCallback });
+            getValueMatches({ callback: valueMatchesCallback });
+            getUserOperationHistory({ callback: userOperationHistoryCallback });
+        } catch (err: any) {
+            const overwrite = confirm('Session exists. Overwrite?');
+            if (overwrite) {
+                try {
+                    const sessions = await importSessionFromZip(file, targetName, true);
+                    setSessions(toSessionObjs(sessions));
+                    updateSessionName(targetName);
+                    callback([]);
+                    getCachedResults({ callback: callback });
+                    getSourceOntology({ callback: sourceOntologyCallback });
+                    getTargetOntology({ callback: targetOntologyCallback });
+                    getValueBins({ callback: uniqueValuesCallback });
+                    getValueMatches({ callback: valueMatchesCallback });
+                    getUserOperationHistory({ callback: userOperationHistoryCallback });
+                } catch (_) {
+                    // no-op
+                }
+            }
+        } finally {
+            setIsImporting(false);
+            setFileInputKey((k) => k + 1);
+        }
+    }, [setSessions, updateSessionName, callback, sourceOntologyCallback, targetOntologyCallback, uniqueValuesCallback, valueMatchesCallback, userOperationHistoryCallback]);
+
     const onSelectSession = useCallback((e: any) => {
         const name = e.target.value as string;
         if (!name || name === sessionName) return;
@@ -176,6 +251,25 @@ const SessionMenu: React.FC<SessionMenuProps> = ({ callback, sourceOntologyCallb
                 <IconButton size="small" onClick={onRefresh} disabled={isRefreshing}>
                     {isRefreshing ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
                 </IconButton>
+            </Tooltip>
+            <Tooltip title="Export current session as ZIP">
+                <IconButton size="small" onClick={onExport} disabled={isExporting}>
+                    {isExporting ? <CircularProgress size={16} /> : <FileDownloadIcon fontSize="small" />}
+                </IconButton>
+            </Tooltip>
+            <Tooltip title="Import session from ZIP">
+                <span>
+                    <IconButton size="small" component="label" disabled={isImporting}>
+                        {isImporting ? <CircularProgress size={16} /> : <FileUploadIcon fontSize="small" />}
+                        <input
+                            key={fileInputKey}
+                            type="file"
+                            accept=".zip,application/zip"
+                            hidden
+                            onChange={onImportFileSelected}
+                        />
+                    </IconButton>
+                </span>
             </Tooltip>
             <Select
                 size="small"
