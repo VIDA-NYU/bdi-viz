@@ -239,7 +239,31 @@ class MatchingTask:
 
         # Initialize value matches once both dataframes are ready
         if self.source_df is not None and self.target_df is not None:
-            self._initialize_value_matches()
+            # Ensure candidates are loaded from cache if available
+            self._ensure_candidates_loaded()
+            # Ensure value_matches structure exists and is complete
+            if not self.cached_candidates.get("value_matches"):
+                self._initialize_value_matches()
+            else:
+                # Ensure all source columns have value_matches initialized
+                for source_col in self.source_df.columns:
+                    if source_col not in self.cached_candidates["value_matches"]:
+                        source_unique_values = []
+                        if pd.api.types.is_numeric_dtype(
+                            self.source_df[source_col].dtype
+                        ):
+                            source_unique_values = self.get_source_unique_values(
+                                source_col, n=300
+                            )
+                        else:
+                            source_unique_values = self.get_source_unique_values(
+                                source_col
+                            )
+                        self.cached_candidates["value_matches"][source_col] = {
+                            "source_unique_values": source_unique_values,
+                            "source_mapped_values": source_unique_values,
+                            "targets": {},
+                        }
 
     def set_nodes(self, nodes: List[str]) -> None:
         """Set the nodes to filter target data by."""
@@ -257,13 +281,38 @@ class MatchingTask:
             nodes.add(ontology_flat[col]["node"])
         return list(nodes)
 
+    def _ensure_candidates_loaded(self) -> None:
+        """Ensure candidates are loaded from cache if available. Does not generate new candidates."""
+        if self.source_df is None or self.target_df is None:
+            return
+
+        with self.lock:
+            # If candidates already loaded and valid, skip
+            if self.cached_candidates.get("candidates"):
+                source_hash, target_hash = self._compute_hashes()
+                if self._is_cache_valid(
+                    self.cached_candidates, source_hash, target_hash
+                ):
+                    return
+
+            # Try loading from JSON cache
+            cached_json = self._import_cache_from_json()
+            if cached_json:
+                source_hash, target_hash = self._compute_hashes()
+                if self._is_cache_valid(cached_json, source_hash, target_hash):
+                    self.cached_candidates = cached_json
+                    # Load cached matchers if they exist
+                    if "matchers" in cached_json and cached_json["matchers"]:
+                        self._load_cached_matchers_async(cached_json)
+                    logger.info("[MatchingTask] Candidates loaded from cache.")
+
     def _filter_target_by_nodes(self) -> None:
         """Filter target dataframe based on nodes if they are set."""
         if not self.cached_candidates["nodes"]:
             return
 
         # Load flat ontology to get node information
-        ontology_flat = load_ontology_flat()
+        ontology_flat = load_ontology_flat(self.session_name)
 
         # Get columns that belong to the specified nodes
         valid_columns = []

@@ -605,7 +605,9 @@ def load_ontology_flat(session_name: Optional[str] = None) -> Dict[str, Any]:
         path = get_session_file(session_name, "target.json", create_dir=False)
         with open(path, "r") as f:
             return json.load(f)
-    with open(".target.json", "r") as f:
+    # Default to "default" session instead of hardcoded path
+    path = get_session_file("default", "target.json", create_dir=False)
+    with open(path, "r") as f:
         return json.load(f)
 
 
@@ -624,7 +626,8 @@ def load_ontology(
         if session:
             path = get_session_file(session, f"{dataset}.json", create_dir=False)
         else:
-            path = f".{dataset}.json"
+            # Default to "default" session instead of hardcoded path
+            path = get_session_file("default", f"{dataset}.json", create_dir=False)
         with open(path, "r") as f:
             ontology_flat = json.load(f)
     except Exception as e:

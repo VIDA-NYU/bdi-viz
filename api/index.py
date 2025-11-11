@@ -807,7 +807,6 @@ def matching_status():
                 target=agent.remember_ontology, args=(target_json,)
             ).start()
         matching_task.sync_cache()
-        # matching_task.get_candidates()
 
         response = {
             "status": "completed",
@@ -939,11 +938,6 @@ def get_results():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
-        app.logger.critical(
-            "[get_results] PID=%s CWD=%s ARGV=%s", os.getpid(), os.getcwd(), sys.argv
-        )
-        _ = matching_task.get_candidates()
-        # AGENT.remember_candidates(candidates)
         target_json_path = get_session_file(session, "target.json", create_dir=False)
         if os.path.exists(target_json_path):
             target_json = json.load(open(target_json_path, "r"))
@@ -993,13 +987,6 @@ def get_value_matches():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
-        app.logger.critical(
-            "[get_value_matches] PID=%s CWD=%s ARGV=%s",
-            os.getpid(),
-            os.getcwd(),
-            sys.argv,
-        )
-        _ = matching_task.get_candidates()
     results = matching_task.value_matches_to_frontend_json()
 
     return {"message": "success", "results": results}
@@ -1016,13 +1003,6 @@ def get_gdc_ontology():
             matching_task.update_dataframe(
                 source_df=source, target_df=pd.read_csv(GDC_DATA_PATH)
             )
-        app.logger.critical(
-            "[get_gdc_ontology] PID=%s CWD=%s ARGV=%s",
-            os.getpid(),
-            os.getcwd(),
-            sys.argv,
-        )
-        _ = matching_task.get_candidates()
     results = matching_task._generate_gdc_ontology()
 
     return {"message": "success", "results": results}
@@ -1043,13 +1023,6 @@ def get_target_ontology():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
-        app.logger.critical(
-            "[get_target_ontology] PID=%s CWD=%s ARGV=%s",
-            os.getpid(),
-            os.getcwd(),
-            sys.argv,
-        )
-        _ = matching_task.get_candidates()
 
     results = matching_task._generate_target_ontology()
 
@@ -1071,13 +1044,6 @@ def get_source_ontology():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
-        app.logger.critical(
-            "[get_source_ontology] PID=%s CWD=%s ARGV=%s",
-            os.getpid(),
-            os.getcwd(),
-            sys.argv,
-        )
-        _ = matching_task.get_candidates()
 
     results = matching_task._generate_source_ontology()
 
@@ -1143,10 +1109,6 @@ def get_matchers():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
-        app.logger.critical(
-            "[get_matchers] PID=%s CWD=%s ARGV=%s", os.getpid(), os.getcwd(), sys.argv
-        )
-        _ = matching_task.get_candidates()
     matchers = matching_task.get_matchers()
     return {"message": "success", "matchers": matchers}
 
@@ -1812,7 +1774,9 @@ def rematch():
     data = request.json
     nodes = data.get("nodes", [])  # Get nodes from request body
 
-    if not os.path.exists(".source.csv") or not os.path.exists(".target.csv"):
+    if not os.path.exists(
+        get_session_file(session, "source.csv", create_dir=False)
+    ) or not os.path.exists(get_session_file(session, "target.csv", create_dir=False)):
         return {
             "status": "failed",
             "message": "Source or target files not found",
