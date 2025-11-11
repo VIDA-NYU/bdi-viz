@@ -7,10 +7,11 @@
   --foreground: #171717;
 }
 
+/* Dark mode disabled - forcing light mode */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #ffffff;
-    --foreground: #ededed;
+    --foreground: #171717;
   }
 }
 

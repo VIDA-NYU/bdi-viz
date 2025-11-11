@@ -346,7 +346,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                                 defaultLanguage="python"
                                 value={code}
                                 onChange={handleEditorChange}
-                                theme="vs-dark"
+                                theme="vs"
                                 options={{
                                     minimap: { enabled: false },
                                     fontSize: 14,
