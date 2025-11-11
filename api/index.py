@@ -345,6 +345,14 @@ def session_import():
                 }, 409
             shutil.rmtree(dest_dir, ignore_errors=True)
             os.makedirs(dest_dir, exist_ok=True)
+            # Delete session from manager to clear cached MatchingTask
+            if session in SESSION_MANAGER.sessions:
+                SESSION_MANAGER.delete_session(session)
+            # Clear memory retriever for the session
+            try:
+                delete_memory_retriever(session)
+            except Exception:
+                pass
         with zipfile.ZipFile(upfile.stream) as zf:
             for member in zf.infolist():
                 name = member.filename
