@@ -353,7 +353,9 @@ def session_import():
                 delete_memory_retriever(session)
             except Exception:
                 pass
-        with zipfile.ZipFile(upfile.stream) as zf:
+        # Read file content to ensure it's available for zipfile
+        file_content = upfile.read()
+        with zipfile.ZipFile(io.BytesIO(file_content)) as zf:
             for member in zf.infolist():
                 name = member.filename
                 if name.endswith("/"):
@@ -374,10 +376,18 @@ def session_import():
                     and parts[1] in (session, "default")
                 ):
                     norm = os.path.join(*parts[2:]) if len(parts) > 2 else ""
-                if norm.startswith("..") or os.path.isabs(norm) or norm == ".":
+                if (
+                    norm.startswith("..")
+                    or os.path.isabs(norm)
+                    or norm == "."
+                    or not norm
+                ):
                     continue
                 target_path = os.path.join(dest_dir, norm)
-                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                # Ensure parent directory exists (only if different from dest_dir)
+                parent_dir = os.path.dirname(target_path)
+                if parent_dir and parent_dir != dest_dir and parent_dir != target_path:
+                    os.makedirs(parent_dir, exist_ok=True)
                 with zf.open(member) as src, open(target_path, "wb") as dst:
                     shutil.copyfileobj(src, dst)
         try:
