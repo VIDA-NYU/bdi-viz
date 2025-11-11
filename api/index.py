@@ -1627,6 +1627,10 @@ def get_dataset_names():
     session = extract_session_name(request)
     source_name = None
     target_name = None
+    source_timestamp = None
+    source_size = None
+    target_timestamp = None
+    target_size = None
 
     try:
         if os.path.exists(get_session_file(session, "source.csv", create_dir=False)):
