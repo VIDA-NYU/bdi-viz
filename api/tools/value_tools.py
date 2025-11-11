@@ -82,7 +82,10 @@ class ValueTools:
 
         _validate(tree)
         compiled = compile(tree, filename="<lambda>", mode="eval")
-        func = eval(compiled, {"__builtins__": {}}, allowed_names)
+        # Names like int/float/round must be available at runtime in the function's globals.
+        safe_globals: Dict[str, Any] = {"__builtins__": {}}
+        safe_globals.update(allowed_names)
+        func = eval(compiled, safe_globals, {})
 
         def _fn(x: Any) -> Any:
             # Call the evaluated lambda function with x

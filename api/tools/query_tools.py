@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 from langchain.tools.base import StructuredTool
 
@@ -105,14 +105,16 @@ class QueryTools:
             self.read_target_description_tool,
         ]
 
-    def _read_source_candidates(self, source_attribute: str) -> List[Dict[str, Any]]:
+    def _read_source_candidates(
+        self, source_attribute: str
+    ) -> Union[List[Dict[str, Any]], str]:
         """
         Read existing candidates for a specific source attribute.
 
         Args:
             source_attribute (str): The source biomedical attribute to read.
         Returns:
-            List[Dict[str, Any]]: All candidates for the source attribute.
+            Union[List[Dict[str, Any]], str]: All candidates for the source attribute or an empty list.
         """
         candidates = self.matching_task.get_cached_candidates()
         # Filter candidates by source attribute and group by sourceColumn and targetColumn
@@ -169,11 +171,13 @@ class QueryTools:
             source_attribute,
             len(results),
         )
+        if not results:
+            return "[]"
         return results
 
     def _read_target_values(
         self, session_id: str, target_attribute: str, keywords: List[str] = None
-    ) -> List[str]:
+    ) -> Union[List[str], str]:
         """
         Read the values for a specific target attribute.
 
@@ -182,7 +186,7 @@ class QueryTools:
             target_attribute (str): The target biomedical attribute to read.
             keywords (List[str]): List of keywords to filter the target values.
         Returns:
-            List[str]: All values for the target attribute.
+            Union[List[str], str]: All values for the target attribute or an empty list.
         """
         results = []  # Initialize results to avoid UnboundLocalError
         target_properties = load_property(
@@ -220,9 +224,18 @@ class QueryTools:
             f"keywords: {keywords} "
             f"target_values: {target_values}"
         )
+        # Avoid returning a raw empty list, which can cause some providers'
+        # function-calling transports to drop the response part and lead to a
+        # mismatch between function calls and responses.
+        if not results:
+            return "[]"
         return results
 
-    def _read_source_values(self, session_id: str, source_attribute: str) -> List[str]:
+    def _read_source_values(
+        self,
+        session_id: str,
+        source_attribute: str,
+    ) -> Union[List[str], str]:
         """
         Read the values for a specific source attribute.
 
@@ -260,6 +273,8 @@ class QueryTools:
             source_attribute,
             len(results),
         )
+        if not results:
+            return "[]"
         return results
 
     def _read_target_description(self, session_id: str, target_attribute: str) -> str:
