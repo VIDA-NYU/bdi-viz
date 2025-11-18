@@ -62,19 +62,26 @@ class MatchingTask:
         """
         Normalize numeric-like values to consistent string forms.
         - If the value represents an integer (e.g., 24 or 24.0), return "24".
+        - NaN/None values return empty string "".
         - Otherwise, return the original string form.
         This is used to avoid treating "24" and "24.0" as different categories.
         """
-        if value is None:
+        if value is None or pd.isna(value):
             return ""
         s = str(value).strip()
+        # Handle 'nan' string representation
+        if s.lower() == "nan":
+            return ""
         # Fast path: avoid work for obviously non-numeric
         try:
             f = float(s)
         except Exception:
             return s
+        # Check for NaN/infinity before processing
+        if not np.isfinite(f):
+            return ""
         # Only collapse floats that are mathematically integers
-        if np.isfinite(f) and float(f).is_integer():
+        if float(f).is_integer():
             return str(int(f))
         return s
 
@@ -1362,15 +1369,28 @@ class MatchingTask:
             raise ValueError(
                 f"Source column {source_col} not found in the source dataframe."
             )
-        series = self.source_df[source_col].dropna()
+        series = self.source_df[source_col]
+        # Get unique values including NaN - don't drop them
         uniques = series.unique()[:n]
-        # For numeric dtypes, collapse integer-like floats (e.g., 24.0 -> "24")
+
+        # Convert all values to strings, handling NaN/None/empty consistently
         if pd.api.types.is_numeric_dtype(series.dtype):
+            # For numeric types, normalize (handles NaN -> "")
             normalized = [self._normalize_numeric_str(v) for v in uniques]
-            # De-duplicate after normalization
             return sorted(list(set(normalized)))
-        # Non-numeric: keep original string forms
-        return sorted([str(v) for v in uniques])
+        else:
+            # For non-numeric types, convert to string (NaN becomes "nan", convert to "")
+            result = []
+            for v in uniques:
+                if pd.isna(v) or v is None:
+                    result.append("")
+                elif isinstance(v, str) and v.strip() == "":
+                    result.append("")
+                else:
+                    str_val = str(v)
+                    # Convert 'nan' string to empty string
+                    result.append("" if str_val.lower() == "nan" else str_val)
+            return sorted(list(set(result)))
 
     def get_target_value_bins(self, target_col: str) -> List[Dict[str, Any]]:
         if self.target_df is None or target_col not in self.target_df.columns:

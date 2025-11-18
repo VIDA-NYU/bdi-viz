@@ -271,7 +271,31 @@ class MemoryRetriever:
         session_dir = get_session_dir(session_id, create=True)
         chroma_dir = os.path.join(session_dir, "chroma_db")
         os.makedirs(chroma_dir, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=chroma_dir)
+
+        # Try to initialize ChromaDB client, handling corrupted/incompatible databases
+        try:
+            self.client = chromadb.PersistentClient(path=chroma_dir)
+        except (ValueError, Exception) as e:
+            error_msg = str(e).lower()
+            # Handle tenant/database schema errors (ChromaDB 0.6.x compatibility issue)
+            if "tenant" in error_msg or "no such table: tenants" in error_msg:
+                logger.warning(
+                    f"ChromaDB database at {chroma_dir} is corrupted/incompatible. "
+                    "Recreating database..."
+                )
+                try:
+                    # Remove corrupted database directory
+                    if os.path.exists(chroma_dir):
+                        shutil.rmtree(chroma_dir, ignore_errors=True)
+                    os.makedirs(chroma_dir, exist_ok=True)
+                    # Retry client initialization
+                    self.client = chromadb.PersistentClient(path=chroma_dir)
+                except Exception as e2:
+                    logger.error(f"Failed to recreate ChromaDB database: {e2}")
+                    raise
+            else:
+                raise
+
         self.collections = {}
         for ns in self.supported_namespaces:
             self.collections[ns] = self.client.get_or_create_collection(
@@ -904,11 +928,24 @@ Explanations: {formatted_explanations}
                 self._increase_namespace_count(namespace, 1)
             except Exception as e:
                 msg = str(e).lower()
-                # Handle transient sqlite open errors by recreating client/collections once
-                if "unable to open database file" in msg:
+                # Handle transient sqlite open errors and tenant/database schema errors
+                if (
+                    "unable to open database file" in msg
+                    or "tenant" in msg
+                    or "no such table: tenants" in msg
+                ):
                     try:
                         session_dir = get_session_dir(self.session_id, create=True)
                         chroma_dir = os.path.join(session_dir, "chroma_db")
+
+                        # If tenant error, remove corrupted database
+                        if "tenant" in msg or "no such table: tenants" in msg:
+                            logger.warning(
+                                f"ChromaDB database corrupted during operation. Recreating..."
+                            )
+                            if os.path.exists(chroma_dir):
+                                shutil.rmtree(chroma_dir, ignore_errors=True)
+
                         os.makedirs(chroma_dir, exist_ok=True)
                         self.client = chromadb.PersistentClient(path=chroma_dir)
                         # Rebind collections
