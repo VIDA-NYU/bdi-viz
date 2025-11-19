@@ -158,12 +158,11 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
       } else {
         toVal = "";
       }
-      if (fromVal.length > 0) {
-        valueToMapped[fromVal] = toVal;
-        // Also map normalized numeric-like key if different (so "24" and "24.0" both resolve)
-        if (fromNorm && fromNorm !== fromVal && valueToMapped[fromNorm] === undefined) {
-          valueToMapped[fromNorm] = toVal;
-        }
+      // Include empty string mappings - they should be shown in the wrangler view
+      valueToMapped[fromVal] = toVal;
+      // Also map normalized numeric-like key if different (so "24" and "24.0" both resolve)
+      if (fromNorm && fromNorm !== fromVal && valueToMapped[fromNorm] === undefined) {
+        valueToMapped[fromNorm] = toVal;
       }
     }
 
