@@ -33,6 +33,16 @@ interface ShortcutPanelProps {
     setOpenNewMatcherDialog: (open: boolean) => void;
 }
 
+const ShortcutGroup = styled(Box)(({ theme }) => ({
+  display: "flex",
+  gap: theme.spacing(0.2),
+  backgroundColor: theme.palette.grey[300],
+  padding: theme.spacing(0.5, 1),
+  borderRadius: theme.shape.borderRadius * 2,
+  alignItems: "center",
+  flexWrap: "wrap",
+}));
+
 const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
     handleFileUpload,
     handleTargetOntology,
@@ -56,39 +66,79 @@ const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
         <SectionHeader>
             Shortcut Panel
         </SectionHeader>
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "left", maxWidth: "300px" }}>
-            <Box sx={{ display: "flex", gap: 1 }}>
-                <Box sx={{ display: "flex", gap: 0.5, backgroundColor: theme.palette.grey[300], px: 1, py: 0.5, borderRadius: 2, alignItems: "center" }}>
-                  <SectionLabel
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: 1,
+            alignItems: "flex-start",
+          }}
+        >
+            <ShortcutGroup>
+              <SectionLabel
+                sx={{
+                  paddingRight: "0.2rem",
+                  fontSize: "0.8rem",
+                  fontWeight: "400",
+                  color: theme.palette.text.secondary,
+                }}
+              >
+                Operations
+              </SectionLabel>
+              <AcceptMatchButton onClick={acceptMatch} />
+              <RejectMatchButton onClick={rejectMatch} />
+              <DiscardColumnButton onClick={discardColumn} />
+            </ShortcutGroup>
+
+            <ShortcutGroup>
+              <SectionLabel
+                sx={{
+                  paddingRight: "0.2rem",
+                  fontSize: "0.8rem",
+                  fontWeight: "400",
+                  color: theme.palette.text.secondary,
+                }}
+              >
+                History
+              </SectionLabel>
+              <UndoButton onClick={undo} />
+              <RedoButton onClick={redo} />
+            </ShortcutGroup>
+
+            <ShortcutGroup>
+              <SectionLabel
+                sx={{
+                  paddingRight: "0.2rem",
+                  fontSize: "0.8rem",
+                  fontWeight: "400",
+                  color: theme.palette.text.secondary,
+                }}
+              >
+                File
+              </SectionLabel>
+              <FileUploading
+                callback={handleFileUpload}
+                ontologyCallback={handleTargetOntology}
+                sourceOntologyCallback={handleSourceOntology}
+                uniqueValuesCallback={handleUniqueValues}
+                valueMatchesCallback={handleValueMatches}
+              />
+              <ExportMatchingResultsButton onClick={exportMatchingResults} />
+            </ShortcutGroup>
+
+            {developerMode && (
+              <ShortcutGroup>
+                <SectionLabel
                   sx={{
                     paddingRight: "0.2rem",
                     fontSize: "0.8rem",
-                    fontWeight: "800",
+                    fontWeight: "400",
                     color: theme.palette.text.secondary,
                   }}
-                  >Decision</SectionLabel>
-                  <AcceptMatchButton onClick={acceptMatch} />
-                  <RejectMatchButton onClick={rejectMatch} />
-                  <DiscardColumnButton onClick={discardColumn} />
-                </Box>
-                <Box sx={{ display: "flex", gap: 0.5, backgroundColor: theme.palette.grey[300], px: 1, py: 0.5, borderRadius: 2 }}>
-                  <UndoButton onClick={undo} />
-                  <RedoButton onClick={redo} />
-                </Box>
-                <Box sx={{ display: "flex", gap: 0.5 }}>
-                  <ExportMatchingResultsButton onClick={exportMatchingResults} />
-                  <FileUploading
-                    callback={handleFileUpload}
-                    ontologyCallback={handleTargetOntology}
-                    sourceOntologyCallback={handleSourceOntology}
-                    uniqueValuesCallback={handleUniqueValues}
-                    valueMatchesCallback={handleValueMatches}
-                  />
-                </Box>
-            </Box>
-
-            {developerMode && (
-              <Box sx={{ display: "flex", gap: 0.5 }}>
+                >
+                  Developer
+                </SectionLabel>
                 <ValueMatchingUploading
                   callback={handleFileUpload}
                   ontologyCallback={handleTargetOntology}
@@ -97,7 +147,7 @@ const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
                   valueMatchesCallback={handleValueMatches}
                 />
                 <NewMatcherButton onClick={() => setOpenNewMatcherDialog(true)} />
-              </Box>
+              </ShortcutGroup>
             )}
         </Box>
     </>
