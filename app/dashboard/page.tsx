@@ -123,6 +123,7 @@ export default function Dashboard() {
         onRelatedOuterSources: setRelatedOuterSources,
         onSourceColumnsUpdate: updateSourceColumns,
         onCandidateThresholdUpdate: updateCandidateThreshold,
+        onValueMatchesUpdate: handleValueMatches,
     });
 
 
@@ -391,6 +392,7 @@ export default function Dashboard() {
                         selectedCandidate={selectedCandidate}
                         setSelectedCandidate={setSelectedCandidateByTargetColumnCallback}
                         handleValueMatches={handleValueMatches}
+                        handleUserOperationsUpdate={handleUserOperationsUpdate}
                         valueMatches={valueMatches}
                         metaData={metaData}
                     />

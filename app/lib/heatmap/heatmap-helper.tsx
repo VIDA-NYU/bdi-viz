@@ -486,6 +486,7 @@ interface undoRedoProps {
     userOperationCallback: (userOperation: UserOperation) => void;
     cachedResultsCallback: (candidates: Candidate[]) => void;
     userOperationHistoryCallback: (userOperations: UserOperation[]) => void;
+    valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
     signal?: AbortSignal;
 }
 
@@ -493,6 +494,7 @@ const undoUserOperation = ({
     userOperationCallback,
     cachedResultsCallback,
     userOperationHistoryCallback,
+    valueMatchesCallback,
     signal
 }: undoRedoProps) => {
     try {
@@ -503,6 +505,7 @@ const undoUserOperation = ({
                     userOperationCallback(response.data.userOperation as UserOperation);
                     getCachedResults({ callback: cachedResultsCallback, signal });
                     getUserOperationHistory({ callback: userOperationHistoryCallback, signal });
+                    getValueMatches({ callback: valueMatchesCallback, signal });
                 }
             })
             .catch((error) => {
@@ -521,6 +524,7 @@ const redoUserOperation = ({
     userOperationCallback,
     cachedResultsCallback,
     userOperationHistoryCallback,
+    valueMatchesCallback,
     signal
 }: undoRedoProps) => {
     try {
@@ -531,6 +535,7 @@ const redoUserOperation = ({
                     userOperationCallback(response.data.userOperation as UserOperation);
                     getCachedResults({ callback: cachedResultsCallback, signal });
                     getUserOperationHistory({ callback: userOperationHistoryCallback, signal });
+                    getValueMatches({ callback: valueMatchesCallback, signal });
                 }
             })
             .catch((error) => {
@@ -617,18 +622,19 @@ interface updateSourceValueProps {
     value: any;
     newValue: any;
     valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
+    userOperationHistoryCallback: (userOperations: UserOperation[]) => void;
     signal?: AbortSignal;
 }
 
-const updateSourceValue = ({ column, value, newValue, valueMatchesCallback, signal }: updateSourceValueProps) => {
+const updateSourceValue = ({ column, value, newValue, valueMatchesCallback, userOperationHistoryCallback, signal }: updateSourceValueProps) => {
     return makeApiRequest<void>(
         "/api/value/update",
         { column, value, newValue, operation: "source", session_name: getSessionName() },
         signal,
         (data) => {
             if (data && data.message === "success") {
-            console.log("updateSourceValue finished!");
                 getValueMatches({ callback: valueMatchesCallback, signal });
+                getUserOperationHistory({ callback: userOperationHistoryCallback, signal });
             } else {
                 throw new Error("Invalid results format");
             }
@@ -643,18 +649,19 @@ interface updateTargetMatchValueProps {
     targetColumn: string;
     newTargetValue: any;
     valueMatchesCallback: (valueMatches: ValueMatch[]) => void;
+    userOperationHistoryCallback: (userOperations: UserOperation[]) => void;
     signal?: AbortSignal;
 }
 
-const updateTargetMatchValue = ({ sourceColumn, sourceValue, targetColumn, newTargetValue, valueMatchesCallback, signal }: updateTargetMatchValueProps) => {
+const updateTargetMatchValue = ({ sourceColumn, sourceValue, targetColumn, newTargetValue, valueMatchesCallback, userOperationHistoryCallback, signal }: updateTargetMatchValueProps) => {
     return makeApiRequest<void>(
         "/api/value/update",
         { operation: "target", sourceColumn, sourceValue, targetColumn, newTargetValue, session_name: getSessionName() },
         signal,
         (data) => {
             if (data && data.message === "success") {
-                console.log("updateTargetMatchValue finished!");
                 getValueMatches({ callback: valueMatchesCallback, signal });
+                getUserOperationHistory({ callback: userOperationHistoryCallback, signal });
             } else {
                 throw new Error("Invalid results format");
             }

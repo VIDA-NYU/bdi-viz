@@ -16,7 +16,8 @@ import { updateTargetMatchValue, getGDCAttribute } from "@/app/lib/heatmap/heatm
 interface DataWranglerTableProps {
   selectedCandidate?: Candidate;
   valueMatches: ValueMatch[];
-  handleValueMatches?: (valueMatches: ValueMatch[]) => void;
+  handleValueMatches: (valueMatches: ValueMatch[]) => void;
+  handleUserOperationsUpdate: (userOperations: UserOperation[]) => void;
   metaData?: { sourceMeta: DatasetMeta; targetMeta: DatasetMeta };
 }
 
@@ -24,7 +25,7 @@ type CsvRow = Record<string, any>;
 
 const MAX_ROWS = 1000; // safety cap for UI responsiveness
 
-const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate, valueMatches, handleValueMatches, metaData }) => {
+const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate, valueMatches, handleValueMatches, handleUserOperationsUpdate, metaData }) => {
   const theme = useTheme();
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [columns, setColumns] = useState<GridColDef[]>([]);
@@ -245,18 +246,35 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
     if (!selectedCandidate || editing.sourceValue === null || !handleValueMatches) return;
     const sourceCol = selectedCandidate.sourceColumn;
     const targetCol = selectedCandidate.targetColumn;
-    try { console.log("[Wrangler] applyEnumToRow", { enumValue, sourceCol, targetCol, sourceValue: editing.sourceValue }); } catch (_) {}
-    setRows((prev) => prev.map((r) => (String(r[sourceCol] ?? "") === editing.sourceValue ? { ...r, [mappedColName]: enumValue } : r)));
+    // Skip update if the value didn't actually change
+    const currentRow = rows.find(
+      (r) => String(r[sourceCol] ?? "") === editing.sourceValue
+    );
+    const currentValue = currentRow ? String((currentRow as any)[mappedColName] ?? "") : "";
+    if (currentValue === enumValue) {
+      closeEnumsPopover();
+      setEditing((s) => ({ ...s, sourceValue: null }));
+      return;
+    }
+
+    setRows((prev) =>
+      prev.map((r) =>
+        String(r[sourceCol] ?? "") === editing.sourceValue
+          ? { ...r, [mappedColName]: enumValue }
+          : r
+      )
+    );
     updateTargetMatchValue({
       sourceColumn: sourceCol,
       sourceValue: editing.sourceValue,
       targetColumn: targetCol,
       newTargetValue: enumValue,
       valueMatchesCallback: handleValueMatches,
+      userOperationHistoryCallback: handleUserOperationsUpdate,
     });
     closeEnumsPopover();
     setEditing((s) => ({ ...s, sourceValue: null }));
-  }, [selectedCandidate, editing.sourceValue, handleValueMatches, mappedColName, closeEnumsPopover]);
+  }, [selectedCandidate, editing.sourceValue, rows, handleValueMatches, handleUserOperationsUpdate, mappedColName, closeEnumsPopover]);
 
   // Quick helpers for visibility controls
   const showOnlyFocused = useCallback(() => {
@@ -355,6 +373,11 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
                 const commit = () => {
                   if (!handleValueMatches) { setEditing({ rowId: null, key: null, value: "", sourceValue: null }); return; }
                   const newVal = editing.value;
+                  // Skip update if the value didn't actually change
+                  if (newVal === current) {
+                    setEditing({ rowId: null, key: null, value: "", sourceValue: null });
+                    return;
+                  }
                   // optimistic update across all rows with the same source value
                   setRows((prev) => prev.map((r) => (String(r[sourceCol] ?? "") === srcVal ? { ...r, [mappedColName]: newVal } : r)));
                   // persist to backend
@@ -364,6 +387,7 @@ const DataWranglerTable: React.FC<DataWranglerTableProps> = ({ selectedCandidate
                     targetColumn: targetCol,
                     newTargetValue: newVal,
                     valueMatchesCallback: handleValueMatches,
+                    userOperationHistoryCallback: handleUserOperationsUpdate,
                   });
                   setEditing({ rowId: null, key: null, value: "", sourceValue: null });
                 };

@@ -1243,7 +1243,10 @@ class MatchingTask:
         operation = self.history.undo_last_operation()
         if operation:
             self.undo_operation(
-                operation.operation, operation.candidate, operation.references
+                operation.operation,
+                operation.candidate,
+                operation.references,
+                operation.value_mappings,
             )
             return operation._json_serialize()
         return None
@@ -1253,7 +1256,10 @@ class MatchingTask:
         operation = self.history.redo_last_operation()
         if operation:
             self.redo_operation(
-                operation.operation, operation.candidate, operation.references
+                operation.operation,
+                operation.candidate,
+                operation.references,
+                operation.value_mappings,
             )
             return operation._json_serialize()
         return None
@@ -1264,18 +1270,21 @@ class MatchingTask:
         candidate: Dict[str, Any],
         references: List[Dict[str, Any]],
         is_match_to_agent: Optional[bool] = None,
+        value_mappings: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         logger.info(f"Applying operation: {operation}, on candidate: {candidate}...")
 
         # Update matcher weights if enabled
         if self.weight_updater:
             self.weight_updater.update_weights(
-                operation, candidate["sourceColumn"], candidate["targetColumn"]
+                operation, candidate.get("sourceColumn"), candidate.get("targetColumn")
             )
 
         # Add operation to history
         self.history.add_operation(
-            UserOperation(operation, candidate, references, is_match_to_agent)
+            UserOperation(
+                operation, candidate, references, is_match_to_agent, value_mappings
+            )
         )
 
         # Apply the operation
@@ -1293,6 +1302,31 @@ class MatchingTask:
             self.append_candidates_from_agent(candidate["sourceColumn"], [candidate])
         elif operation == "delete":
             self.prune_candidates_from_agent(candidate["sourceColumn"], [candidate])
+        elif operation == "map_source_value":
+            # Apply all source value mappings: from -> to
+            if not value_mappings:
+                return
+            source_col = candidate["sourceColumn"]
+            for vm in value_mappings:
+                from_val = vm.get("from")
+                to_val = vm.get("to")
+                if from_val is None or to_val is None:
+                    continue
+                self.set_source_value(source_col, str(from_val), str(to_val))
+        elif operation == "map_target_value":
+            # Apply all target value mappings and keep source column in sync
+            if not value_mappings:
+                return
+            source_col = candidate["sourceColumn"]
+            target_col = candidate["targetColumn"]
+            for vm in value_mappings:
+                from_val = vm.get("from")
+                to_val = vm.get("to")
+                if from_val is None or to_val is None:
+                    continue
+                self.set_target_value_match(
+                    source_col, str(from_val), target_col, str(to_val)
+                )
         else:
             raise ValueError(f"Operation {operation} not supported.")
 
@@ -1301,8 +1335,45 @@ class MatchingTask:
         operation: str,
         candidate: Dict[str, Any],
         references: List[Dict[str, Any]],
+        value_mappings: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         logger.info(f"Undoing operation: {operation}, on candidate: {candidate}...")
+
+        # Handle value mapping operations first using stored value_mappings
+        if operation in ["map_source_value", "map_target_value"]:
+            mappings = value_mappings or []
+            if not mappings:
+                return
+
+            if operation == "map_source_value":
+                source_col = candidate.get("sourceColumn")
+                if not source_col:
+                    return
+                # Invert each mapping: to -> from
+                for vm in mappings:
+                    from_val = vm.get("from")
+                    to_val = vm.get("to")
+                    if from_val is None or to_val is None:
+                        continue
+                    self.set_source_value(source_col, str(to_val), str(from_val))
+            else:  # map_target_value
+                source_col = candidate.get("sourceColumn")
+                target_col = candidate.get("targetColumn")
+                if not source_col or not target_col:
+                    return
+                # Reset mapping back to identity (source value maps to itself)
+                for vm in mappings:
+                    from_val = vm.get("from")
+                    if from_val is None:
+                        continue
+                    from_str = str(from_val)
+                    self.set_target_value_match(
+                        source_col,
+                        from_str,
+                        target_col,
+                        from_str,
+                    )
+            return
 
         last_status = candidate["status"]
 
@@ -1329,8 +1400,43 @@ class MatchingTask:
         operation: str,
         candidate: Dict[str, Any],
         references: List[Dict[str, Any]],
+        value_mappings: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         logger.info(f"Redoing operation: {operation}, on candidate: {candidate}...")
+
+        # Re-apply value mappings on redo
+        if operation in ["map_source_value", "map_target_value"]:
+            mappings = value_mappings or []
+            if not mappings:
+                return
+
+            if operation == "map_source_value":
+                source_col = candidate.get("sourceColumn")
+                if not source_col:
+                    return
+                for vm in mappings:
+                    from_val = vm.get("from")
+                    to_val = vm.get("to")
+                    if from_val is None or to_val is None:
+                        continue
+                    self.set_source_value(source_col, str(from_val), str(to_val))
+            else:  # map_target_value
+                source_col = candidate.get("sourceColumn")
+                target_col = candidate.get("targetColumn")
+                if not source_col or not target_col:
+                    return
+                for vm in mappings:
+                    from_val = vm.get("from")
+                    to_val = vm.get("to")
+                    if from_val is None or to_val is None:
+                        continue
+                    self.set_target_value_match(
+                        source_col,
+                        str(from_val),
+                        target_col,
+                        str(to_val),
+                    )
+            return
 
         if operation == "accept":
             self.accept_cached_candidate(candidate)
@@ -1920,16 +2026,21 @@ class UserOperation:
         candidate: Dict[str, Any],
         references: List[Dict[str, Any]],
         is_match_to_agent: Optional[bool] = None,
+        value_mappings: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """
         operation: str - the operation to be applied: accept, reject, discard, append, prune, create, delete
         candidate: Dict[str, Any] - the candidate to be operated on
         references: List[Dict[str, Any]] - the references to the candidates to be operated on (append, prune)
+        is_match_to_agent: Optional[bool] - whether the candidate is a match to the agent
+        value_mappings: Optional[List[Dict[str, Any]]] - the value mappings to be
+            applied (map_source_value, map_target_value)
         """
         self.operation = operation
         self.candidate = candidate
         self.references = references
         self.is_match_to_agent = is_match_to_agent
+        self.value_mappings = value_mappings
 
     def _json_serialize(self) -> Dict[str, Any]:
         return {
@@ -1939,4 +2050,5 @@ class UserOperation:
                 self.references if self.operation in ["append", "prune"] else []
             ),
             "isMatchToAgent": self.is_match_to_agent,
+            "value_mappings": self.value_mappings,
         }

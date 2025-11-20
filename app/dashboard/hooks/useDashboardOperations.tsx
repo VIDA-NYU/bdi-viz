@@ -20,6 +20,7 @@ type DashboardOperationProps = {
     onRelatedOuterSources?: (relatedOuterSources: RelatedSource[]) => void;
     onSourceColumnsUpdate?: (sourceColumns: string[]) => void;
     onCandidateThresholdUpdate?: (threshold: number) => void;
+    onValueMatchesUpdate: (valueMatches: ValueMatch[]) => void;
 }
 
 type DashboardOperationState = {
@@ -52,6 +53,7 @@ export const {
         onRelatedOuterSources,
         onSourceColumnsUpdate,
         onCandidateThresholdUpdate,
+        onValueMatchesUpdate,
     }: DashboardOperationProps): DashboardOperationState => {
         const [isExplaining, setIsExplaining] = useState<boolean>(false);
         const { setIsLoadingGlobal, isLoadingGlobal } = useContext(SettingsGlobalContext);
@@ -174,9 +176,12 @@ export const {
                 userOperationHistoryCallback(userOperations: UserOperation[]) {
                     onUserOperationsUpdate(userOperations);
                 },
+                valueMatchesCallback: (valueMatches: ValueMatch[]) => {
+                    onValueMatchesUpdate(valueMatches);
+                },
             });
             
-            }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate, onSourceColumnsUpdate]);
+            }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate, onSourceColumnsUpdate, onValueMatchesUpdate]);
 
         const redo = useCallback(() => {
             redoUserOperation({
@@ -200,8 +205,11 @@ export const {
                 userOperationHistoryCallback(userOperations: UserOperation[]) {
                     onUserOperationsUpdate(userOperations);
                 },
+                valueMatchesCallback: (valueMatches: ValueMatch[]) => {
+                    onValueMatchesUpdate(valueMatches);
+                },
             });
-        }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate, onSourceColumnsUpdate]);
+        }, [candidates, onCandidateUpdate, onCandidateSelect, candidateThreshold, onCandidateThresholdUpdate, onSourceColumnsUpdate, onValueMatchesUpdate]);
             
 
         const explain = useCallback(async (candidate?: Candidate) => {

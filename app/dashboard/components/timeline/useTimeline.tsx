@@ -18,9 +18,10 @@ export const useTimeline = ({ userOperations }: useTimelineProps): useTimelineSt
         userOperations.forEach((operation: UserOperation, index: number) => {
             nodes.push({
                 timelineId: index,
-                operation: operation.operation as 'accept' | 'reject' | 'discard' | 'append' | 'prune',
+                operation: operation.operation as 'accept' | 'reject' | 'discard' | 'append' | 'prune' | 'map_source_value' | 'map_target_value',
                 candidate: operation.candidate as AggregatedCandidate,
                 references: operation.references || [],
+                value_mappings: (operation as any).value_mappings || [],
             });
         });
         return nodes;
