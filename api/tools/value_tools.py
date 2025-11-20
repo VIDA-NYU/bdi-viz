@@ -192,29 +192,33 @@ class ValueTools:
         def _apply_value_map(
             source_column: str, target_column: str, mapping: Dict[str, Any]
         ) -> str:
+            """
+            Apply an exact categorical mapping:
+            - Mutate the source dataframe column in-place.
+            - Update value_matches for the given (source, target) pair.
+            """
             try:
                 mt = SESSION_MANAGER.get_session(self.session_id).matching_task
                 df = mt.get_source_df()
                 if df is None or source_column not in df.columns:
                     return json.dumps({"error": f"Column '{source_column}' not found"})
 
-                # Convert mapping dict into value_mappings list for history/undo/redo
-                value_mappings = [
-                    {"from": str(source_val), "to": str(target_val)}
+                # Normalize mapping to strings once
+                normalized_items = [
+                    (str(source_val), str(target_val))
                     for source_val, target_val in mapping.items()
                 ]
 
-                # Record a single map_target_value operation with full value_mappings.
-                # MatchingTask.apply_operation will:
-                # - Update the source dataframe values
-                # - Update value_matches and persist cache
-                mt.apply_operation(
-                    "map_target_value",
-                    {"sourceColumn": source_column, "targetColumn": target_column},
-                    [],
-                    None,
-                    value_mappings=value_mappings,
-                )
+                # 1) Mutate source dataframe and keep source_mapped_values in sync
+                #    by reusing MatchingTask.set_source_value
+                for from_val, to_val in normalized_items:
+                    mt.set_source_value(source_column, from_val, to_val)
+
+                # 2) Update value_matches for the specific source/target pair
+                for from_val, to_val in normalized_items:
+                    mt.set_target_value_match(
+                        source_column, from_val, target_column, to_val
+                    )
 
                 logger.info(
                     (
