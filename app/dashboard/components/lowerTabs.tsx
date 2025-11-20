@@ -14,6 +14,7 @@ interface LowerTabsProps {
   selectedCandidate?: Candidate;
   setSelectedCandidate: (sourceColumn: string, targetColumn: string) => void;
   handleValueMatches: (valueMatches: ValueMatch[]) => void;
+  handleUserOperationsUpdate: (userOperations: UserOperation[]) => void;
   valueMatches: ValueMatch[];
   metaData?: { sourceMeta: DatasetMeta; targetMeta: DatasetMeta };
 }
@@ -24,6 +25,7 @@ const LowerTabs: React.FC<LowerTabsProps> = ({
   selectedCandidate,
   setSelectedCandidate,
   handleValueMatches,
+  handleUserOperationsUpdate,
   valueMatches,
   metaData,
 }) => {
@@ -58,6 +60,7 @@ const LowerTabs: React.FC<LowerTabsProps> = ({
               selectedCandidate={selectedCandidate}
               setSelectedCandidate={setSelectedCandidate}
               handleValueMatches={handleValueMatches}
+              handleUserOperationsUpdate={handleUserOperationsUpdate}
             />
           </TabPanel>
           <TabPanel sx={{ padding: 0, maxHeight: 400, overflowY: "scroll", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }} value="3">
@@ -65,6 +68,7 @@ const LowerTabs: React.FC<LowerTabsProps> = ({
               selectedCandidate={selectedCandidate}
               valueMatches={valueMatches}
               handleValueMatches={handleValueMatches}
+              handleUserOperationsUpdate={handleUserOperationsUpdate}
               metaData={metaData}
             />
           </TabPanel>

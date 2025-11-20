@@ -15,6 +15,7 @@ interface ValueComparisonTableProps {
     selectedCandidate?: Candidate;
     setSelectedCandidate: (sourceColumn: string, targetColumn: string) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
+    handleUserOperationsUpdate: (userOperations: UserOperation[]) => void;
 }
 
 // A helper component that displays both the original source value and the edited value
@@ -47,6 +48,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     selectedCandidate,
     setSelectedCandidate,
     handleValueMatches,
+    handleUserOperationsUpdate,
 }) => {
     const theme = useTheme();
     const { globalCandidateHighlight, globalQuery } = useContext(HighlightGlobalContext);
@@ -184,6 +186,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
             targetColumn: selectedEnumContext.targetColumn,
             newTargetValue: enumValue,
             valueMatchesCallback: handleValueMatches,
+            userOperationHistoryCallback: handleUserOperationsUpdate,
         });
     }, [candidate, selectedEnumContext, handleValueMatches]);
 
@@ -205,16 +208,24 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     }, [rows, sourceKey, candidate, columnVisibilityModel]);
 
     const commitEditIfNeeded = useCallback((row: any) => {
-        if (!candidate || editingRowId === null) return;
+        if (!candidate || editingRowId === null || !sourceKey) return;
+        const original = String(row[sourceKey]);
+        // If value did not actually change, do not call update endpoint
+        if (original === editingValue) {
+            setEditingRowId(null);
+            setEditingValue("");
+            return;
+        }
         updateSourceValue({
             column: candidate.sourceColumn,
-            value: row[sourceKey as string],
+            value: row[sourceKey],
             newValue: editingValue,
             valueMatchesCallback: handleValueMatches,
+            userOperationHistoryCallback: handleUserOperationsUpdate,
         });
         setEditingRowId(null);
         setEditingValue("");
-    }, [candidate, editingRowId, editingValue, handleValueMatches, sourceKey]);
+    }, [candidate, editingRowId, editingValue, handleValueMatches, handleUserOperationsUpdate, sourceKey]);
 
     const isRowEdited = useCallback((row: any) => {
         if (!sourceKey) return false;
@@ -222,30 +233,32 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     }, [sourceKey]);
 
     return (
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div className="value-comparison-root" style={{ display: "flex", flexDirection: "column" }}>
             <style>
                 {`
-                    tr {
+                    .value-comparison-root tr {
                         height: 10px;
                     }
-                    tr td {
+                    .value-comparison-root tr td {
                         height: auto !important;
                     }
-                    .MuiTableCell-head {
+                    .value-comparison-root .MuiTableCell-head {
                         max-width: 300px !important;
                         font-weight: 700 !important;
                         font-family: "Roboto","Helvetica","Arial",sans-serif !important;
                     }
-                    .table-container { overflow: auto; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; width: 100%; }
-                    table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; table-layout: fixed; font-size: 0.92rem; }
-                    th, td { box-sizing: border-box; border-bottom: 1px solid rgba(0,0,0,0.12); border-right: 1px solid rgba(0,0,0,0.12); padding: 8px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                    thead th:last-child, tbody td:last-child { border-right: none; }
-                    thead th { position: sticky; top: 0; z-index: 3; }
-                    .sticky-source { position: sticky; left: var(--sticky-left-source); z-index: 4; }
-                    .sticky-target { position: sticky; left: var(--sticky-left-target); z-index: 4; }
-                    tbody tr:hover td { background-color: rgba(0,0,0,0.03); }
-                    .cell-btn { opacity: 0; transition: opacity 160ms ease; }
-                    td:hover .cell-btn { opacity: 1; }
+                    .value-comparison-root .table-container { overflow: auto; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; width: 100%; }
+                    .value-comparison-root table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; table-layout: fixed; font-size: 0.92rem; }
+                    .value-comparison-root th,
+                    .value-comparison-root td { box-sizing: border-box; border-bottom: 1px solid rgba(0,0,0,0.12); border-right: 1px solid rgba(0,0,0,0.12); padding: 8px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                    .value-comparison-root thead th:last-child,
+                    .value-comparison-root tbody td:last-child { border-right: none; }
+                    .value-comparison-root thead th { position: sticky; top: 0; z-index: 3; }
+                    .value-comparison-root .sticky-source { position: sticky; left: var(--sticky-left-source); z-index: 4; }
+                    .value-comparison-root .sticky-target { position: sticky; left: var(--sticky-left-target); z-index: 4; }
+                    .value-comparison-root tbody tr:hover td { background-color: rgba(0,0,0,0.03); }
+                    .value-comparison-root .cell-btn { opacity: 0; transition: opacity 160ms ease; }
+                    .value-comparison-root td:hover .cell-btn { opacity: 1; }
                 `}
             </style>
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1, px: 2 }}>
@@ -400,6 +413,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                                                     value: row[sourceKey as string],
                                                                     newValue: String(row["SourceOriginalValues"] ?? ""),
                                                                     valueMatchesCallback: handleValueMatches,
+                                                                    userOperationHistoryCallback: handleUserOperationsUpdate,
                                                                 });
                                                             }}>
                                                                 <UndoIcon fontSize="inherit" />
@@ -439,13 +453,18 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                                     onKeyDown={(e) => {
                                                         if (e.key === "Enter") {
                                                             if (candidate) {
-                                                                updateTargetMatchValue({
-                                                                    sourceColumn: candidate.sourceColumn,
-                                                                    sourceValue: String(row["SourceOriginalValues"] ?? ""),
-                                                                    targetColumn: key,
-                                                                    newTargetValue: editingTargetValue,
-                                                                    valueMatchesCallback: handleValueMatches,
-                                                                });
+                                                                const original = String(row[key] ?? "");
+                                                                // Only persist if the value actually changed
+                                                                if (original !== editingTargetValue) {
+                                                                    updateTargetMatchValue({
+                                                                        sourceColumn: candidate.sourceColumn,
+                                                                        sourceValue: String(row["SourceOriginalValues"] ?? ""),
+                                                                        targetColumn: key,
+                                                                        newTargetValue: editingTargetValue,
+                                                                        valueMatchesCallback: handleValueMatches,
+                                                                        userOperationHistoryCallback: handleUserOperationsUpdate,
+                                                                    });
+                                                                }
                                                             }
                                                             setEditingTarget(null);
                                                             setEditingTargetValue("");
@@ -456,13 +475,17 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                                     }}
                                                     onBlur={() => {
                                                         if (candidate) {
-                                                            updateTargetMatchValue({
-                                                                sourceColumn: candidate.sourceColumn,
-                                                                sourceValue: String(row["SourceOriginalValues"] ?? ""),
-                                                                targetColumn: key,
-                                                                newTargetValue: editingTargetValue,
-                                                                valueMatchesCallback: handleValueMatches,
-                                                            });
+                                                            const original = String(row[key] ?? "");
+                                                            if (original !== editingTargetValue) {
+                                                                updateTargetMatchValue({
+                                                                    sourceColumn: candidate.sourceColumn,
+                                                                    sourceValue: String(row["SourceOriginalValues"] ?? ""),
+                                                                    targetColumn: key,
+                                                                    newTargetValue: editingTargetValue,
+                                                                    valueMatchesCallback: handleValueMatches,
+                                                                    userOperationHistoryCallback: handleUserOperationsUpdate,
+                                                                });
+                                                            }
                                                         }
                                                         setEditingTarget(null);
                                                         setEditingTargetValue("");

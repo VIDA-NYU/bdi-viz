@@ -198,15 +198,23 @@ class ValueTools:
                 if df is None or source_column not in df.columns:
                     return json.dumps({"error": f"Column '{source_column}' not found"})
 
-                # Preserve values not present in mapping (avoid NaNs from Series.map)
-                df[source_column] = (
-                    df[source_column].astype(str).apply(lambda v: mapping.get(v, v))
-                )
+                # Convert mapping dict into value_mappings list for history/undo/redo
+                value_mappings = [
+                    {"from": str(source_val), "to": str(target_val)}
+                    for source_val, target_val in mapping.items()
+                ]
 
-                for source_val, target_val in mapping.items():
-                    mt.set_target_value_match(
-                        source_column, source_val, target_column, target_val
-                    )
+                # Record a single map_target_value operation with full value_mappings.
+                # MatchingTask.apply_operation will:
+                # - Update the source dataframe values
+                # - Update value_matches and persist cache
+                mt.apply_operation(
+                    "map_target_value",
+                    {"sourceColumn": source_column, "targetColumn": target_column},
+                    [],
+                    None,
+                    value_mappings=value_mappings,
+                )
 
                 logger.info(
                     (

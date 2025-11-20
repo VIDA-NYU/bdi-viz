@@ -41,21 +41,163 @@ const chipStyleSecondary = (color: string, theme: any) => `
             vertical-align:middle;
         `;
 
+const getOpColor = (
+    operation: TimelineNode["operation"],
+    theme: any
+): string => {
+    return operation === "accept"
+        ? theme.palette.success.main
+        : operation === "reject"
+        ? theme.palette.error.main
+        : operation === "discard"
+        ? theme.palette.warning.main
+        : operation === "append"
+        ? theme.palette.info.main
+        : operation === "prune"
+        ? theme.palette.secondary.main
+        : operation === "create"
+        ? theme.palette.primary.main
+        : operation === "delete"
+        ? theme.palette.error.main
+        : operation === "map_source_value"
+        ? theme.palette.info.main
+        : operation === "map_target_value"
+        ? theme.palette.info.main
+        : theme.palette.text.primary;
+};
+
 const getNodeContent = (d: TimelineNode, isExpanded: boolean, theme: any): string => {
-    const { operation, candidate, references } = d;
-    const opColor =
-        operation === 'accept' ? theme.palette.success.main :
-        operation === 'reject' ? theme.palette.error.main :
-        operation === 'discard' ? theme.palette.warning.main :
-        operation === 'append' ? theme.palette.info.main :
-        operation === 'prune' ? theme.palette.secondary.main :
-        operation === 'create' ? theme.palette.primary.main :
-        operation === 'delete' ? theme.palette.error.main :
-        theme.palette.text.primary;
+    const { operation, candidate, references, value_mappings } = d;
     const truncate = (str: string, n: number) => (str.length > n ? str.slice(0, n-1) + '…' : str);
     let title = '';
     let details = '';
-    if (operation === 'append' || operation === 'prune') {
+    
+    if (operation === 'map_source_value' && candidate) {
+        // Use all mappings for expanded table view, but only the first for the compact title
+        const mappings = (value_mappings || []) as Array<{ from?: string; to?: string }>;
+        const first = mappings[0] || {};
+        const from = (first.from ?? '').toString();
+        const to = (first.to ?? '').toString();
+
+        const column = truncate(candidate.sourceColumn || '', isExpanded ? 30 : 18);
+        const columnChip = `<span style="${chipStyle(theme.palette.primary.main, theme.palette.primary.contrastText, theme)}">${column}</span>`;
+        const fromChip = `<span style="${chipStyleSecondary(theme.palette.text.secondary, theme)}">${truncate(from, isExpanded ? 32 : 14)}</span>`;
+        const toChip = `<span style="${chipStyleSecondary(theme.palette.info.main, theme)}">${truncate(to, isExpanded ? 32 : 14)}</span>`;
+
+        title = `
+            <span style="font-weight:600;font-size:0.7rem;">value:</span>
+            ${columnChip}
+            <span style="margin:0 2px;font-size:0.65rem;">→</span>
+            ${toChip}
+        `;
+
+        if (isExpanded) {
+            const maxRows = 8;
+            const rows = mappings.slice(0, maxRows).map(m => {
+                const f = (m.from ?? '').toString();
+                const t = (m.to ?? '').toString();
+                return `
+                    <tr>
+                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${f || '<em>(empty)</em>'}
+                        </td>
+                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${t || '<em>(empty)</em>'}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            const moreRow =
+                mappings.length > maxRows
+                    ? `<tr><td colspan="2" style="padding:2px 6px;color:${theme.palette.text.disabled};font-style:italic;">+${mappings.length - maxRows} more…</td></tr>`
+                    : '';
+
+            details = `
+                <div class="timeline-details" style="
+                    color:${theme.palette.text.secondary};
+                    font-size:0.6rem;
+                    margin-top:4px;
+                    line-height:1.4;
+                ">
+                    <table style="margin-top:4px;border-collapse:collapse;width:100%;table-layout:fixed;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;font-weight:500;padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};">From</th>
+                                <th style="text-align:left;font-weight:500;padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};">To</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                            ${moreRow}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+    } else if (operation === 'map_target_value' && candidate) {
+        const mappings = (value_mappings || []) as Array<{ from?: string; to?: string }>;
+        const first = mappings[0] || {};
+        const from = (first.from ?? '').toString();
+        const to = (first.to ?? '').toString();
+
+        const sourceCol = truncate(candidate.sourceColumn || '', isExpanded ? 22 : 12);
+        const targetCol = truncate(candidate.targetColumn || '', isExpanded ? 22 : 12);
+        const sourceChip = `<span style="${chipStyle(theme.palette.primary.main, theme.palette.primary.contrastText, theme)}">${sourceCol}</span>`;
+        const targetChip = `<span style="${chipStyle(theme.palette.secondary.main, theme.palette.primary.contrastText, theme)}">${targetCol}</span>`;
+        const fromChip = `<span style="${chipStyleSecondary(theme.palette.text.secondary, theme)}">${truncate(from, isExpanded ? 28 : 10)}</span>`;
+        const toChip = `<span style="${chipStyleSecondary(theme.palette.info.main, theme)}">${truncate(to, isExpanded ? 28 : 10)}</span>`;
+
+        title = `
+            <span style="font-weight:600;font-size:0.7rem;">value:</span>
+            ${targetChip}
+            <span style="font-size:1.1em;vertical-align:middle;margin:0 2px;">→</span>
+            ${toChip}
+        `;
+
+        if (isExpanded) {
+            const maxRows = 8;
+            const rows = mappings.slice(0, maxRows).map(m => {
+                const f = (m.from ?? '').toString();
+                const t = (m.to ?? '').toString();
+                return `
+                    <tr>
+                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${f || '<em>(empty)</em>'}
+                        </td>
+                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${t || '<em>(empty)</em>'}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            const moreRow =
+                mappings.length > maxRows
+                    ? `<tr><td colspan="2" style="padding:2px 6px;color:${theme.palette.text.disabled};font-style:italic;">+${mappings.length - maxRows} more…</td></tr>`
+                    : '';
+
+            details = `
+                <div class="timeline-details" style="
+                    color:${theme.palette.text.secondary};
+                    font-size:0.6rem;
+                    margin-top:4px;
+                    line-height:1.4;
+                ">
+                    <table style="margin-top:4px;border-collapse:collapse;width:100%;table-layout:fixed;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;font-weight:500;padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};">Source value</th>
+                                <th style="text-align:left;font-weight:500;padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};">Mapped to</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                            ${moreRow}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+    } else if (operation === 'append' || operation === 'prune') {
         const count = references.length;
         const source = truncate(candidate?.sourceColumn || '', isExpanded ? 30 : 15);
         const sourceChip = `<span style="${chipStyle(theme.palette.primary.main, theme.palette.primary.contrastText, theme)}">${source}</span>`;
@@ -109,7 +251,7 @@ const getNodeContent = (d: TimelineNode, isExpanded: boolean, theme: any): strin
     return `
         <div style="flex-direction:column;align-items:flex-start;">
             <div style="align-items:center;">${title}</div>
-            ${details ? `<div style='margin-top:2px;width:100%;height:32px;overflow-y:auto;'>${details}</div>` : ''}
+            ${details ? `<div style='margin-top:2px;width:100%;height:56px;overflow-y:auto;'>${details}</div>` : ''}
         </div>
     `;
 };
@@ -131,7 +273,7 @@ const Timeline = ({ userOperations }: TimelineProps) => {
         const textWidth = 240;
         const paddingLeft = 20;
         const paddingTop = 20;
-        const nodeDistance = 60;
+        const nodeDistance = 80;
         const height = (nodes.length + 1) * nodeDistance + paddingTop; // Adjust height for the start node
 
         svg.attr("width", width).attr("height", height);
@@ -171,12 +313,7 @@ const Timeline = ({ userOperations }: TimelineProps) => {
             .append("circle")
             .attr("r", 12)
             .attr("fill", 
-                d => d.operation === 'accept' ? theme.palette.success.main : 
-                d.operation === 'reject' ? theme.palette.error.main : 
-                d.operation === 'discard' ? theme.palette.warning.main : 
-                d.operation === 'append' ? theme.palette.info.main : 
-                d.operation === 'prune' ? theme.palette.secondary.main : 
-                theme.palette.grey[500]);
+                d => getOpColor(d.operation as any, theme));
 
         nodeGroup
             .append("text")
@@ -216,7 +353,7 @@ const Timeline = ({ userOperations }: TimelineProps) => {
             .on("click", function(event, d) {
                 // If expanded, collapse, vice versa
                 const fo = d3.select(this).select("foreignObject");
-                if (parseInt(fo.attr("height")) === 60) {
+                if (parseInt(fo.attr("height")) === 100) {
                     fo.transition()
                         .attr("width", textWidth)
                         .attr("height", 50)
@@ -230,8 +367,8 @@ const Timeline = ({ userOperations }: TimelineProps) => {
                 } else {
                     fo.transition()
                         .attr("width", textWidth)
-                        .attr("height", 60)
-                        .attr("y", -30);
+                        .attr("height", 100)
+                        .attr("y", -45);
                     fo.select("div")
                         .style("white-space", "normal")
                         .style("padding", "3px 5px")

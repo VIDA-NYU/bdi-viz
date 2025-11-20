@@ -1746,15 +1746,39 @@ def update_value():
         column = data["column"]
         value = data["value"]
         new_value = data["newValue"]
-        matching_task.set_source_value(column, value, new_value)
+        matching_task.apply_operation(
+            operation="map_source_value",
+            candidate={
+                "sourceColumn": column,
+                "targetColumn": None,
+            },
+            references=[],
+            value_mappings=[
+                {
+                    "from": value,
+                    "to": new_value,
+                }
+            ],
+        )
         return {"message": "success"}
     elif operation == "target":
         source_column = data["sourceColumn"]
         source_value = data["sourceValue"]
         target_column = data["targetColumn"]
         new_target_value = data["newTargetValue"]
-        matching_task.set_target_value_match(
-            source_column, source_value, target_column, new_target_value
+        matching_task.apply_operation(
+            operation="map_target_value",
+            candidate={
+                "sourceColumn": source_column,
+                "targetColumn": target_column,
+            },
+            references=[],
+            value_mappings=[
+                {
+                    "from": source_value,
+                    "to": new_target_value,
+                }
+            ],
         )
         return {"message": "success"}
     else:

@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
@@ -32,7 +32,9 @@ class WeightUpdater:
         self._normalize_weights(reset=True)
         return self.matchers
 
-    def update_weights(self, operation: str, source_column: str, target_column: str):
+    def update_weights(
+        self, operation: str, source_column: Optional[str], target_column: Optional[str]
+    ):
         """
         Update matcher weights based on user operation.
         Args:
@@ -46,8 +48,15 @@ class WeightUpdater:
         self._handle_update(operation, source_column, target_column)
         self._normalize_weights()
 
-    def _handle_update(self, operation: str, source_column: str, target_column: str):
+    def _handle_update(
+        self, operation: str, source_column: Optional[str], target_column: Optional[str]
+    ):
         """Handle accept/reject update in a unified way."""
+        if source_column is None or target_column is None:
+            logger.warning(
+                f"Source or target column is None for operation '{operation}'."
+            )
+            return
         factor = self.alpha if operation == "accept" else -self.beta
         for matcher, candidates in self.candidates.items():
             if matcher not in self.matchers:
