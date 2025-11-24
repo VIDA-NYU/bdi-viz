@@ -452,22 +452,8 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                                     onChange={(e) => setEditingTargetValue(e.target.value)}
                                                     onKeyDown={(e) => {
                                                         if (e.key === "Enter") {
-                                                            if (candidate) {
-                                                                const original = String(row[key] ?? "");
-                                                                // Only persist if the value actually changed
-                                                                if (original !== editingTargetValue) {
-                                                                    updateTargetMatchValue({
-                                                                        sourceColumn: candidate.sourceColumn,
-                                                                        sourceValue: String(row["SourceOriginalValues"] ?? ""),
-                                                                        targetColumn: key,
-                                                                        newTargetValue: editingTargetValue,
-                                                                        valueMatchesCallback: handleValueMatches,
-                                                                        userOperationHistoryCallback: handleUserOperationsUpdate,
-                                                                    });
-                                                                }
-                                                            }
-                                                            setEditingTarget(null);
-                                                            setEditingTargetValue("");
+                                                            // Commit via blur; onBlur will trigger a single update
+                                                            (e.target as HTMLInputElement).blur();
                                                         } else if (e.key === "Escape") {
                                                             setEditingTarget(null);
                                                             setEditingTargetValue("");
