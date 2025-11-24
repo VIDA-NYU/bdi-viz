@@ -641,6 +641,7 @@ def run_matching_task(
             target = load_target_df(session)
 
             matching_task.update_dataframe(source_df=source, target_df=target)
+            matching_task.reset_value_matches()
             matching_task.set_nodes(nodes)
 
             # Target ontology is now handled by a dedicated task when needed

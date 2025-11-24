@@ -1014,6 +1014,20 @@ class MatchingTask:
             target_column
         ] = list(match_results["To"])
 
+    def reset_value_matches(self) -> None:
+        """
+        Clear cached value matches so a fresh set is generated on the next matching run.
+        This ensures previously mapped values do not leak into new tasks.
+        """
+        logger.info(
+            "[MatchingTask] Resetting cached value matches for session '%s'",
+            self.session_name,
+        )
+        self.cached_candidates["value_matches"] = {}
+        if self.source_df is not None and self.target_df is not None:
+            self._initialize_value_matches()
+        self._export_cache_to_json(self.cached_candidates)
+
     def accept_cached_candidate(self, candidate: Dict[str, Any]) -> None:
         cached_candidates = self.get_cached_candidates()
         for cached_candidate in cached_candidates:

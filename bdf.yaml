@@ -1,0 +1,152 @@
+# data
+version: v0.0.3
+
+tool:
+  name: BDIViz
+  repo_url: https://github.com/VIDA-NYU/bdi-viz
+  tool_homepage: https://vida-nyu.github.io/bdi-viz-manual/
+  documentation_url: https://vida-nyu.github.io/bdi-viz-manual/
+  tool_type: WebApp
+  tool_notes: Dockerized local deployment is also provided
+
+llm:
+  usesLlm: true
+  modelsSupported:
+    - gemini-2.5-pro
+    - gemini-2.5-flash
+    - gpt4o
+    - gpt4o-mini
+  modelsRequired:
+    - gpt4o
+    - gpt4o-mini
+  reasonsForRequirement:
+    - performance
+  bringOwnKey: true
+
+input:
+  - name: Clinical/phenotype Tabular 1
+    dataCategory: clinical-phenotype
+    dataClass: tabular
+    dataType: clinical-ehr
+    dataSubType: genomics/proteomics
+    format:
+      - csv
+    dataStandard:
+      - GDC
+      - PDC
+      - Synapse
+    proprietary: false
+    source: https://drive.google.com/file/d/1N3rbTHtnVDe19kMNei0opy_g-8Hr_Hl5/view?usp=drive_link
+  - name: Clinical/phenotype Tabular 2
+    dataCategory: clinical-phenotype
+    dataClass: tabular
+    dataType: clinical-ehr
+    dataSubType: genomics/proteomics
+    format:
+      - csv
+    dataStandard:
+      - GDC
+      - PDC
+      - Synapse
+    proprietary: false
+    source: https://drive.google.com/file/d/1N3rbTHtnVDe19kMNei0opy_g-8Hr_Hl5/view?usp=drive_link
+  - name: Clinical/phenotype Structured
+    dataCategory: clinical-phenotype
+    dataClass: structured
+    dataType: clinical-ehr
+    dataSubType: genomics/proteomics
+    format:
+      - json
+    dataStandard:
+      - GDC
+      - PDC
+    proprietary: false
+    source: https://drive.google.com/file/d/1N3rbTHtnVDe19kMNei0opy_g-8Hr_Hl5/view?usp=drive_link
+
+output:
+  - name: Clinical/phenotype Tabular
+    dataCategory: clinical-phenotype
+    dataClass: tabular
+    dataType: clinical-ehr
+    dataSubType: genomics/proteomics
+    format:
+      - csv
+      - json
+    dataStandard:
+      - GDC
+      - PDC
+      - Synapse
+    proprietary: false
+    source: https://drive.google.com/file/d/1N3rbTHtnVDe19kMNei0opy_g-8Hr_Hl5/view?usp=drive_link
+  - name: Clinical/phenotype Structured
+    dataCategory: clinical-phenotype
+    dataClass: structured
+    dataType: clinical-ehr
+    dataSubType: genomics/proteomics
+    format:
+      - json
+    dataStandard:
+      - GDC
+      - PDC
+      - Synapse
+    proprietary: false
+    source: https://drive.google.com/file/d/1N3rbTHtnVDe19kMNei0opy_g-8Hr_Hl5/view?usp=drive_link
+
+collaborations: []
+
+funding:
+  source: ASKEM ARPA-H
+  agreement: Not specified
+  link: https://arpa-h.gov/
+
+domains:
+  - omics/clinical
+  - data harmonization from diverse domains
+
+maturity:
+  beginning_maturity: 1
+  current_maturity: 6
+
+license:
+  license_type: Apache-2.0
+  link: https://github.com/VIDA-NYU/bdi-viz/blob/main/LICENSE
+
+publication:
+  - type: Documentation
+    tool_version: v1.0.0
+    url: https://vida-nyu.github.io/bdi-viz-manual/
+  - type: IEEE VIS
+    tool_version: 0.0.1
+    doi: https://doi.org/10.48550/arXiv.2507.16117
+
+credit:
+  - name: NYU ASKEM Team
+    role: Developer
+    org: New York University
+    url: https://vida-nyu.github.io/
+
+target_users:
+  primary_user:
+    user_type: researcher
+    technical_literacy_level:
+      - novice
+    biomedical_literacy_level:
+      - intermediate
+      - advanced
+      - expert
+  secondary_user:
+    user_type: "clinician"
+    technical_literacy_level:
+      - novice
+    biomedical_literacy_level:
+      - intermediate
+      - advanced
+      - expert
+
+media:
+  [
+    {
+      "link": "https://drive.google.com/file/d/1RY3XjRmLIkBNjcZWkUZhG3vA-ZvPc6Ug/view?usp=drive_link",
+    },
+    { "link": "https://vida-nyu.github.io/bdi-viz-manual/" },
+  ]
