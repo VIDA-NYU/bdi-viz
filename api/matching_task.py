@@ -1294,10 +1294,40 @@ class MatchingTask:
                 operation, candidate.get("sourceColumn"), candidate.get("targetColumn")
             )
 
-        # Add operation to history
+        # Prepare value_mappings for history.
+        # For map_target_value we enrich each mapping with source_value, old_target_value and new_target_value
+        history_value_mappings = value_mappings
+        if operation == "map_target_value" and value_mappings:
+            source_col = candidate.get("sourceColumn")
+            target_col = candidate.get("targetColumn")
+            if source_col and target_col:
+                enriched: List[Dict[str, Any]] = []
+                for vm in value_mappings:
+                    source_val = vm.get("from")
+                    new_target_val = vm.get("to")
+                    if source_val is None or new_target_val is None:
+                        continue
+                    old_target_val = self.get_current_target_value(
+                        source_col, str(source_val), target_col
+                    )
+                    enriched.append(
+                        {
+                            "source_value": str(source_val),
+                            "old_target_value": old_target_val,
+                            "new_target_value": str(new_target_val),
+                        }
+                    )
+                if enriched:
+                    history_value_mappings = enriched
+
+        # Add operation to history (use enriched mappings for map_target_value)
         self.history.add_operation(
             UserOperation(
-                operation, candidate, references, is_match_to_agent, value_mappings
+                operation,
+                candidate,
+                references,
+                is_match_to_agent,
+                history_value_mappings,
             )
         )
 
@@ -1375,18 +1405,31 @@ class MatchingTask:
                 target_col = candidate.get("targetColumn")
                 if not source_col or not target_col:
                     return
-                # Reset mapping back to identity (source value maps to itself)
                 for vm in mappings:
-                    from_val = vm.get("from")
-                    if from_val is None:
-                        continue
-                    from_str = str(from_val)
-                    self.set_target_value_match(
-                        source_col,
-                        from_str,
-                        target_col,
-                        from_str,
-                    )
+                    # New enriched format: {source_value, old_target_value, new_target_value}
+                    if "source_value" in vm:
+                        source_val = vm.get("source_value")
+                        old_target_val = vm.get("old_target_value")
+                        if source_val is None or old_target_val is None:
+                            continue
+                        self.set_target_value_match(
+                            source_col,
+                            str(source_val),
+                            target_col,
+                            str(old_target_val),
+                        )
+                    else:
+                        # Fallback for legacy format: reset to identity (source maps to itself)
+                        from_val = vm.get("from")
+                        if from_val is None:
+                            continue
+                        from_str = str(from_val)
+                        self.set_target_value_match(
+                            source_col,
+                            from_str,
+                            target_col,
+                            from_str,
+                        )
             return
 
         last_status = candidate["status"]
@@ -1440,16 +1483,30 @@ class MatchingTask:
                 if not source_col or not target_col:
                     return
                 for vm in mappings:
-                    from_val = vm.get("from")
-                    to_val = vm.get("to")
-                    if from_val is None or to_val is None:
-                        continue
-                    self.set_target_value_match(
-                        source_col,
-                        str(from_val),
-                        target_col,
-                        str(to_val),
-                    )
+                    # New enriched format: {source_value, old_target_value, new_target_value}
+                    if "source_value" in vm:
+                        source_val = vm.get("source_value")
+                        new_target_val = vm.get("new_target_value")
+                        if source_val is None or new_target_val is None:
+                            continue
+                        self.set_target_value_match(
+                            source_col,
+                            str(source_val),
+                            target_col,
+                            str(new_target_val),
+                        )
+                    else:
+                        # Fallback for legacy format using from/to
+                        from_val = vm.get("from")
+                        to_val = vm.get("to")
+                        if from_val is None or to_val is None:
+                            continue
+                        self.set_target_value_match(
+                            source_col,
+                            str(from_val),
+                            target_col,
+                            str(to_val),
+                        )
             return
 
         if operation == "accept":
@@ -2001,6 +2058,54 @@ class MatchingTask:
 
         # Persist to cache file so changes survive reloads
         self._export_cache_to_json(self.cached_candidates)
+
+    def get_current_target_value(
+        self, source_col: str, source_val: str, target_col: str
+    ) -> str:
+        """
+        Get the current target value for a given source value and target column.
+        Returns empty string if not found.
+        """
+        if source_col not in self.cached_candidates["value_matches"]:
+            return ""
+
+        source_vm = self.cached_candidates["value_matches"][source_col]
+        if target_col not in source_vm["targets"]:
+            return ""
+
+        # Locate index via original unique values list
+        is_numeric_source = (
+            self.source_df is not None
+            and source_col in self.source_df.columns
+            and pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype)
+        )
+        search_keys: List[str] = []
+        if is_numeric_source:
+            search_keys.append(self._normalize_numeric_str(source_val))
+            search_keys.append(str(source_val))
+        else:
+            search_keys.append(str(source_val))
+
+        # Attempt lookups in order
+        idx = None
+        for key in search_keys:
+            try:
+                idx = source_vm["source_unique_values"].index(key)
+                break
+            except ValueError:
+                continue
+        if idx is None:
+            # Last fallback: try non-casted object form
+            try:
+                idx = source_vm["source_unique_values"].index(source_val)
+            except ValueError:
+                return ""
+
+        targets_list = source_vm["targets"][target_col]
+        if idx < 0 or idx >= len(targets_list):
+            return ""
+
+        return str(targets_list[idx])
 
 
 class UserOperationHistory:

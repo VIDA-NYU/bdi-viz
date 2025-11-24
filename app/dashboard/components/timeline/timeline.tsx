@@ -135,44 +135,58 @@ const getNodeContent = (d: TimelineNode, isExpanded: boolean, theme: any): strin
             `;
         }
     } else if (operation === 'map_target_value' && candidate) {
-        const mappings = (value_mappings || []) as Array<{ from?: string; to?: string }>;
+        // For map_target_value we may receive enriched mappings:
+        // { source_value, old_target_value, new_target_value }
+        // Fall back to legacy { from, to } if needed.
+        const mappings = (value_mappings || []) as Array<{
+            source_value?: string;
+            old_target_value?: string;
+            new_target_value?: string;
+            from?: string;
+            to?: string;
+        }>;
         const first = mappings[0] || {};
-        const from = (first.from ?? '').toString();
-        const to = (first.to ?? '').toString();
+        const sourceValue = (first.source_value ?? '').toString();
+        const oldTarget = (first.old_target_value ?? first.from ?? '').toString();
+        const newTarget = (first.new_target_value ?? first.to ?? '').toString();
 
-        const sourceCol = truncate(candidate.sourceColumn || '', isExpanded ? 22 : 12);
         const targetCol = truncate(candidate.targetColumn || '', isExpanded ? 22 : 12);
-        const sourceChip = `<span style="${chipStyle(theme.palette.primary.main, theme.palette.primary.contrastText, theme)}">${sourceCol}</span>`;
         const targetChip = `<span style="${chipStyle(theme.palette.secondary.main, theme.palette.primary.contrastText, theme)}">${targetCol}</span>`;
-        const fromChip = `<span style="${chipStyleSecondary(theme.palette.text.secondary, theme)}">${truncate(from, isExpanded ? 28 : 10)}</span>`;
-        const toChip = `<span style="${chipStyleSecondary(theme.palette.info.main, theme)}">${truncate(to, isExpanded ? 28 : 10)}</span>`;
+        const changeLabel = truncate(
+            `${oldTarget || '(none)'} → ${newTarget || '(none)'}`,
+            isExpanded ? 40 : 18
+        );
+        const changeChip = `<span style="${chipStyleSecondary(theme.palette.info.main, theme)}">${changeLabel}</span>`;
 
         title = `
             <span style="font-weight:600;font-size:0.7rem;">value:</span>
             ${targetChip}
-            <span style="font-size:1.1em;vertical-align:middle;margin:0 2px;">→</span>
-            ${toChip}
+            ${changeChip}
         `;
 
         if (isExpanded) {
             const maxRows = 8;
             const rows = mappings.slice(0, maxRows).map(m => {
-                const f = (m.from ?? '').toString();
-                const t = (m.to ?? '').toString();
+                const src = (m.source_value ?? '').toString();
+                const oldT = (m.old_target_value ?? m.from ?? '').toString();
+                const newT = (m.new_target_value ?? m.to ?? '').toString();
                 return `
                     <tr>
-                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                            ${f || '<em>(empty)</em>'}
+                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${src || '<em>(empty)</em>'}
                         </td>
-                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                            ${t || '<em>(empty)</em>'}
+                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${oldT || '<em>(empty)</em>'}
+                        </td>
+                        <td style="padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${newT || '<em>(empty)</em>'}
                         </td>
                     </tr>
                 `;
             }).join('');
             const moreRow =
                 mappings.length > maxRows
-                    ? `<tr><td colspan="2" style="padding:2px 6px;color:${theme.palette.text.disabled};font-style:italic;">+${mappings.length - maxRows} more…</td></tr>`
+                    ? `<tr><td colspan="3" style="padding:2px 6px;color:${theme.palette.text.disabled};font-style:italic;">+${mappings.length - maxRows} more…</td></tr>`
                     : '';
 
             details = `
@@ -186,7 +200,8 @@ const getNodeContent = (d: TimelineNode, isExpanded: boolean, theme: any): strin
                         <thead>
                             <tr>
                                 <th style="text-align:left;font-weight:500;padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};">Source value</th>
-                                <th style="text-align:left;font-weight:500;padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};">Mapped to</th>
+                                <th style="text-align:left;font-weight:500;padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};">Old target</th>
+                                <th style="text-align:left;font-weight:500;padding:2px 6px;border-bottom:1px solid ${theme.palette.divider};">New target</th>
                             </tr>
                         </thead>
                         <tbody>

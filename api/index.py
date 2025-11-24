@@ -1767,6 +1767,26 @@ def update_value():
         source_value = data["sourceValue"]
         target_column = data["targetColumn"]
         new_target_value = data["newTargetValue"]
+
+        # Fast no-op check: if the requested target value is already the current one,
+        # skip recording a new operation or touching value_matches.
+        try:
+            current = matching_task.get_current_target_value(
+                source_column, str(source_value), target_column
+            )
+            if str(current) == str(new_target_value):
+                logging.getLogger("bdiviz_flask.sub").info(
+                    "Skipping map_target_value: source '%s' value '%s' already mapped to '%s' for target '%s'",
+                    source_column,
+                    source_value,
+                    new_target_value,
+                    target_column,
+                )
+                return {"message": "success"}
+        except Exception:
+            # If anything goes wrong in the fast path, fall back to applying the operation.
+            pass
+
         matching_task.apply_operation(
             operation="map_target_value",
             candidate={
