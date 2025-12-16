@@ -29,6 +29,32 @@ from .utils import (
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
+# Default matcher names
+DEFAULT_MATCHER_NAMES = [
+    "magneto_ft",
+    "magneto_zs",
+    # "ct_learning",
+    # "jaccard_distance_matcher",
+    # "valentine",
+]
+
+
+def _create_default_matcher_objs() -> Dict[str, BDIKitMatcher]:
+    """Create default matcher objects."""
+    return {name: BDIKitMatcher(name) for name in DEFAULT_MATCHER_NAMES}
+
+
+def _create_default_matcher_metadata(weight: float = 1.0) -> Dict[str, Dict[str, Any]]:
+    """Create default matcher metadata with specified weight."""
+    return {
+        name: {
+            "name": name,
+            "weight": weight,
+            "params": {},
+        }
+        for name in DEFAULT_MATCHER_NAMES
+    }
+
 
 class MatchingTask:
     def __init__(
@@ -43,14 +69,7 @@ class MatchingTask:
 
         self.candidate_quadrants = None
         # Store matcher objects separately from matcher metadata
-        self.matcher_objs = {
-            # "jaccard_distance_matcher": ValentineMatcher(
-            #     "jaccard_distance_matcher"
-            # ),
-            # "ct_learning": BDIKitMatcher("ct_learning"),
-            "magneto_ft": BDIKitMatcher("magneto_ft"),
-            "magneto_zs": BDIKitMatcher("magneto_zs"),
-        }
+        self.matcher_objs = _create_default_matcher_objs()
 
         self.source_df = None
         self.target_df = None
@@ -99,18 +118,9 @@ class MatchingTask:
                 "target_hash": None,
                 "candidates": [],
                 "value_matches": {},
-                "matchers": {
-                    "magneto_ft": {
-                        "name": "magneto_ft",
-                        "weight": 0.5,  # Initialize with normalized weights
-                        "params": {},
-                    },
-                    "magneto_zs": {
-                        "name": "magneto_zs",
-                        "weight": 0.5,  # Initialize with normalized weights
-                        "params": {},
-                    },
-                },
+                "matchers": _create_default_matcher_metadata(
+                    weight=0.5
+                ),  # Initialize with normalized weights
                 "matcher_code": {},
                 "nodes": [],  # Initialize empty nodes list
             }
@@ -118,34 +128,20 @@ class MatchingTask:
     def _load_cached_matchers_async(self, cached_json: Dict[str, Any]) -> None:
         """Start an asynchronous process to load cached matchers"""
         # Always start with default matcher objects
-        self.matcher_objs = {
-            "magneto_ft": BDIKitMatcher("magneto_ft"),
-            "magneto_zs": BDIKitMatcher("magneto_zs"),
-        }
+        self.matcher_objs = _create_default_matcher_objs()
         if cached_json and "matchers" in cached_json:
             # Load matcher metadata first (this was done by _load_cached_matchers)
             cached_matchers = cached_json["matchers"]
             cached_matcher_code = cached_json.get("matcher_code", {})
 
             # First load the default matchers
-            default_matchers = {
-                "magneto_ft": {
-                    "name": "magneto_ft",
-                    "weight": 1.0,
-                    "params": {},
-                },
-                "magneto_zs": {
-                    "name": "magneto_zs",
-                    "weight": 1.0,
-                    "params": {},
-                },
-            }
+            default_matchers = _create_default_matcher_metadata(weight=1.0)
             # Initialize matchers dictionaries with defaults
             matchers = default_matchers.copy()
             # Load custom matchers from cache
             for matcher_name, matcher_info in cached_matchers.items():
                 # Skip default matchers as they're already loaded
-                if matcher_name in default_matchers:
+                if matcher_name in DEFAULT_MATCHER_NAMES:
                     continue
                 matchers[matcher_name] = {
                     "name": matcher_info.get("name", matcher_name),
@@ -172,17 +168,11 @@ class MatchingTask:
         self, cached_json: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Load matcher objects from cache asynchronously using multithreading"""
-        default_matcher_objs = {
-            # "ct_learning": BDIKitMatcher("ct_learning"),
-            "magneto_ft": BDIKitMatcher("magneto_ft"),
-            "magneto_zs": BDIKitMatcher("magneto_zs"),
-        }
-
         # Get matcher names that need to be loaded
         matcher_names = [
             matcher_name
             for matcher_name in cached_json["matchers"]
-            if matcher_name not in default_matcher_objs
+            if matcher_name not in DEFAULT_MATCHER_NAMES
         ]
 
         if not matcher_names:
@@ -519,24 +509,13 @@ class MatchingTask:
     ) -> None:
         """Load matchers from cache, do not mutate input."""
         # First load the default matchers
-        default_matchers = {
-            "magneto_ft": {
-                "name": "magneto_ft",
-                "weight": 1.0,
-                "params": {},
-            },
-            "magneto_zs": {
-                "name": "magneto_zs",
-                "weight": 1.0,
-                "params": {},
-            },
-        }
+        default_matchers = _create_default_matcher_metadata(weight=1.0)
         # Initialize matchers dictionaries with defaults
         matchers = default_matchers.copy()
         # Load custom matchers from cache
         for matcher_name, matcher_info in cached_matchers.items():
             # Skip default matchers as they're already loaded
-            if matcher_name in default_matchers:
+            if matcher_name in DEFAULT_MATCHER_NAMES:
                 continue
             matchers[matcher_name] = {
                 "name": matcher_info.get("name", matcher_name),
@@ -555,7 +534,7 @@ class MatchingTask:
         # Also load matcher objects for custom matchers
         loaded_matcher_objs = {}
         for matcher_name, matcher_info in matchers.items():
-            if matcher_name in default_matchers:
+            if matcher_name in DEFAULT_MATCHER_NAMES:
                 # Default matchers are already loaded in __init__
                 continue
 
