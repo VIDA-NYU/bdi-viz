@@ -42,6 +42,7 @@ interface LeftPanelProps {
     handleSourceOntology: (sourceOntologies: Ontology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
+    handleUserOperationsUpdate: (userOperations: UserOperation[]) => void;
     setOpenNewMatcherDialog: (open: boolean) => void;
 }
 
@@ -76,6 +77,7 @@ const LeftPanel = ({
     handleSourceOntology,
     handleUniqueValues,
     handleValueMatches,
+    handleUserOperationsUpdate,
     // New Matcher Props
     setOpenNewMatcherDialog,
 }: LeftPanelProps) => {
@@ -88,6 +90,7 @@ const LeftPanel = ({
                 handleSourceOntology={handleSourceOntology}
                 handleUniqueValues={handleUniqueValues}
                 handleValueMatches={handleValueMatches}
+                handleUserOperationsUpdate={handleUserOperationsUpdate}
                 acceptMatch={acceptMatch}
                 rejectMatch={rejectMatch}
                 discardColumn={discardColumn}
