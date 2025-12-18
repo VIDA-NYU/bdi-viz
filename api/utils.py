@@ -351,6 +351,103 @@ def parse_ground_truth_mappings(df: pd.DataFrame) -> List[Tuple[str, str, str, s
     return mappings
 
 
+def parse_mapping_payload(
+    raw_content: str, fmt: str = "json"
+) -> List[Tuple[str, str, str, str]]:
+    """Parse uploaded mapping content (JSON or 4-column CSV) into a list of tuples.
+
+    Each tuple is (source_attribute, target_attribute, source_value, target_value).
+    JSON supports either:
+      - [{sourceColumn, targetColumn, valueMatches: [{from, to}]}]
+      - [{source_attribute, target_attribute, source_value, target_value}]
+    CSV must include the 4 required headers (case-insensitive).
+    """
+    if not raw_content:
+        raise ValueError("Mapping content is empty.")
+
+    fmt = (fmt or "json").lower()
+    if fmt == "csv":
+        df = pd.read_csv(StringIO(raw_content), dtype=str, keep_default_na=False)
+        return parse_ground_truth_mappings(df)
+    if fmt != "json":
+        raise ValueError(f"Unsupported mapping format: {fmt}")
+
+    try:
+        data = json.loads(raw_content)
+    except Exception as e:
+        raise ValueError(f"Invalid JSON mapping payload: {e}")
+
+    # Allow wrapper keys like { "mappings": [...] }
+    if isinstance(data, dict):
+        for key in ["mappings", "results", "data"]:
+            if key in data and isinstance(data[key], list):
+                data = data[key]
+                break
+
+    if not isinstance(data, list):
+        raise ValueError("Mapping JSON must be a list of mappings.")
+
+    mappings: List[Tuple[str, str, str, str]] = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+
+        source_attr = (
+            entry.get("sourceColumn")
+            or entry.get("source_attribute")
+            or entry.get("source")
+            or entry.get("sourceAttr")
+        )
+        target_attr = (
+            entry.get("targetColumn")
+            or entry.get("target_attribute")
+            or entry.get("target")
+            or entry.get("targetAttr")
+        )
+
+        if source_attr is None or target_attr is None:
+            continue
+
+        s_attr = str(source_attr).strip()
+        t_attr = str(target_attr).strip()
+        if s_attr == "" or t_attr == "":
+            continue
+
+        value_matches = entry.get("valueMatches") or entry.get("mappings") or []
+        appended = False
+        if isinstance(value_matches, list):
+            for vm in value_matches:
+                if not isinstance(vm, dict):
+                    continue
+                s_val = vm.get("from")
+                t_val = vm.get("to")
+                mappings.append(
+                    (
+                        s_attr,
+                        t_attr,
+                        ("" if s_val is None else str(s_val)).strip(),
+                        ("" if t_val is None else str(t_val)).strip(),
+                    )
+                )
+                appended = True
+
+        if not appended:
+            s_val = entry.get("source_value")
+            t_val = entry.get("target_value")
+            mappings.append(
+                (
+                    s_attr,
+                    t_attr,
+                    ("" if s_val is None else str(s_val)).strip(),
+                    ("" if t_val is None else str(t_val)).strip(),
+                )
+            )
+
+    if not mappings:
+        raise ValueError("No valid mappings found in JSON payload.")
+    return mappings
+
+
 @check_cache_dir
 def sanitize_filename(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", name)

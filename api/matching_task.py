@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
@@ -1965,6 +1965,79 @@ class MatchingTask:
         self.source_df[column] = self.source_df[column].replace(from_val, to_val)
         self.set_source_mapped_values(column, from_val, to_val)
 
+    def _ensure_value_match_entry(self, source_col: str) -> Dict[str, Any]:
+        """
+        Ensure value_matches has an entry for the source column without resetting
+        existing mappings.
+        """
+        if "value_matches" not in self.cached_candidates:
+            self.cached_candidates["value_matches"] = {}
+
+        if source_col not in self.cached_candidates["value_matches"]:
+            uniques: List[str] = []
+            try:
+                if (
+                    self.source_df is not None
+                    and source_col in self.source_df.columns
+                    and pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype)
+                ):
+                    uniques = self.get_source_unique_values(source_col, n=300)
+                elif (
+                    self.source_df is not None and source_col in self.source_df.columns
+                ):
+                    uniques = self.get_source_unique_values(source_col)
+            except Exception:
+                uniques = []
+
+            self.cached_candidates["value_matches"][source_col] = {
+                "source_unique_values": list(uniques),
+                "source_mapped_values": list(uniques),
+                "targets": {},
+            }
+
+        return self.cached_candidates["value_matches"][source_col]
+
+    def _upsert_value_mapping(
+        self, source_col: str, target_col: str, source_val: str, target_val: str
+    ) -> None:
+        """
+        Add or update a single source->target value mapping, expanding caches as needed.
+        """
+        vm_entry = self._ensure_value_match_entry(source_col)
+        is_numeric_source = (
+            self.source_df is not None
+            and source_col in self.source_df.columns
+            and pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype)
+        )
+
+        normalized_source = (
+            self._normalize_numeric_str(source_val)
+            if is_numeric_source
+            else ("" if source_val is None else str(source_val).strip())
+        )
+
+        source_uniques = vm_entry["source_unique_values"]
+        mapped_values = vm_entry["source_mapped_values"]
+
+        if normalized_source not in source_uniques:
+            source_uniques.append(normalized_source)
+            mapped_values.append(normalized_source)
+            for vals in vm_entry["targets"].values():
+                vals.append("")
+
+        targets_list = vm_entry["targets"].setdefault(
+            target_col, [""] * len(source_uniques)
+        )
+        if len(targets_list) < len(source_uniques):
+            targets_list.extend([""] * (len(source_uniques) - len(targets_list)))
+
+        try:
+            idx = source_uniques.index(normalized_source)
+        except ValueError:
+            return
+
+        targets_list[idx] = "" if target_val is None else str(target_val).strip()
+
     def set_target_value_match(
         self, source_col: str, source_val: str, target_col: str, new_target_val: str
     ) -> None:
@@ -2085,6 +2158,119 @@ class MatchingTask:
             return ""
 
         return str(targets_list[idx])
+
+    def import_mappings(
+        self, mappings: List[Tuple[str, str, str, str]]
+    ) -> Dict[str, int]:
+        """
+        Apply imported mappings by accepting column pairs and updating value maps.
+        """
+        if self.source_df is None or self.target_df is None:
+            raise ValueError(
+                "Source and target dataframes must be loaded before importing mappings."
+            )
+
+        if "value_matches" not in self.cached_candidates:
+            self._initialize_value_matches()
+
+        aggregated: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
+        skipped_rows = 0
+        accept_ops = 0
+        value_ops = 0
+
+        for s_attr, t_attr, s_val, t_val in mappings:
+            s = (s_attr or "").strip()
+            t = (t_attr or "").strip()
+            if not s or not t:
+                skipped_rows += 1
+                continue
+            aggregated.setdefault((s, t), []).append(
+                (
+                    "" if s_val is None else str(s_val),
+                    "" if t_val is None else str(t_val),
+                )
+            )
+
+        accepted_pairs: Set[Tuple[str, str]] = set()
+        seen_accept: Set[Tuple[str, str]] = set()
+
+        for (source_col, target_col), value_list in aggregated.items():
+            if (
+                source_col not in self.source_df.columns
+                or target_col not in self.target_df.columns
+            ):
+                skipped_rows += len(value_list)
+                continue
+
+            existing = next(
+                (
+                    c
+                    for c in self.get_cached_candidates()
+                    if c["sourceColumn"] == source_col
+                    and c["targetColumn"] == target_col
+                ),
+                None,
+            )
+            initial_status = (
+                existing["status"] if existing and "status" in existing else "idle"
+            )
+
+            candidate = {
+                "sourceColumn": source_col,
+                "targetColumn": target_col,
+                "score": 1.0,
+                "matcher": "import",
+                "status": initial_status,
+            }
+            if existing is None:
+                self.append_cached_candidate(candidate)
+
+            if (source_col, target_col) not in seen_accept:
+                try:
+                    refs = [
+                        c
+                        for c in self.get_cached_candidates()
+                        if c["sourceColumn"] == source_col
+                    ]
+                    self.apply_operation("accept", candidate, refs, False)
+                    accept_ops += 1
+                except Exception:
+                    self.accept_cached_candidate(candidate)
+                accepted_pairs.add((source_col, target_col))
+                seen_accept.add((source_col, target_col))
+
+            batch_value_mappings = [
+                {"from": s_val, "to": t_val}
+                for s_val, t_val in value_list
+                if str(s_val).strip() != "" or str(t_val).strip() != ""
+            ]
+            if batch_value_mappings:
+                try:
+                    self.apply_operation(
+                        "map_target_value",
+                        candidate,
+                        [],
+                        False,
+                        batch_value_mappings,
+                    )
+                except Exception:
+                    # Fallback: apply directly to preserve data even if history misses it
+                    for vm in batch_value_mappings:
+                        self._upsert_value_mapping(
+                            source_col, target_col, vm["from"], vm["to"]
+                        )
+                value_ops += len(batch_value_mappings)
+
+        self._export_cache_to_json(self.cached_candidates)
+        return {
+            "accepted_pairs": len(accepted_pairs),
+            "accept_operations": accept_ops,
+            "value_operations": value_ops,
+            "acceptedPairs": len(accepted_pairs),
+            "value_updates": value_ops,
+            "valueUpdates": value_ops,
+            "skipped_rows": skipped_rows,
+        }
 
 
 class UserOperationHistory:

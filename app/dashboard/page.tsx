@@ -439,6 +439,7 @@ export default function Dashboard() {
                     handleSourceOntology={handleSourceOntology}
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}
+                    handleUserOperationsUpdate={handleUserOperationsUpdate}
                     setOpenNewMatcherDialog={setOpenNewMatcherDialog}
                 />
 
