@@ -86,30 +86,30 @@ const useHeatmapScales = ({ data, sourceColumns, width, height, margin, config, 
         y.domain = () => yColumns;
         y.range = () => [0, height - margin.top - margin.bottom];
 
-        // Reverse lookup: given an x pixel position (inside inner chart group), return target column name
+        // Reverse lookup: given an x pixel position (inside the translated chart <g>, i.e. after margins),
+        // return the target column name.
         const getXColumn = (xPixel: number) => {
             if (xPixel == null || Number.isNaN(xPixel)) return undefined;
-            const x = xPixel - margin.left - 316;
             for (let i = 0; i < xColumns.length; i += 1) {
                 const col = xColumns[i];
                 const start = getXPosition(col) ?? 0;
                 const width = getWidth({ targetColumn: col } as Candidate);
                 const end = start + width;
-                if (x >= start && x <= end) return col;
+                if (xPixel >= start && xPixel <= end) return col;
             }
             return undefined;
         };
 
-        // Reverse lookup: given a y pixel position (inside inner chart group), return source column name
+        // Reverse lookup: given a y pixel position (inside the translated chart <g>, i.e. after margins),
+        // return the source column name.
         const getYColumn = (yPixel: number) => {
             if (yPixel == null || Number.isNaN(yPixel)) return undefined;
-            const y = yPixel - margin.top - 140;
             for (let i = 0; i < yColumns.length; i += 1) {
                 const col = yColumns[i];
                 const start = getYPosition(col) ?? 0;
                 const height = getHeight({ sourceColumn: col } as Candidate);
                 const end = start + height;
-                if (y >= start && y <= end) return col;
+                if (yPixel >= start && yPixel <= end) return col;
             }
             return undefined;
         };

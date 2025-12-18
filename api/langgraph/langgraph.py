@@ -117,12 +117,11 @@ class LangGraphAgent:
         if llm_provider == "portkey":
             portkey_headers = createHeaders(
                 api_key=os.getenv("PORTKEY_API_KEY"),
-                virtual_key=os.getenv("PROVIDER_API_KEY"),
                 metadata={"_user": "yfw215"},
             )
 
             self.master_llm = ChatOpenAI(
-                model="gemini-2.5-pro",
+                model="@vertexai/gemini-2.5-pro",
                 temperature=0,
                 # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
                 base_url=(
@@ -135,7 +134,7 @@ class LangGraphAgent:
                 max_retries=retries,
             )
             self.worker_llm = ChatOpenAI(
-                model="gemini-2.5-flash",
+                model="@vertexai/gemini-2.5-flash",
                 temperature=0,
                 base_url=(
                     "https://portkey-lb.rt.nyu.edu/v1/"

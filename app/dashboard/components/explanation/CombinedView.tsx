@@ -51,7 +51,7 @@ const CombinedView = ({
                     );
                 }}
             >
-            <Box sx={{ paddingLeft: 0, height: "400px", overflowY: 'scroll', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
+            <Box sx={{ p: 1, height: "400px", overflowY: 'scroll', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
                 <SchemaExplanation
                     isMatch={isMatch}
                     currentExplanations={currentExplanations}
@@ -67,7 +67,7 @@ const CombinedView = ({
                 />
             </Box>
             <Box
-                sx={{ overflowY: 'scroll', height: "100%", maxHeight: "800px", scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
+                sx={{ p: 1, overflowY: 'scroll', height: "100%", maxHeight: "800px", scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
             >
                 {/* <SectionHeader>
                     Relevant Knowledge

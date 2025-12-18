@@ -83,6 +83,32 @@ const HeatMap: React.FC<HeatMapProps> = ({
 
   const { svgHeight, svgWidth, ref: svgRef } = useResizedSVGRef();
 
+  const getChartPointFromClient = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return undefined;
+
+    // Prefer proper SVG coordinate transforms to avoid brittle layout offsets.
+    try {
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      const ctm = svg.getScreenCTM();
+      if (ctm) {
+        const svgPoint = pt.matrixTransform(ctm.inverse());
+        return { x: svgPoint.x - MARGIN.left, y: svgPoint.y - MARGIN.top };
+      }
+    } catch {
+      // fall back below
+    }
+
+    try {
+      const rect = svg.getBoundingClientRect();
+      return { x: clientX - rect.left - MARGIN.left, y: clientY - rect.top - MARGIN.top };
+    } catch {
+      return undefined;
+    }
+  }, [svgRef]);
+
   const dimensions = useMemo(() => ({
     width: svgWidth,
     height: svgHeight,
@@ -250,8 +276,9 @@ const HeatMap: React.FC<HeatMapProps> = ({
           onMouseMove={(e) => {
             hideTooltip();
             setGlobalCandidateHighlight(undefined);
-            const xCol = getXColumn(e.clientX);
-            const yCol = getYColumn(e.clientY);
+            const p = getChartPointFromClient(e.clientX, e.clientY);
+            const xCol = p ? getXColumn(p.x) : undefined;
+            const yCol = p ? getYColumn(p.y) : undefined;
             setHoveredTargetColumn(xCol);
             setHoveredSourceColumn(yCol);
           }}
@@ -260,10 +287,9 @@ const HeatMap: React.FC<HeatMapProps> = ({
             setHoveredSourceColumn(undefined);
           }}
           onClick={(e) => {
-            const mousePositionX = e.clientX;
-            const mousePositionY = e.clientY;
-            const xColumn = getXColumn(mousePositionX);
-            const yColumn = getYColumn(mousePositionY);
+            const p = getChartPointFromClient(e.clientX, e.clientY);
+            const xColumn = p ? getXColumn(p.x) : undefined;
+            const yColumn = p ? getYColumn(p.y) : undefined;
             if (xColumn && yColumn) {
               createCandidate({ sourceColumn: yColumn, targetColumn: xColumn, score: 1 });
             }

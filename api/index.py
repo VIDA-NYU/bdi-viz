@@ -29,6 +29,7 @@ from .utils import (
     load_property,
     load_source_df,
     load_target_df,
+    parse_mapping_payload,
     parse_llm_generated_ontology,
     read_cached_ontology,
     read_candidate_explanation_json,
@@ -1111,6 +1112,47 @@ def get_candidates_results():
 
     else:
         return {"message": "failure", "results": None}
+
+
+@app.route("/api/mappings/import", methods=["POST"])
+def import_mappings():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    # Ensure dataframes are loaded before applying mappings
+    if matching_task.source_df is None or matching_task.target_df is None:
+        try:
+            if os.path.exists(
+                get_session_file(session, "source.csv", create_dir=False)
+            ):
+                source_df = load_source_df(session)
+                if os.path.exists(
+                    get_session_file(session, "target.csv", create_dir=False)
+                ):
+                    target_df = load_target_df(session)
+                else:
+                    target_df = pd.read_csv(GDC_DATA_PATH)
+                matching_task.update_dataframe(source_df=source_df, target_df=target_df)
+        except Exception as e:
+            return {
+                "message": "failure",
+                "error": f"Failed to load session data: {str(e)}",
+            }, 400
+
+    data = request.json or {}
+    content = data.get("content", "")
+    fmt = data.get("format", "json")
+
+    try:
+        mappings = parse_mapping_payload(content, fmt)
+    except Exception as e:
+        return {"message": "failure", "error": str(e)}, 400
+
+    try:
+        summary = matching_task.import_mappings(mappings)
+        return {"message": "success", "summary": summary}
+    except Exception as e:
+        return {"message": "failure", "error": str(e)}, 500
 
 
 @app.route("/api/matchers", methods=["POST"])

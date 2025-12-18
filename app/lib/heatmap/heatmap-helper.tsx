@@ -617,6 +617,29 @@ const getCandidatesResult = (prop: getCandidatesResultProps) => {
     );
 };
 
+interface importMappingsProps {
+    content: string;
+    format: 'json' | 'csv';
+    onSuccess?: (summary: Record<string, any>) => void;
+    signal?: AbortSignal;
+}
+
+const importMappings = (prop: importMappingsProps) => {
+    return makeApiRequest<Record<string, any>>(
+        "/api/mappings/import",
+        { content: prop.content, format: prop.format, session_name: getSessionName() },
+        prop.signal,
+        (data) => {
+            if (data && data.message === "success") {
+                prop.onSuccess?.(data.summary || {});
+                return data.summary;
+            } else {
+                throw new Error(data?.error || "Failed to import mappings");
+            }
+        }
+    );
+};
+
 interface updateSourceValueProps {
     column: string;
     value: any;
@@ -893,6 +916,7 @@ export {
     redoUserOperation, 
     getGDCAttribute, 
     getCandidatesResult, 
+    importMappings,
     updateSourceValue,
     updateTargetMatchValue,
     newMatcher,
