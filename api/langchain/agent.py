@@ -560,11 +560,10 @@ def get_agent(memory_retriever: MemoryRetriever, session_id: str = "default") ->
         if llm_provider == "portkey":
             portkey_headers = createHeaders(
                 api_key=os.getenv("PORTKEY_API_KEY"),
-                virtual_key=os.getenv("PROVIDER_API_KEY"),
                 metadata={"_user": "yfw215"},
             )
             llm_model = ChatOpenAI(
-                model="gemini-2.5-flash",
+                model="@vertexai/gemini-2.5-flash",
                 temperature=0,
                 base_url=(
                     "https://portkey-lb.rt.nyu.edu/v1/"
