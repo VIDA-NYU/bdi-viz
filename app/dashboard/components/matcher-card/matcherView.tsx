@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, Fragment } from "react";
 import {
   Stack,
   Box,
@@ -6,6 +6,12 @@ import {
   useTheme,
   Paper,
   Divider,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import { alpha, lighten } from "@mui/material/styles";
 import {
@@ -60,6 +66,17 @@ const precisionFromRecallAndF1 = (recall: number, f1: number) => {
   if (denom <= 0) return 0;
   return clamp01((f1 * recall) / denom);
 };
+
+const EXPLANATION_TYPES: ExplanationType[] = [
+  "name",
+  "token",
+  "value",
+  "semantic",
+  "pattern",
+  "history",
+  "knowledge",
+  "other",
+];
 
 const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
   const theme = useTheme();
@@ -182,6 +199,36 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
       )
     );
   }, [rankedMetricDataWithRank.length]);
+
+  const hasExplanationBreakdown = useMemo(() => {
+    return matcherAnalysis.some((m) => Boolean(m.explanationBreakdown));
+  }, [matcherAnalysis]);
+
+  const explanationBreakdownRows = useMemo(() => {
+    return matcherAnalysis.map((matcher) => {
+      const breakdown = matcher.explanationBreakdown;
+      const supportScores = breakdown?.explanationTypeSupportScores ?? {};
+      const contradictScores = breakdown?.explanationTypeContradictScores ?? {};
+      return {
+        matcher: matcher.name,
+        coveredCount: breakdown?.coveredGroundTruthCount ?? 0,
+        explainedCount: breakdown?.explainedGroundTruthCount ?? 0,
+        missingCount: breakdown?.missingExplanationCount ?? 0,
+        coveredScore: breakdown?.coveredGroundTruthScore ?? 0,
+        exactScore: breakdown?.exactMatchScore ?? 0,
+        typeScores: EXPLANATION_TYPES.map((type) => ({
+          type,
+          support: supportScores[type] ?? 0,
+          contradict: contradictScores[type] ?? 0,
+        })),
+      };
+    });
+  }, [matcherAnalysis, EXPLANATION_TYPES]);
+
+  const formatScore = useCallback((value: number) => {
+    if (!Number.isFinite(value)) return "0";
+    return value.toFixed(3);
+  }, []);
 
   if (matcherAnalysis.length === 0) {
     return (
@@ -424,8 +471,8 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                     fillOpacity={0.9}
                     isAnimationActive={false}
                   />
-                </BarChart>
-              </ResponsiveContainer>
+                  </BarChart>
+                </ResponsiveContainer>
             </Box>
 
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, pt: 0.5 }}>
@@ -463,8 +510,203 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                     {item.label}
                   </Typography>
                 </Box>
-              ))}
+                ))}
             </Box>
+          </Box>
+
+          <Divider sx={{ borderColor: alpha("#ffffff", 0.1) }} />
+
+          <Box>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: 1,
+                mb: 0.75,
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: alpha("#ffffff", 0.92),
+                }}
+              >
+                Explanation Coverage (Accepted Matches)
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{ color: alpha("#ffffff", 0.65) }}
+              >
+                Sum of (matcher score × explanation confidence); “+” supports, “-” contradicts
+              </Typography>
+            </Box>
+
+            {!hasExplanationBreakdown ? (
+              <Typography
+                variant="caption"
+                sx={{ color: alpha("#ffffff", 0.75) }}
+              >
+                Waiting for cached explanations…
+              </Typography>
+            ) : (
+              <TableContainer
+                sx={{
+                  borderRadius: 1,
+                  border: `1px solid ${alpha("#ffffff", 0.12)}`,
+                  backgroundColor: alpha("#000000", 0.08),
+                  overflowX: "auto",
+                }}
+              >
+                <Table size="small" stickyHeader aria-label="Matcher explanation breakdown">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell
+                        sx={{
+                          backgroundColor: CARD_BG,
+                          color: TICK_COLOR,
+                          fontWeight: 650,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Matcher
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          backgroundColor: CARD_BG,
+                          color: TICK_COLOR,
+                          fontWeight: 650,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        GT Covered
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          backgroundColor: CARD_BG,
+                          color: TICK_COLOR,
+                          fontWeight: 650,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Explained
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          backgroundColor: CARD_BG,
+                          color: TICK_COLOR,
+                          fontWeight: 650,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Missing
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          backgroundColor: CARD_BG,
+                          color: TICK_COLOR,
+                          fontWeight: 650,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        GT Score
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          backgroundColor: CARD_BG,
+                          color: TICK_COLOR,
+                          fontWeight: 650,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Exact
+                      </TableCell>
+                      {EXPLANATION_TYPES.flatMap((type) => [
+                        <TableCell
+                          key={`type-${type}-support`}
+                          align="right"
+                          sx={{
+                            backgroundColor: CARD_BG,
+                            color: TICK_COLOR,
+                            fontWeight: 650,
+                            whiteSpace: "nowrap",
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {type}+
+                        </TableCell>,
+                        <TableCell
+                          key={`type-${type}-contradict`}
+                          align="right"
+                          sx={{
+                            backgroundColor: CARD_BG,
+                            color: TICK_COLOR,
+                            fontWeight: 650,
+                            whiteSpace: "nowrap",
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {type}-
+                        </TableCell>,
+                      ])}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {explanationBreakdownRows.map((row) => (
+                      <TableRow
+                        key={`breakdown-${row.matcher}`}
+                        sx={{
+                          "& td": {
+                            borderColor: alpha("#ffffff", 0.08),
+                            color: alpha("#ffffff", 0.86),
+                            fontSize: 12,
+                            whiteSpace: "nowrap",
+                          },
+                        }}
+                      >
+                        <TableCell
+                          sx={{
+                            fontWeight: 650,
+                            color: alpha("#ffffff", 0.92),
+                            maxWidth: 220,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                          title={row.matcher}
+                        >
+                          {row.matcher}
+                        </TableCell>
+                        <TableCell align="right">{row.coveredCount}</TableCell>
+                        <TableCell align="right">{row.explainedCount}</TableCell>
+                        <TableCell align="right">{row.missingCount}</TableCell>
+                        <TableCell align="right">
+                          {formatScore(row.coveredScore)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {formatScore(row.exactScore)}
+                        </TableCell>
+                        {row.typeScores.map((item) => (
+                          <Fragment key={`cells-${row.matcher}-${item.type}`}>
+                            <TableCell align="right">
+                              {formatScore(item.support)}
+                            </TableCell>
+                            <TableCell align="right">
+                              {formatScore(item.contradict)}
+                            </TableCell>
+                          </Fragment>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
           </Box>
         </Stack>
       </Paper>
