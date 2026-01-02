@@ -1425,8 +1425,6 @@ def agent_explanation():
 
     source_col = data["sourceColumn"]
     target_col = data["targetColumn"]
-    source_values = matching_task.get_source_unique_values(source_col)
-    target_values = matching_task.get_target_unique_values(target_col)
 
     cached_explanation = read_candidate_explanation_json(source_col, target_col)
     if cached_explanation:
@@ -1434,6 +1432,13 @@ def agent_explanation():
             f"Returning cached explanation for {source_col} and {target_col}"
         )
         return cached_explanation
+
+    cache_only = bool(data.get("cache_only", False))
+    if cache_only:
+        return {"message": "cached explanation not found"}, 404
+
+    source_values = matching_task.get_source_unique_values(source_col)
+    target_values = matching_task.get_target_unique_values(target_col)
 
     agent = get_agent(session)
     response = agent.explain(
@@ -1453,6 +1458,86 @@ def agent_explanation():
     app.logger.info(f"Response: {response}")
     write_candidate_explanation_json(source_col, target_col, response)
     return response
+
+
+@app.route("/api/agent/explain/cached-types", methods=["POST"])
+def agent_explanation_cached_types():
+    extract_session_name(request)
+    data = request.json or {}
+
+    candidates = data.get("candidates", [])
+    if not isinstance(candidates, list):
+        return {"message": "candidates must be a list"}, 400
+
+    cached_types = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        source_col = candidate.get("sourceColumn")
+        target_col = candidate.get("targetColumn")
+        if not source_col or not target_col:
+            continue
+
+        cached_explanation = read_candidate_explanation_json(source_col, target_col)
+        if not cached_explanation:
+            continue
+
+        explanations = cached_explanation.get("explanations", [])
+        if not isinstance(explanations, list):
+            continue
+
+        def _coerce_bool(value):
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            if isinstance(value, str):
+                lower = value.strip().lower()
+                if lower in ("true", "1", "yes", "y"):
+                    return True
+                if lower in ("false", "0", "no", "n"):
+                    return False
+            return None
+
+        def _coerce_float(value):
+            try:
+                return float(value)
+            except Exception:
+                return None
+
+        types = []
+        summary_explanations = []
+        for explanation in explanations:
+            if not isinstance(explanation, dict):
+                continue
+            explanation_type = explanation.get("type")
+            if explanation_type:
+                types.append(explanation_type)
+                is_match = _coerce_bool(
+                    explanation.get("is_match", explanation.get("isMatch"))
+                )
+                confidence = _coerce_float(explanation.get("confidence"))
+                if confidence is None:
+                    confidence = 0
+                summary_explanations.append(
+                    {
+                        "type": explanation_type,
+                        "isMatch": (is_match if is_match is not None else False),
+                        "confidence": confidence,
+                    }
+                )
+
+        unique_types = list(dict.fromkeys(types))
+        cached_types.append(
+            {
+                "sourceColumn": source_col,
+                "targetColumn": target_col,
+                "types": unique_types,
+                "explanations": summary_explanations,
+            }
+        )
+
+    return {"message": "success", "results": {"cachedExplanationTypes": cached_types}}
 
 
 # @app.route("/api/agent/explore", methods=["POST"])

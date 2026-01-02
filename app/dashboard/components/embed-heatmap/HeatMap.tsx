@@ -18,7 +18,7 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import HierarchicalColumnViz from "./axis/space-filling/HierarchyColumnViz";
 import SourceHierarchyColumnViz from "./axis/space-filling/SourceHierarchyColumnViz";
 import CellCommentDialog, { CellComment } from "../comments/CellCommentDialog";
-import { listAllCellCommentsMap, listCellComments, addCellComment, clearCellComments as apiClearCellComments, setCellComments as apiSetCellComments } from "@/app/lib/heatmap/heatmap-helper";
+import { listAllCellCommentsMap, addCellComment, clearCellComments as apiClearCellComments, setCellComments as apiSetCellComments } from "@/app/lib/heatmap/heatmap-helper";
 import { useSession } from "@/app/lib/settings/session";
 
 interface HeatMapProps {
@@ -180,7 +180,6 @@ const HeatMap: React.FC<HeatMapProps> = ({
   const openCommentFor = useCallback((data: AggregatedCandidate) => {
     setActiveCell(data);
     const key = getCellKey(data.sourceColumn, data.targetColumn);
-    const arr = cellComments[key] || [];
     setCommentDraft("");
     setCommentOpen(true);
   }, [cellComments, getCellKey]);
@@ -188,7 +187,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
   const handleSaveComment = useCallback(() => {
     if (!activeCell) return;
     const trimmed = commentDraft.trim();
-    if (!trimmed) { setCommentOpen(false); return; }
+    if (!trimmed) return;
     (async () => {
       try {
         const updated = await addCellComment(activeCell.sourceColumn, activeCell.targetColumn, trimmed);
@@ -430,6 +429,15 @@ const HeatMap: React.FC<HeatMapProps> = ({
           arrow
           placement="top"
           describeChild
+          disableInteractive
+          slotProps={{
+            popper: {
+              sx: { pointerEvents: "none" },
+            },
+            tooltip: {
+              sx: { pointerEvents: "none" },
+            },
+          }}
           title={
             <Box
               sx={{
