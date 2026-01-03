@@ -40,17 +40,61 @@ interface ParamItem {
 }
 
 const DEFAULT_MATCHER_CODE = `# Add your import lines here
+from __future__ import annotations
 
-class MyCustomMatcher():
-    def __init__(self, name, weight=1, **params):
-        # Make sure that the name and weight are presented!
+from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+
+class MyCustomMatcher:
+    """
+    Custom matcher template.
+
+    Required behavior:
+    - __init__ must accept name and weight (weight may be ignored but must exist).
+    - top_matches must return a list of dicts with:
+        * sourceColumn or source (source column name)
+        * targetColumn or target (target column name)
+        * score (float, higher is better)
+      Optional keys:
+        * matcher (string)
+        * status (string, e.g., "idle")
+
+    Input expectations:
+    - source and target are pandas.DataFrame objects.
+      Use source.columns and target.columns to get column names.
+    """
+
+    def __init__(self, name: str, weight: float = 1.0, **params: Any) -> None:
+        # Make sure that the name and weight are present!
         self.name = name
-        self.weight = 1
+        self.weight = float(weight)
         # Initialize with params if needed
 
-    def top_matches(self, source, target, top_k=20, **kwargs):
-        
-        # Implement your matching logic here
+    def top_matches(
+        self,
+        source,
+        target,
+        top_k: int = 20,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        """
+        Compute candidate matches between source and target columns.
+
+        Return format (list of dicts):
+        [
+            {
+                "sourceColumn": "source_col_name",
+                "targetColumn": "target_col_name",
+                "score": 0.9,
+                "matcher": "my_matcher_name",
+                "status": "idle",
+            },
+            ...
+        ]
+        """
+
+        # Implement your matching logic here.
+        # Example: return an empty list until you implement logic.
         return []
 `;
 
@@ -174,6 +218,13 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
             onSubmit(newMatchers);
             getMatchers({ callback: matchersCallback });
             setIsLoadingGlobal(false);
+            // Reset form after successful creation
+            setName("");
+            setCode("");
+            setParamItems([{ name: "", value: "" }]);
+            setErrors({ name: false, code: false });
+            onClose();
+            toastify("success", <p>New matcher created successfully!</p>);
           },
           onError: (error) => {
             toastify("error", <p>Error creating matcher: {error}</p>);
@@ -182,19 +233,13 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
               name: false,
               code: true,
             });
-            // setIsLoadingGlobal(false);
+            setIsLoadingGlobal(false);
           },
           taskStateCallback: (taskState) => {
             console.log("Task state:", taskState);
             setTaskStateFor("new_matcher", taskState);
           },
         });
-        // Reset form
-        setName("");
-        setCode("");
-        setParamItems([{ name: "", value: "" }]);
-        onClose();
-        toastify("success", <p>New matcher created successfully!</p>);
       } catch (error) {
         console.error("Error creating matcher:", error);
         toastify("error", <p>Failed to create matcher. Please try again.</p>);

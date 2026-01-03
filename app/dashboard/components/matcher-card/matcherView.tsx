@@ -13,7 +13,7 @@ import {
   TableHead,
   TableRow,
 } from "@mui/material";
-import { alpha, lighten } from "@mui/material/styles";
+import { alpha } from "@mui/material/styles";
 import {
   RadarChart,
   PolarGrid,
@@ -34,24 +34,33 @@ interface MatcherViewProps {
   matcherAnalysis: MatcherAnalysis[];
 }
 
-const getMatcherColors = (theme: any, count: number): string[] => {
+const getMatcherColorMap = (names: string[]): Map<string, string> => {
   const base = [
-    theme.palette.primary.main,
-    theme.palette.secondary.main,
-    theme.palette.info.main,
-    theme.palette.success.main,
-    theme.palette.warning.main,
-    theme.palette.error.main,
+    "#ff6b6b",
+    "#5f9cff",
+    "#ffd166",
+    "#06d6a0",
+    "#f28482",
+    "#9d4edd",
+    "#4ecdc4",
+    "#f9c74f",
+    "#43aa8b",
+    "#f3722c",
   ];
 
+  const uniqueNames = Array.from(new Set(names));
   const colors: string[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const baseColor = base[i % base.length];
-    const cycle = Math.floor(i / base.length);
-    const lift = Math.min(0.14 * cycle, 0.42);
-    colors.push(cycle === 0 ? baseColor : lighten(baseColor, lift));
+
+  for (let i = 0; i < uniqueNames.length; i += 1) {
+    if (i < base.length) {
+      colors.push(base[i]);
+      continue;
+    }
+    const hue = (137.508 * (i - base.length)) % 360;
+    colors.push(`hsl(${hue}, 68%, 58%)`);
   }
-  return colors;
+
+  return new Map(uniqueNames.map((name, idx) => [name, colors[idx]]));
 };
 
 const truncate = (text: string, maxLen: number) => {
@@ -85,13 +94,15 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
 
   // Generate colors once for all matchers
   const matcherSeries = useMemo(() => {
-    const colors = getMatcherColors(theme, matcherAnalysis.length);
-    return matcherAnalysis.map((matcher, index) => ({
+    const colorMap = getMatcherColorMap(
+      matcherAnalysis.map((matcher) => matcher.name)
+    );
+    return matcherAnalysis.map((matcher) => ({
       name: matcher.name,
-      color: colors[index],
+      color: colorMap.get(matcher.name) ?? "#5f9cff",
       dataKey: matcher.name,
     }));
-  }, [matcherAnalysis, theme]);
+  }, [matcherAnalysis]);
 
   const metricColors = useMemo(() => {
     // Yellow -> Green -> Blue-ish, as requested.
@@ -106,27 +117,31 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
     theme.palette.warning.main,
   ]);
 
-  const renderRotatedYAxisTick = useCallback((props: any) => {
-    const x = Number(props?.x ?? 0);
-    const y = Number(props?.y ?? 0);
-    const value = props?.payload?.value != null ? String(props.payload.value) : "";
-    const label = truncate(value, 18);
+  const renderRotatedYAxisTick = useCallback(
+    (props: any) => {
+      const x = Number(props?.x ?? 0);
+      const y = Number(props?.y ?? 0);
+      const value =
+        props?.payload?.value != null ? String(props.payload.value) : "";
+      const label = truncate(value, 18);
 
-    return (
-      <g transform={`translate(${x},${y}) rotate(-45)`}>
-        <text
-          x={0}
-          y={0}
-          dy={3}
-          textAnchor="end"
-          fill={TICK_COLOR}
-          fontSize={11}
-        >
-          {label}
-        </text>
-      </g>
-    );
-  }, [TICK_COLOR]);
+      return (
+        <g transform={`translate(${x},${y}) rotate(-45)`}>
+          <text
+            x={0}
+            y={0}
+            dy={3}
+            textAnchor="end"
+            fill={TICK_COLOR}
+            fontSize={11}
+          >
+            {label}
+          </text>
+        </g>
+      );
+    },
+    [TICK_COLOR]
+  );
 
   // Transform data for radar chart
   const radarData = useMemo(() => {
@@ -471,8 +486,8 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                     fillOpacity={0.9}
                     isAnimationActive={false}
                   />
-                  </BarChart>
-                </ResponsiveContainer>
+                </BarChart>
+              </ResponsiveContainer>
             </Box>
 
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, pt: 0.5 }}>
@@ -510,7 +525,7 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                     {item.label}
                   </Typography>
                 </Box>
-                ))}
+              ))}
             </Box>
           </Box>
 
@@ -539,7 +554,8 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                 variant="caption"
                 sx={{ color: alpha("#ffffff", 0.65) }}
               >
-                Sum of (matcher score × explanation confidence); “+” supports, “-” contradicts
+                Sum of (matcher score × explanation confidence); “+” supports,
+                “-” contradicts
               </Typography>
             </Box>
 
@@ -559,7 +575,11 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                   overflowX: "auto",
                 }}
               >
-                <Table size="small" stickyHeader aria-label="Matcher explanation breakdown">
+                <Table
+                  size="small"
+                  stickyHeader
+                  aria-label="Matcher explanation breakdown"
+                >
                   <TableHead>
                     <TableRow>
                       <TableCell
@@ -683,7 +703,9 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                           {row.matcher}
                         </TableCell>
                         <TableCell align="right">{row.coveredCount}</TableCell>
-                        <TableCell align="right">{row.explainedCount}</TableCell>
+                        <TableCell align="right">
+                          {row.explainedCount}
+                        </TableCell>
                         <TableCell align="right">{row.missingCount}</TableCell>
                         <TableCell align="right">
                           {formatScore(row.coveredScore)}

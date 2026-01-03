@@ -1392,12 +1392,14 @@ def matcher_status():
         response = {
             "status": "pending",
             "message": "Task is pending",
+            "error": None,
             "taskState": task_state.get_task_state(),
         }
     elif task.state == "FAILURE":
         response = {
             "status": "failed",
             "message": str(task.info),
+            "error": str(task.info),
             "taskState": task_state.get_task_state(),
         }
     elif task.state == "SUCCESS":
@@ -1405,10 +1407,12 @@ def matcher_status():
         app.logger.info(f"Result: {result}")
         if result["status"] == "completed":
             _ = matching_task.get_candidates(task_state=task_state)
+        error = result.get("error") if result.get("status") == "failed" else None
 
         response = {
             "status": result["status"],
             "message": (result["error"] if result["status"] == "failed" else "success"),
+            "error": error,
             "taskState": task_state.get_task_state(),
             "matchers": matching_task.get_matchers(),
         }
@@ -1416,6 +1420,7 @@ def matcher_status():
         response = {
             "status": task.state,
             "message": "Task is in progress",
+            "error": None,
             "taskState": task_state.get_task_state(),
         }
 
