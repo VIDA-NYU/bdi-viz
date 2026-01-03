@@ -223,12 +223,6 @@ def session_create():
     except Exception:
         pass
 
-    # Pre-warm: ensure embeddings are loaded and Chroma collections created.
-    try:
-        _ = get_memory_retriever(session)
-    except Exception:
-        pass
-
     # If a shared schema chroma_db exists, copy it into the new session to avoid first-time build
     try:
         from .utils import get_session_dir
@@ -238,29 +232,56 @@ def session_create():
         dest_dir = os.path.join(get_session_dir(session, create=True), "chroma_db")
         if os.path.isdir(shared_chroma):
             if not os.path.exists(dest_dir) or not os.listdir(dest_dir):
-                import shutil as _sh
-
-                # copytree requires dest to not exist; emulate copy if it does
-                if not os.path.exists(dest_dir):
-                    _sh.copytree(shared_chroma, dest_dir)
-                else:
-                    # copy files recursively
-                    for root, dirs, files in os.walk(shared_chroma):
-                        rel = os.path.relpath(root, shared_chroma)
-                        tgt_root = (
-                            os.path.join(dest_dir, rel) if rel != "." else dest_dir
+                copy_allowed = False
+                config_path = os.path.join(shared_chroma, "embedding_config.json")
+                if os.path.exists(config_path):
+                    try:
+                        with open(config_path, "r") as f:
+                            config = json.load(f)
+                    except Exception:
+                        config = None
+                    if isinstance(config, dict):
+                        current_model = os.getenv(
+                            "EMBED_MODEL_NAME",
+                            "sentence-transformers/all-MiniLM-L6-v2",
                         )
-                        os.makedirs(tgt_root, exist_ok=True)
-                        for d in dirs:
-                            os.makedirs(os.path.join(tgt_root, d), exist_ok=True)
-                        for f in files:
-                            src_f = os.path.join(root, f)
-                            dst_f = os.path.join(tgt_root, f)
-                            try:
-                                if not os.path.exists(dst_f):
-                                    _sh.copy2(src_f, dst_f)
-                            except Exception:
-                                pass
+                        config_model = config.get("embedding_model")
+                        if config_model and config_model == current_model:
+                            copy_allowed = True
+                if not copy_allowed:
+                    app.logger.info(
+                        "Skipping shared chroma_db copy due to missing/mismatched embedding config."
+                    )
+                else:
+                    import shutil as _sh
+
+                    # copytree requires dest to not exist; emulate copy if it does
+                    if not os.path.exists(dest_dir):
+                        _sh.copytree(shared_chroma, dest_dir)
+                    else:
+                        # copy files recursively
+                        for root, dirs, files in os.walk(shared_chroma):
+                            rel = os.path.relpath(root, shared_chroma)
+                            tgt_root = (
+                                os.path.join(dest_dir, rel) if rel != "." else dest_dir
+                            )
+                            os.makedirs(tgt_root, exist_ok=True)
+                            for d in dirs:
+                                os.makedirs(os.path.join(tgt_root, d), exist_ok=True)
+                            for f in files:
+                                src_f = os.path.join(root, f)
+                                dst_f = os.path.join(tgt_root, f)
+                                try:
+                                    if not os.path.exists(dst_f):
+                                        _sh.copy2(src_f, dst_f)
+                                except Exception:
+                                    pass
+    except Exception:
+        pass
+
+    # Pre-warm: ensure embeddings are loaded and Chroma collections created.
+    try:
+        _ = get_memory_retriever(session)
     except Exception:
         pass
 
