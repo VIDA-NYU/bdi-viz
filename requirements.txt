@@ -19,7 +19,7 @@ langchain-openai==0.3.9
 # langchain-together
 langgraph==0.5.3
 # duckduckgo-search
-portkey-ai==1.13.0
+portkey-ai==2.1.0
 chromadb==0.6.3
 
 hf_xet

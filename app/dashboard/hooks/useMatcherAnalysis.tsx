@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { cachedExplanationSummariesRequest } from '@/app/lib/langchain/agent-helper';
 
 type matcherAnalysisState = {
     matcherMetrics: MatcherAnalysis[];
@@ -15,17 +16,9 @@ export const useMatcherAnalysis = ({
     matchers, 
     enabled = true 
 }: matcherAnalysisProps): matcherAnalysisState => {
-    const [matcherNames, setMatcherNames] = useState<string[]>([]);
     const [groundTruth, setGroundTruth] = useState<Candidate[]>([]);
     const [matcherMetrics, setMatcherMetrics] = useState<MatcherAnalysis[]>([]);
-
-    // Effect to update matcher names when matchers change
-    useEffect(() => {
-        if (!enabled) return;
-        
-        const names = matchers.map((matcher) => matcher.name);
-        setMatcherNames(names);
-    }, [matchers, enabled]);
+    const explanationRequestIdRef = useRef(0);
 
     // Effect to update ground truth when candidates change
     useEffect(() => {
@@ -54,12 +47,12 @@ export const useMatcherAnalysis = ({
     useEffect(() => {
         if (!enabled) return;
         
-        if (!matcherNames.length || !candidates.length || !groundTruth.length) {
+        if (!matchers.length || !candidates.length || !groundTruth.length) {
             setMatcherMetrics([]);
             return;
         }
         
-        const metrics = matchers.map((matcher) => {
+        const metrics: MatcherAnalysis[] = matchers.map((matcher) => {
             // Calculate metrics using candidates if available
             const {mrr, recall, f1, falsePositives, falseNegatives} = calculateMetrics(matcher.name, candidates, groundTruth);
             return {
@@ -76,9 +69,215 @@ export const useMatcherAnalysis = ({
         });
         
         setMatcherMetrics(metrics);
-    }, [candidates, matcherNames, groundTruth, enabled]);
+
+        const requestId = (explanationRequestIdRef.current += 1);
+
+        (async () => {
+            const explanationBreakdowns = await calculateExplanationBreakdowns({
+                candidates,
+                matchers,
+                groundTruth,
+            });
+
+            if (explanationRequestIdRef.current !== requestId) return;
+
+            setMatcherMetrics((prev) =>
+                prev.map((metric) => ({
+                    ...metric,
+                    explanationBreakdown: explanationBreakdowns[metric.name],
+                }))
+            );
+        })();
+    }, [candidates, groundTruth, matchers, enabled]);
 
     return { matcherMetrics };
+}
+
+const EXPLANATION_TYPES: ExplanationType[] = [
+    "name",
+    "token",
+    "value",
+    "semantic",
+    "pattern",
+    "history",
+    "knowledge",
+    "other",
+];
+
+const pairKey = (sourceColumn: string, targetColumn: string) =>
+    JSON.stringify([sourceColumn, targetColumn]);
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+type CalculateBreakdownsProps = {
+    candidates: Candidate[];
+    matchers: Matcher[];
+    groundTruth: Candidate[];
+};
+
+async function calculateExplanationBreakdowns({
+    candidates,
+    matchers,
+    groundTruth,
+}: CalculateBreakdownsProps): Promise<Record<string, MatcherExplanationBreakdown>> {
+    const easyPairs = new Set<string>();
+    candidates.forEach((candidate) => {
+        if (candidate.matcher === "candidate_quadrants") {
+            easyPairs.add(pairKey(candidate.sourceColumn, candidate.targetColumn));
+        }
+    });
+
+    const scoreByMatcherAndPair = new Map<string, number>();
+    candidates.forEach((candidate) => {
+        if (!candidate.matcher) return;
+        const key = JSON.stringify([
+            candidate.matcher,
+            candidate.sourceColumn,
+            candidate.targetColumn,
+        ]);
+
+        const prev = scoreByMatcherAndPair.get(key);
+        if (prev == null || candidate.score > prev) {
+            scoreByMatcherAndPair.set(key, candidate.score);
+        }
+    });
+
+    const nonEasyGroundTruthPairs = groundTruth
+        .map((candidate) => ({
+            sourceColumn: candidate.sourceColumn,
+            targetColumn: candidate.targetColumn,
+        }))
+        .filter(
+            ({ sourceColumn, targetColumn }) =>
+                !easyPairs.has(pairKey(sourceColumn, targetColumn))
+        );
+
+    const cachedSummariesList = await cachedExplanationSummariesRequest(
+        nonEasyGroundTruthPairs
+    );
+
+    type PairExplanationWeights = {
+        hasExplanations: boolean;
+        supportByType: Partial<Record<ExplanationType, number>>;
+        contradictByType: Partial<Record<ExplanationType, number>>;
+    };
+
+    const cachedWeightsByPair = new Map<string, PairExplanationWeights>();
+    cachedSummariesList.forEach((item) => {
+        if (!item?.sourceColumn || !item?.targetColumn) return;
+
+        const supportByType: Partial<Record<ExplanationType, number>> = {};
+        const contradictByType: Partial<Record<ExplanationType, number>> = {};
+        EXPLANATION_TYPES.forEach((type) => {
+            supportByType[type] = 0;
+            contradictByType[type] = 0;
+        });
+
+        const explanationItems = Array.isArray(item.explanations)
+            ? item.explanations
+            : [];
+
+        explanationItems.forEach((explanation) => {
+            const rawType = explanation?.type;
+            if (!rawType) return;
+
+            const normalizedType = EXPLANATION_TYPES.includes(
+                rawType as ExplanationType
+            )
+                ? (rawType as ExplanationType)
+                : "other";
+
+            const rawConfidence = Number(explanation?.confidence ?? 0);
+            const confidence = Number.isFinite(rawConfidence)
+                ? clamp01(rawConfidence)
+                : 0;
+
+            if (explanation?.isMatch) {
+                supportByType[normalizedType] = Math.max(
+                    supportByType[normalizedType] ?? 0,
+                    confidence
+                );
+            } else {
+                contradictByType[normalizedType] = Math.max(
+                    contradictByType[normalizedType] ?? 0,
+                    confidence
+                );
+            }
+        });
+
+        cachedWeightsByPair.set(pairKey(item.sourceColumn, item.targetColumn), {
+            hasExplanations: explanationItems.length > 0,
+            supportByType,
+            contradictByType,
+        });
+    });
+
+    const breakdowns: Record<string, MatcherExplanationBreakdown> = {};
+
+    matchers.forEach((matcher) => {
+        const explanationTypeSupportScores: Partial<Record<ExplanationType, number>> = {};
+        const explanationTypeContradictScores: Partial<Record<ExplanationType, number>> = {};
+        EXPLANATION_TYPES.forEach((type) => {
+            explanationTypeSupportScores[type] = 0;
+            explanationTypeContradictScores[type] = 0;
+        });
+
+        const breakdown: MatcherExplanationBreakdown = {
+            exactMatchScore: 0,
+            coveredGroundTruthScore: 0,
+            coveredGroundTruthCount: 0,
+            explainedGroundTruthCount: 0,
+            missingExplanationCount: 0,
+            explanationTypeSupportScores,
+            explanationTypeContradictScores,
+        };
+
+        groundTruth.forEach((gtCandidate) => {
+            const matcherScoreKey = JSON.stringify([
+                matcher.name,
+                gtCandidate.sourceColumn,
+                gtCandidate.targetColumn,
+            ]);
+            const matcherScore = scoreByMatcherAndPair.get(matcherScoreKey);
+            if (matcherScore == null) return;
+
+            breakdown.coveredGroundTruthCount += 1;
+            breakdown.coveredGroundTruthScore += matcherScore;
+
+            const gtPairKey = pairKey(
+                gtCandidate.sourceColumn,
+                gtCandidate.targetColumn
+            );
+            if (easyPairs.has(gtPairKey)) {
+                breakdown.exactMatchScore += matcherScore;
+                return;
+            }
+
+            const weights = cachedWeightsByPair.get(gtPairKey);
+            if (!weights || !weights.hasExplanations) {
+                breakdown.missingExplanationCount += 1;
+                return;
+            }
+
+            breakdown.explainedGroundTruthCount += 1;
+
+            EXPLANATION_TYPES.forEach((type) => {
+                const support = weights.supportByType[type] ?? 0;
+                const contradict = weights.contradictByType[type] ?? 0;
+
+                breakdown.explanationTypeSupportScores[type] =
+                    (breakdown.explanationTypeSupportScores[type] ?? 0) +
+                    matcherScore * support;
+                breakdown.explanationTypeContradictScores[type] =
+                    (breakdown.explanationTypeContradictScores[type] ?? 0) +
+                    matcherScore * contradict;
+            });
+        });
+
+        breakdowns[matcher.name] = breakdown;
+    });
+
+    return breakdowns;
 }
 
 type Metrics = {
