@@ -1,4 +1,5 @@
 # flake8: noqa
+import json
 import logging
 import os
 import shutil
@@ -6,6 +7,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 import chromadb
+from chromadb.errors import InvalidDimensionException
 from langchain.tools import StructuredTool
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -149,6 +151,11 @@ class MemoryRetriever:
         self._lock = threading.RLock()
         # Use shared embeddings model across sessions to avoid duplication
         embeddings = get_shared_embeddings()
+        self.embedding_model_name = os.getenv(
+            "EMBED_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2"
+        )
+        self.embeddings = embeddings
+        self.embedding_dim = self._infer_embedding_dim()
 
         self.namespace_counts = {
             "candidates": 0,
@@ -167,7 +174,6 @@ class MemoryRetriever:
         )
 
         # Initialize per-session Chroma client and collections under api/sessions/<session>/chroma_db
-        self.embeddings = embeddings
         self.client = None
         self.collections: Dict[str, chromadb.Collection] = {}
         self._switch_session_unlocked(self.session_id)
@@ -265,12 +271,137 @@ class MemoryRetriever:
             """.strip(),
         )
 
+    def _infer_embedding_dim(self) -> int:
+        try:
+            vec = self.embeddings.embed_query("embedding-dim-probe")
+            return len(vec)
+        except Exception:
+            return 0
+
+    def _embedding_config_path(self, chroma_dir: str) -> str:
+        return os.path.join(chroma_dir, "embedding_config.json")
+
+    def _read_embedding_config(self, chroma_dir: str) -> Optional[Dict[str, Any]]:
+        path = self._embedding_config_path(chroma_dir)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def _write_embedding_config(self, chroma_dir: str) -> None:
+        if not self.embedding_dim and not self.embedding_model_name:
+            return
+        payload: Dict[str, Any] = {}
+        if self.embedding_model_name:
+            payload["embedding_model"] = self.embedding_model_name
+        if self.embedding_dim:
+            payload["embedding_dim"] = int(self.embedding_dim)
+        path = self._embedding_config_path(chroma_dir)
+        try:
+            with open(path, "w") as f:
+                json.dump(payload, f)
+        except Exception:
+            pass
+
+    def _embedding_config_matches(self, config: Dict[str, Any]) -> bool:
+        if not isinstance(config, dict):
+            return True
+        try:
+            if (
+                self.embedding_dim
+                and "embedding_dim" in config
+                and int(config["embedding_dim"]) != int(self.embedding_dim)
+            ):
+                return False
+        except Exception:
+            return False
+        if (
+            self.embedding_model_name
+            and config.get("embedding_model")
+            and config.get("embedding_model") != self.embedding_model_name
+        ):
+            return False
+        return True
+
+    def _build_collection_metadata(self, recovery: bool = False) -> Dict[str, Any]:
+        if recovery:
+            metadata = {
+                "hnsw:space": "cosine",
+                "hnsw:construction_ef": 100,
+                "hnsw:search_ef": 100,
+                "hnsw:M": 16,
+            }
+        else:
+            metadata = {
+                "hnsw:space": "cosine",
+                "hnsw:construction_ef": 64,
+                "hnsw:search_ef": 100,
+                "hnsw:M": 12,
+            }
+        if self.embedding_model_name:
+            metadata["embedding_model"] = self.embedding_model_name
+        if self.embedding_dim:
+            metadata["embedding_dim"] = int(self.embedding_dim)
+        return metadata
+
+    def _get_collection(self, namespace: str) -> Optional[chromadb.Collection]:
+        if namespace is None:
+            return None
+        with self._lock:
+            if not self.collections or "user_memory" not in self.collections:
+                try:
+                    self._switch_session_unlocked(self.session_id)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to reinitialize collections for session {self.session_id}: {e}"
+                    )
+                    return None
+            coll = self.collections.get(namespace)
+            if coll is not None:
+                return coll
+            return self.collections.get("user_memory")
+
+    def _chroma_error_reason(self, error: Exception) -> Optional[str]:
+        if isinstance(error, InvalidDimensionException):
+            return "embedding dimension mismatch"
+        msg = str(error).lower()
+        if "dimension" in msg and "collection dimensionality" in msg:
+            return "embedding dimension mismatch"
+        if "unable to open database file" in msg:
+            return "unable to open database file"
+        if "tenant" in msg or "no such table: tenants" in msg:
+            return "tenant/schema error"
+        return None
+
+    def _recreate_chroma_db(self, reason: str) -> None:
+        session_dir = get_session_dir(self.session_id, create=True)
+        chroma_dir = os.path.join(session_dir, "chroma_db")
+        logger.warning(
+            f"ChromaDB issue detected ({reason}). Recreating database at {chroma_dir}..."
+        )
+        if os.path.exists(chroma_dir):
+            shutil.rmtree(chroma_dir, ignore_errors=True)
+        os.makedirs(chroma_dir, exist_ok=True)
+        self._switch_session_unlocked(self.session_id)
+
     def _switch_session_unlocked(self, session_id: str) -> None:
         """Rebind client/collections to a different session (caller must hold lock)."""
         self.session_id = session_id
         session_dir = get_session_dir(session_id, create=True)
         chroma_dir = os.path.join(session_dir, "chroma_db")
         os.makedirs(chroma_dir, exist_ok=True)
+
+        config = self._read_embedding_config(chroma_dir)
+        if config and not self._embedding_config_matches(config):
+            logger.warning(
+                f"ChromaDB at {chroma_dir} uses a different embedding config. Recreating database..."
+            )
+            if os.path.exists(chroma_dir):
+                shutil.rmtree(chroma_dir, ignore_errors=True)
+            os.makedirs(chroma_dir, exist_ok=True)
 
         # Try to initialize ChromaDB client, handling corrupted/incompatible databases
         try:
@@ -300,13 +431,9 @@ class MemoryRetriever:
         for ns in self.supported_namespaces:
             self.collections[ns] = self.client.get_or_create_collection(
                 name=f"agent_memory_{ns}",
-                metadata={
-                    "hnsw:space": "cosine",
-                    "hnsw:construction_ef": 64,
-                    "hnsw:search_ef": 100,
-                    "hnsw:M": 12,
-                },
+                metadata=self._build_collection_metadata(),
             )
+        self._write_embedding_config(chroma_dir)
         # Sync namespace counters with existing persisted collections so searches
         # don't incorrectly report empty memory on fresh process/session loads.
         try:
@@ -914,11 +1041,14 @@ Explanations: {formatted_explanations}
             return
 
         # Embed the text and add to collection
-        collection = self.collections.get(namespace, self.collections["user_memory"])
+        collection = self._get_collection(namespace)
+        if collection is None:
+            logger.warning(f"ChromaDB collection missing for namespace '{namespace}'")
+            return
 
-        with self._lock:
-            embedding = self.embeddings.embed_documents([page_content])[0]
-            try:
+        embedding = self.embeddings.embed_documents([page_content])[0]
+        try:
+            with self._lock:
                 collection.add(
                     ids=[id],
                     documents=[page_content],
@@ -926,44 +1056,16 @@ Explanations: {formatted_explanations}
                     embeddings=[embedding],
                 )
                 self._increase_namespace_count(namespace, 1)
-            except Exception as e:
-                msg = str(e).lower()
-                # Handle transient sqlite open errors and tenant/database schema errors
-                if (
-                    "unable to open database file" in msg
-                    or "tenant" in msg
-                    or "no such table: tenants" in msg
-                ):
-                    try:
-                        session_dir = get_session_dir(self.session_id, create=True)
-                        chroma_dir = os.path.join(session_dir, "chroma_db")
-
-                        # If tenant error, remove corrupted database
-                        if "tenant" in msg or "no such table: tenants" in msg:
-                            logger.warning(
-                                f"ChromaDB database corrupted during operation. Recreating..."
-                            )
-                            if os.path.exists(chroma_dir):
-                                shutil.rmtree(chroma_dir, ignore_errors=True)
-
-                        os.makedirs(chroma_dir, exist_ok=True)
-                        self.client = chromadb.PersistentClient(path=chroma_dir)
-                        # Rebind collections
-                        self.collections = {}
-                        for ns in self.supported_namespaces:
-                            self.collections[ns] = self.client.get_or_create_collection(
-                                name=f"agent_memory_{ns}",
-                                metadata={
-                                    "hnsw:space": "cosine",
-                                    "hnsw:construction_ef": 100,
-                                    "hnsw:search_ef": 100,
-                                    "hnsw:M": 16,
-                                },
-                            )
-                        # Retry once
-                        collection = self.collections.get(
-                            namespace, self.collections["user_memory"]
-                        )
+        except Exception as e:
+            reason = self._chroma_error_reason(e)
+            if reason:
+                try:
+                    with self._lock:
+                        self._recreate_chroma_db(reason)
+                    collection = self._get_collection(namespace)
+                    if collection is None:
+                        return
+                    with self._lock:
                         collection.add(
                             ids=[id],
                             documents=[page_content],
@@ -971,13 +1073,13 @@ Explanations: {formatted_explanations}
                             embeddings=[embedding],
                         )
                         self._increase_namespace_count(namespace, 1)
-                    except Exception as e2:
-                        logger.warning(
-                            f"Retry add failed for namespace '{namespace}' due to DB error: {e2}"
-                        )
-                        return
-                else:
-                    raise
+                except Exception as e2:
+                    logger.warning(
+                        f"Retry add failed for namespace '{namespace}' due to DB error: {e2}"
+                    )
+                    return
+            else:
+                raise
 
     def _search_vector_store(
         self,
@@ -994,14 +1096,24 @@ Explanations: {formatted_explanations}
         if namespace is None:
             return []
 
-        collection = self.collections.get(namespace, self.collections["user_memory"])
+        collection = self._get_collection(namespace)
+        if collection is None:
+            return []
 
         query_embedding = self.embeddings.embed_query(query)
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=k,
-            where=filter,
-        )
+        try:
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=k,
+                where=filter,
+            )
+        except Exception as e:
+            reason = self._chroma_error_reason(e)
+            if reason:
+                with self._lock:
+                    self._recreate_chroma_db(reason)
+                return []
+            raise
 
         # Convert results to Document objects for compatibility
         documents = []
@@ -1016,7 +1128,9 @@ Explanations: {formatted_explanations}
             logger.warning(f"No namespace provided for {id}")
             return
 
-        collection = self.collections.get(namespace, self.collections["user_memory"])
+        collection = self._get_collection(namespace)
+        if collection is None:
+            return
         with self._lock:
             collection.delete(ids=[id])
             self._decrease_namespace_count(namespace, 1)
