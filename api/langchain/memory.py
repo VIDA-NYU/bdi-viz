@@ -465,7 +465,7 @@ class MemoryRetriever:
         """Batch insert schema properties with dedup and trimmed content."""
         if not properties:
             return
-        coll = self.collections.get("schema")
+        coll = self._get_collection("schema")
         if coll is None:
             return
         ids: List[str] = []
@@ -539,6 +539,29 @@ class MemoryRetriever:
                     )
                     self._increase_namespace_count("schema", len(batch_ids))
             except Exception as e:
+                reason = self._chroma_error_reason(e)
+                if reason:
+                    try:
+                        with self._lock:
+                            self._recreate_chroma_db(reason)
+                        coll = self._get_collection("schema")
+                        if coll is None:
+                            return
+                        vecs = self.embeddings.embed_documents(batch_docs)
+                        with self._lock:
+                            coll.add(
+                                ids=batch_ids,
+                                documents=batch_docs,
+                                metadatas=batch_metas,
+                                embeddings=vecs,
+                            )
+                            self._increase_namespace_count("schema", len(batch_ids))
+                        continue
+                    except Exception as e2:
+                        logger.warning(
+                            f"Retry batch add failed for schema namespace due to DB error: {e2}"
+                        )
+                        return
                 logger.warning(f"Failed to batch add schema items: {e}")
 
     def get_validation_tools(self, with_memory: bool):
