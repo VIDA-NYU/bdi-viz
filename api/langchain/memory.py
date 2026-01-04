@@ -22,6 +22,16 @@ logging.getLogger("chromadb.db.duckdb").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
+def _clear_chroma_system_cache(chroma_dir: str) -> None:
+    """Drop cached Chroma system for a persistent path so migrations can re-run."""
+    try:
+        from chromadb.api.shared_system_client import SharedSystemClient
+
+        SharedSystemClient._identifier_to_system.pop(os.path.abspath(chroma_dir), None)
+    except Exception:
+        pass
+
+
 FN_CANDIDATES = [
     {
         "sourceColumn": "Tumor_Site",
@@ -149,13 +159,13 @@ class MemoryRetriever:
     def __init__(self, session_id: str = "default"):
         self.session_id = session_id
         self._lock = threading.RLock()
-        # Use shared embeddings model across sessions to avoid duplication
-        embeddings = get_shared_embeddings()
+        self._embeddings_lock = threading.Lock()
+        # Load embeddings lazily to avoid slow startup when memory isn't used.
+        self._embeddings: Optional[HuggingFaceEmbeddings] = None
         self.embedding_model_name = os.getenv(
             "EMBED_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2"
         )
-        self.embeddings = embeddings
-        self.embedding_dim = self._infer_embedding_dim()
+        self.embedding_dim = 0
 
         self.namespace_counts = {
             "candidates": 0,
@@ -271,9 +281,32 @@ class MemoryRetriever:
             """.strip(),
         )
 
-    def _infer_embedding_dim(self) -> int:
+    def _get_embeddings(self) -> HuggingFaceEmbeddings:
+        if self._embeddings is None:
+            with self._embeddings_lock:
+                if self._embeddings is None:
+                    self._embeddings = get_shared_embeddings()
+                    if not self.embedding_dim:
+                        self.embedding_dim = self._infer_embedding_dim(self._embeddings)
+                        self._refresh_embedding_config()
+        return self._embeddings
+
+    def _refresh_embedding_config(self) -> None:
+        if not self.embedding_dim and not self.embedding_model_name:
+            return
         try:
-            vec = self.embeddings.embed_query("embedding-dim-probe")
+            session_dir = get_session_dir(self.session_id, create=True)
+            chroma_dir = os.path.join(session_dir, "chroma_db")
+            self._write_embedding_config(chroma_dir)
+        except Exception:
+            pass
+
+    def _infer_embedding_dim(
+        self, embeddings: Optional[HuggingFaceEmbeddings] = None
+    ) -> int:
+        try:
+            embedder = embeddings or self._embeddings or get_shared_embeddings()
+            vec = embedder.embed_query("embedding-dim-probe")
             return len(vec)
         except Exception:
             return 0
@@ -382,6 +415,7 @@ class MemoryRetriever:
         logger.warning(
             f"ChromaDB issue detected ({reason}). Recreating database at {chroma_dir}..."
         )
+        _clear_chroma_system_cache(chroma_dir)
         if os.path.exists(chroma_dir):
             shutil.rmtree(chroma_dir, ignore_errors=True)
         os.makedirs(chroma_dir, exist_ok=True)
@@ -399,9 +433,16 @@ class MemoryRetriever:
             logger.warning(
                 f"ChromaDB at {chroma_dir} uses a different embedding config. Recreating database..."
             )
+            _clear_chroma_system_cache(chroma_dir)
             if os.path.exists(chroma_dir):
                 shutil.rmtree(chroma_dir, ignore_errors=True)
             os.makedirs(chroma_dir, exist_ok=True)
+            config = None
+        if config and not self.embedding_dim:
+            try:
+                self.embedding_dim = int(config.get("embedding_dim", 0) or 0)
+            except Exception:
+                pass
 
         # Try to initialize ChromaDB client, handling corrupted/incompatible databases
         try:
@@ -416,6 +457,7 @@ class MemoryRetriever:
                 )
                 try:
                     # Remove corrupted database directory
+                    _clear_chroma_system_cache(chroma_dir)
                     if os.path.exists(chroma_dir):
                         shutil.rmtree(chroma_dir, ignore_errors=True)
                     os.makedirs(chroma_dir, exist_ok=True)
@@ -528,7 +570,7 @@ class MemoryRetriever:
             batch_metas = [metas[j] for j in batch_indices]
             try:
                 # Perform embedding outside of lock to avoid blocking other writes
-                vecs = self.embeddings.embed_documents(batch_docs)
+                vecs = self._get_embeddings().embed_documents(batch_docs)
                 # Lock only around the collection add and counter update
                 with self._lock:
                     coll.add(
@@ -547,7 +589,7 @@ class MemoryRetriever:
                         coll = self._get_collection("schema")
                         if coll is None:
                             return
-                        vecs = self.embeddings.embed_documents(batch_docs)
+                        vecs = self._get_embeddings().embed_documents(batch_docs)
                         with self._lock:
                             coll.add(
                                 ids=batch_ids,
@@ -1069,7 +1111,7 @@ Explanations: {formatted_explanations}
             logger.warning(f"ChromaDB collection missing for namespace '{namespace}'")
             return
 
-        embedding = self.embeddings.embed_documents([page_content])[0]
+        embedding = self._get_embeddings().embed_documents([page_content])[0]
         try:
             with self._lock:
                 collection.add(
@@ -1123,7 +1165,7 @@ Explanations: {formatted_explanations}
         if collection is None:
             return []
 
-        query_embedding = self.embeddings.embed_query(query)
+        query_embedding = self._get_embeddings().embed_query(query)
         try:
             results = collection.query(
                 query_embeddings=[query_embedding],
@@ -1193,6 +1235,13 @@ def get_memory_retriever(session_id: str = "default") -> MemoryRetriever:
 
 def delete_memory_retriever(session_id: str = "default"):
     global _SESSION_STORES
+    chroma_dir = None
+    try:
+        chroma_dir = os.path.join(
+            get_session_dir(session_id, create=False), "chroma_db"
+        )
+    except Exception:
+        chroma_dir = None
     with _SESSION_LOCK:
         store = _SESSION_STORES.pop(session_id, None)
         if store is not None:
@@ -1206,4 +1255,6 @@ def delete_memory_retriever(session_id: str = "default"):
                 store.client = None
             except Exception:
                 pass
+    if chroma_dir:
+        _clear_chroma_system_cache(chroma_dir)
     return None

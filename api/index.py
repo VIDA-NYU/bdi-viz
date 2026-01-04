@@ -836,6 +836,13 @@ def matching_status():
             "taskState": task_state,
         }
     elif task.state == "SUCCESS":
+        if isinstance(task.result, dict) and task.result.get("status") == "failed":
+            response = {
+                "status": "failed",
+                "message": task.result.get("message", "Task failed"),
+                "taskState": task_state,
+            }
+            return response
         source = load_source_df(session)
         target = load_target_df(session)
         matching_task.update_dataframe(source_df=source, target_df=target)
