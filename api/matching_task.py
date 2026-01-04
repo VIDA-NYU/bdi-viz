@@ -29,6 +29,22 @@ from .utils import (
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
+# JSON serializer for numpy/pandas types used in cached results.
+def _json_default(value: Any) -> Any:
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (pd.Timestamp, np.datetime64)):
+        return str(value)
+    if isinstance(value, set):
+        return list(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
 # Default matcher names
 DEFAULT_MATCHER_NAMES = [
     "magneto_ft",
@@ -1107,7 +1123,7 @@ class MatchingTask:
             # Acquire exclusive lock
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             try:
-                json.dump(json_obj, f, indent=4)
+                json.dump(json_obj, f, indent=4, default=_json_default)
                 # Ensure data is written to disk
                 f.flush()
                 os.fsync(f.fileno())
@@ -1176,8 +1192,13 @@ class MatchingTask:
     def sync_cache(self) -> None:
         """Sync the cache with the current state of the task."""
         cached_json = self._import_cache_from_json()
-        self.cached_candidates = cached_json
-        logger.info("Cache synced with current state of the task.")
+        if cached_json:
+            self.cached_candidates = cached_json
+            logger.info("Cache synced with current state of the task.")
+            return
+        logger.warning("Cache sync skipped; cached file missing or invalid.")
+        if not self.cached_candidates:
+            self._initialize_cache()
 
     def _bucket_column(self, df: pd.DataFrame, col: str) -> List[Dict[str, Any]]:
         col_obj = df[col].dropna()

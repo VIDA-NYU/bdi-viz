@@ -13,7 +13,7 @@ import {
   TableHead,
   TableRow,
 } from "@mui/material";
-import { alpha } from "@mui/material/styles";
+import { alpha, lighten } from "@mui/material/styles";
 import {
   RadarChart,
   PolarGrid,
@@ -92,17 +92,18 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
   const CARD_BG = "#1a2332";
   const TICK_COLOR = alpha("#ffffff", 0.92);
 
+  const matcherColorMap = useMemo(() => {
+    return getMatcherColorMap(matcherAnalysis.map((matcher) => matcher.name));
+  }, [matcherAnalysis]);
+
   // Generate colors once for all matchers
   const matcherSeries = useMemo(() => {
-    const colorMap = getMatcherColorMap(
-      matcherAnalysis.map((matcher) => matcher.name)
-    );
     return matcherAnalysis.map((matcher) => ({
       name: matcher.name,
-      color: colorMap.get(matcher.name) ?? "#5f9cff",
+      color: matcherColorMap.get(matcher.name) ?? "#5f9cff",
       dataKey: matcher.name,
     }));
-  }, [matcherAnalysis]);
+  }, [matcherAnalysis, matcherColorMap]);
 
   const metricColors = useMemo(() => {
     // Yellow -> Green -> Blue-ish, as requested.
@@ -123,6 +124,15 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
       const y = Number(props?.y ?? 0);
       const value =
         props?.payload?.value != null ? String(props.payload.value) : "";
+      const payloadMatcher = props?.payload?.payload?.matcher;
+      const matcherName =
+        typeof payloadMatcher === "string"
+          ? payloadMatcher
+          : value.replace(/^\d+\.\s*/, "");
+      const baseColor = matcherColorMap.get(matcherName);
+      const tickColor = baseColor
+        ? lighten(baseColor, 0.12)
+        : TICK_COLOR;
       const label = truncate(value, 18);
 
       return (
@@ -132,15 +142,18 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
             y={0}
             dy={3}
             textAnchor="end"
-            fill={TICK_COLOR}
+            fill={tickColor}
             fontSize={11}
+            paintOrder="stroke"
+            stroke={alpha(CARD_BG, 0.9)}
+            strokeWidth={2}
           >
             {label}
           </text>
         </g>
       );
     },
-    [TICK_COLOR]
+    [CARD_BG, TICK_COLOR, matcherColorMap]
   );
 
   // Transform data for radar chart
