@@ -1269,6 +1269,20 @@ def new_matcher():
     return {"task_id": task.id}
 
 
+@app.route("/api/matcher/delete", methods=["POST"])
+def delete_matcher():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+    data = request.json or {}
+    name = data.get("name")
+    if not name:
+        return {"message": "failure", "error": "Matcher name is required."}, 400
+    error, matchers = matching_task.delete_matcher(name)
+    if error:
+        return {"message": "failure", "error": error}, 400
+    return {"message": "success", "matchers": matchers}
+
+
 # ----------------------
 # Session-scoped cell comments API
 # ----------------------

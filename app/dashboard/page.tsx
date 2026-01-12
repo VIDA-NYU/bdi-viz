@@ -20,6 +20,7 @@ import {
     createCandidate,
     deleteCandidate,
     getCachedResults,
+    deleteMatcher,
     updateMatchers,
 } from '@/app/lib/heatmap/heatmap-helper';
 
@@ -332,6 +333,21 @@ export default function Dashboard() {
         });
     }, [handleMatchers]);
 
+    const deleteMatcherHandler = useCallback(async (matcherName: string) => {
+        try {
+            await deleteMatcher({
+                name: matcherName,
+                callback: handleMatchers,
+            });
+            toastify("success", <p>Matcher deleted successfully!</p>);
+            getCachedResults({ callback: handleFileUpload });
+        } catch (error) {
+            console.error("Failed to delete matcher:", error);
+            toastify("error", <p>Failed to delete matcher.</p>);
+            throw error;
+        }
+    }, [handleMatchers, handleFileUpload]);
+
     const handleCreateCandidate = useCallback((candidate: Candidate) => {
         createCandidate({
             candidate,
@@ -447,6 +463,7 @@ export default function Dashboard() {
                     redo={redo}
                     exportMatchingResults={exportMatchingResults}
                     onMatchersSelect={matchersSelectHandler}
+                    onMatcherDelete={deleteMatcherHandler}
                     state={{ sourceColumns, candidateType, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleNewMatchingTask}

@@ -18,6 +18,7 @@ interface LeftPanelProps {
     onCandidateTypeSelect: (dataType: string) => void;
     onCandidateThresholdSelect: (num: number) => void;
     onMatchersSelect: (matchers: Matcher[]) => void;
+    onMatcherDelete?: (matcherName: string) => Promise<void>;
     state: {
         sourceColumns: string[];
         candidateType: string;
@@ -62,6 +63,7 @@ const LeftPanel = ({
     onCandidateTypeSelect,
     onCandidateThresholdSelect,
     onMatchersSelect,
+    onMatcherDelete,
     state,
     // DecisionPanel Props
     acceptMatch,
@@ -112,6 +114,7 @@ const LeftPanel = ({
                 onCandidateThresholdSelect={onCandidateThresholdSelect}
                 onMatchersSelect={onMatchersSelect}
                 onDefaultMatchersUpdate={onDefaultMatchersUpdate}
+                onMatcherDelete={onMatcherDelete}
                 state={state}
             />
             {/* <DecisionPanel
