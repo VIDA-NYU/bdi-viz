@@ -22,6 +22,7 @@ logging.getLogger("chromadb.db.duckdb").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
+
 def _clear_chroma_system_cache(chroma_dir: str) -> None:
     """Drop cached Chroma system for a persistent path so migrations can re-run."""
     try:

@@ -85,6 +85,7 @@ def create_app() -> Flask:
     app.config.from_prefixed_env()
     celery_init_app(app)
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
+    app.config["MAX_FORM_MEMORY_SIZE"] = 1024 * 1024 * 1024
     app.logger.setLevel(logging.INFO)
     # Constrain thread pools for numerical/BLAS libs to reduce CPU/memory spikes
     try:

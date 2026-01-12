@@ -9,6 +9,9 @@ from .utils import BaseMatcher
 
 ALLOWED_BDI_MATCHERS = [
     "ct_learning",
+    "jaccard_distance",
+    "cupid",
+    "coma",
     "magneto_zs_bp",
     "magneto_ft_bp",
     "magneto_zs_llm",
