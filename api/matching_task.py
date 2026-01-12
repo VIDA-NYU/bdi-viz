@@ -75,7 +75,9 @@ def _create_default_matcher_metadata(weight: float = 1.0) -> Dict[str, Dict[str,
     }
 
 
-def _normalize_matcher_weights(matchers: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _normalize_matcher_weights(
+    matchers: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
     total_weight = sum(matcher.get("weight", 0) for matcher in matchers.values())
     if total_weight > 0:
         for matcher in matchers.values():
@@ -2011,8 +2013,10 @@ class MatchingTask:
 
             if self.weight_updater:
                 self.weight_updater.matchers = self.cached_candidates["matchers"]
-                self.weight_updater.candidates = self.weight_updater._preprocess_candidates(
-                    self.cached_candidates.get("candidates", [])
+                self.weight_updater.candidates = (
+                    self.weight_updater._preprocess_candidates(
+                        self.cached_candidates.get("candidates", [])
+                    )
                 )
                 self.weight_updater._normalize_weights()
                 self.cached_candidates["matchers"] = self.weight_updater.matchers
