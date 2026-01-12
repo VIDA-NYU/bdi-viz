@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { cachedExplanationSummariesRequest } from '@/app/lib/langchain/agent-helper';
 
 type matcherAnalysisState = {
@@ -11,14 +11,18 @@ type matcherAnalysisProps = {
     enabled?: boolean;
 }
 
-export const useMatcherAnalysis = ({ 
-    candidates, 
-    matchers, 
-    enabled = true 
+export const useMatcherAnalysis = ({
+    candidates,
+    matchers,
+    enabled = true,
 }: matcherAnalysisProps): matcherAnalysisState => {
     const [groundTruth, setGroundTruth] = useState<Candidate[]>([]);
     const [matcherMetrics, setMatcherMetrics] = useState<MatcherAnalysis[]>([]);
     const explanationRequestIdRef = useRef(0);
+    const enabledMatchers = useMemo(
+        () => matchers.filter((matcher) => matcher.enabled ?? true),
+        [matchers]
+    );
 
     // Effect to update ground truth when candidates change
     useEffect(() => {
@@ -47,12 +51,12 @@ export const useMatcherAnalysis = ({
     useEffect(() => {
         if (!enabled) return;
         
-        if (!matchers.length || !candidates.length || !groundTruth.length) {
+        if (!enabledMatchers.length || !candidates.length || !groundTruth.length) {
             setMatcherMetrics([]);
             return;
         }
         
-        const metrics: MatcherAnalysis[] = matchers.map((matcher) => {
+        const metrics: MatcherAnalysis[] = enabledMatchers.map((matcher) => {
             // Calculate metrics using candidates if available
             const {mrr, recall, f1, falsePositives, falseNegatives} = calculateMetrics(matcher.name, candidates, groundTruth);
             return {
@@ -75,7 +79,7 @@ export const useMatcherAnalysis = ({
         (async () => {
             const explanationBreakdowns = await calculateExplanationBreakdowns({
                 candidates,
-                matchers,
+                matchers: enabledMatchers,
                 groundTruth,
             });
 
@@ -88,7 +92,7 @@ export const useMatcherAnalysis = ({
                 }))
             );
         })();
-    }, [candidates, groundTruth, matchers, enabled]);
+    }, [candidates, groundTruth, enabledMatchers, enabled]);
 
     return { matcherMetrics };
 }
