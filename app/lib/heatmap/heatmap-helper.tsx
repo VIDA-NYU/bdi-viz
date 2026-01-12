@@ -316,6 +316,26 @@ const getMatchers = (prop: getMatchersProps) => {
     );
 };
 
+interface updateMatchersProps {
+    matchers: Matcher[];
+    callback: (matchers: Matcher[]) => void;
+    signal?: AbortSignal;
+}
+
+const updateMatchers = (prop: updateMatchersProps) => {
+    return makeApiRequest<void>(
+        "/api/matchers/update",
+        { matchers: prop.matchers, session_name: getSessionName() },
+        prop.signal,
+        (data) => {
+            const matchers = parseArray<Matcher>(data?.matchers, "Matcher");
+            console.log("updateMatchers finished!", matchers);
+            prop.callback(matchers);
+            return;
+        }
+    );
+};
+
 interface getUniqueValuesProps {
     callback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     signal?: AbortSignal;
@@ -906,6 +926,7 @@ export {
     pollForMatchingStatus,
     getCachedResults, 
     getMatchers,
+    updateMatchers,
     getValueBins, 
     getValueMatches, 
     getUserOperationHistory, 

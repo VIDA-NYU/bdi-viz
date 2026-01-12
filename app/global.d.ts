@@ -121,6 +121,7 @@ declare interface Matcher {
     weight: number;
     params?: object;
     code?: string;
+    enabled?: boolean;
 }
 
 declare interface GDCAttribute {

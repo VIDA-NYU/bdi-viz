@@ -13,6 +13,7 @@
     "flask-start": "python3 -m flask --app api/index run -p 5328",
     "dev": "concurrently \"pnpm run next-dev\" \"pnpm run flask-dev\" \"pnpm run redis-server\" \"pnpm run celery-dev\"",
     "start": "concurrently \"pnpm run next-start\" \"pnpm run flask-start\" \"pnpm run redis-server\" \"pnpm run celery-start\" \"pnpm run celery-ontology\"",
+    "stop": "sh -c \"celery -A api.index.celery control shutdown || true; pkill -f 'celery -A api.index.celery worker' || true\"",
     "build": "pip3 install -U pip && pip3 install -r requirements.txt --break-system-packages && next build",
     "lint": "next lint",
     "test": "jest"

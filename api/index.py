@@ -484,7 +484,7 @@ def infer_source_ontology_task(self, session):
 
         agent = get_agent(session)
         properties = []
-        total_batches = len(source.columns) // 5 + 1
+        total_batches = max(1, (len(source.columns) + 4) // 5)
         for i, (_slice, ontology) in enumerate(agent.infer_ontology(source)):
             ontology = ontology.model_dump()
             properties += ontology.get("properties", [])
@@ -584,7 +584,7 @@ def infer_target_ontology_task(self, session):
 
         agent = get_agent(session)
         properties = []
-        total_batches = len(target.columns) // 5 + 1
+        total_batches = max(1, (len(target.columns) + 4) // 5)
         for i, (_slice, ontology) in enumerate(agent.infer_ontology(target)):
             ontology = ontology.model_dump()
             properties += ontology.get("properties", [])
@@ -1201,6 +1201,18 @@ def get_matchers():
             matching_task.update_dataframe(source_df=source, target_df=target)
     matchers = matching_task.get_matchers()
     return {"message": "success", "matchers": matchers}
+
+
+@app.route("/api/matchers/update", methods=["POST"])
+def update_matchers():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+    data = request.json or {}
+    matchers = data.get("matchers")
+    if not isinstance(matchers, list):
+        return {"message": "failure", "error": "Invalid matchers payload"}, 400
+    updated = matching_task.update_matchers(matchers)
+    return {"message": "success", "matchers": updated}
 
 
 @celery.task(bind=True, name="api.index.run_new_matcher_task", queue="new_matcher")

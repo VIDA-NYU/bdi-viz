@@ -16,7 +16,12 @@ import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
 import NewMatcherDialog from "./components/matcher-card/newMatcher";
 import OntologySearchPopup from "./components/ontology-search/ontologySearchPopup";
-import { createCandidate, deleteCandidate, getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
+import {
+    createCandidate,
+    deleteCandidate,
+    getCachedResults,
+    updateMatchers,
+} from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
 import { useDashboardCandidates } from "./hooks/useDashboardCandidates";
@@ -317,6 +322,16 @@ export default function Dashboard() {
         handleMatchers(matchers);
     }, [handleMatchers]);
 
+    const defaultMatchersUpdateHandler = useCallback((nextMatchers: Matcher[]) => {
+        handleMatchers(nextMatchers);
+        updateMatchers({
+            matchers: nextMatchers,
+            callback: handleMatchers,
+        }).catch((error) => {
+            console.error("Failed to update default matchers:", error);
+        });
+    }, [handleMatchers]);
+
     const handleCreateCandidate = useCallback((candidate: Candidate) => {
         createCandidate({
             candidate,
@@ -441,6 +456,7 @@ export default function Dashboard() {
                     handleValueMatches={handleValueMatches}
                     handleUserOperationsUpdate={handleUserOperationsUpdate}
                     setOpenNewMatcherDialog={setOpenNewMatcherDialog}
+                    onDefaultMatchersUpdate={defaultMatchersUpdateHandler}
                 />
 
                 {/* Middle Column - Main Visualizations */}

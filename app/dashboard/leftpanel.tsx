@@ -44,6 +44,7 @@ interface LeftPanelProps {
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
     handleUserOperationsUpdate: (userOperations: UserOperation[]) => void;
     setOpenNewMatcherDialog: (open: boolean) => void;
+    onDefaultMatchersUpdate: (matchers: Matcher[]) => void;
 }
 
 const ShortcutPanelMemo = memo(ShortcutPanel);
@@ -80,6 +81,7 @@ const LeftPanel = ({
     handleUserOperationsUpdate,
     // New Matcher Props
     setOpenNewMatcherDialog,
+    onDefaultMatchersUpdate,
 }: LeftPanelProps) => {
 
     return (
@@ -109,6 +111,7 @@ const LeftPanel = ({
                 onCandidateTypeSelect={onCandidateTypeSelect}
                 onCandidateThresholdSelect={onCandidateThresholdSelect}
                 onMatchersSelect={onMatchersSelect}
+                onDefaultMatchersUpdate={onDefaultMatchersUpdate}
                 state={state}
             />
             {/* <DecisionPanel

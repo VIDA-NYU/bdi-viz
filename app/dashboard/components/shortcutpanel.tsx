@@ -166,6 +166,7 @@ const ShortcutPanel: React.FC<ShortcutPanelProps> = ({
             <NewMatcherButton onClick={() => setOpenNewMatcherDialog(true)} />
           </ShortcutGroup>
         )}
+
       </Box>
     </>
   );
