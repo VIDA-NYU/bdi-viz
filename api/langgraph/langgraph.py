@@ -447,7 +447,7 @@ class LangGraphAgent:
            - New candidate search → route to ["ontology"]
            - Candidate operations → route to ["candidate"]
            - Rerank/rescore → route to ["candidate"], pass the candidates list to the candidate agent as well
-           - Task operations → route to ["task"] (e.g. new task, new matcher, update node filter)
+           - Task operations → route to ["task"] (e.g. new task, new matcher, update node filter, delete matcher, matcher analysis/diagnosis)
            - Value mapping/normalization/conversion (e.g., "map values", "normalize codes", "convert units", "apply lambda", "value mapping") → route to ["value"]
            - Information requests → handle directly, set next_agents = []
            - Unclear intent → ask clarification, set next_agents = []
@@ -685,6 +685,16 @@ class RapidFuzzMatcher():
                - name: the name of the new matcher object (e.g. "PubMedBERTMatcher")
                - code: the python code snippet for the new matcher
                - params: the additional parameters for the new matcher
+        4. **Delete Matcher**:
+           - Use `delete_matcher` with the matcher name to remove a custom matcher.
+           - Only delete when the user explicitly requests it and the matcher name is clear.
+        5. **Matcher Analysis & Diagnosis**:
+           - Use `read_matcher_analysis` to fetch metrics for enabled matchers by default.
+           - Metrics align with the UI (Ranked Breakdown): `total = mrr + precision + f1`.
+           - Interpret results: low recall → missing coverage; low precision → noisy matches;
+             high MRR but low recall → few correct top-ranked hits; high total → balanced.
+           - Use false-positive/false-negative samples to explain concrete issues.
+           - If requested, include disabled matchers by setting `include_disabled = True`.
         
         TASK ID HANDLING:
             - When a tool returns a task ID, extract it from the response message.
