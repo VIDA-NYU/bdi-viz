@@ -1,4 +1,4 @@
-import { useMemo, useCallback, Fragment } from "react";
+import { useMemo, useCallback, useState, Fragment } from "react";
 import {
   Stack,
   Box,
@@ -91,6 +91,9 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
   const theme = useTheme();
   const CARD_BG = "#1a2332";
   const TICK_COLOR = alpha("#ffffff", 0.92);
+  const [rankMetric, setRankMetric] = useState<
+    "total" | "mrr" | "precision" | "f1"
+  >("total");
 
   const matcherColorMap = useMemo(() => {
     return getMatcherColorMap(matcherAnalysis.map((matcher) => matcher.name));
@@ -117,6 +120,21 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
     theme.palette.success.main,
     theme.palette.warning.main,
   ]);
+
+  const rankingOptions = useMemo(
+    () => [
+      { key: "total" as const, label: "Total", color: theme.palette.primary.main },
+      { key: "mrr" as const, label: "MRR", color: metricColors.mrr },
+      { key: "precision" as const, label: "Precision", color: metricColors.precision },
+      { key: "f1" as const, label: "F1", color: metricColors.f1 },
+    ],
+    [metricColors, theme.palette.primary.main]
+  );
+
+  const rankingLabel = useMemo(() => {
+    const active = rankingOptions.find((option) => option.key === rankMetric);
+    return active?.label ?? "Total";
+  }, [rankMetric, rankingOptions]);
 
   const renderRotatedYAxisTick = useCallback(
     (props: any) => {
@@ -202,11 +220,29 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
         };
       })
       .sort((a, b) => {
-        if (b.f1 !== a.f1) return b.f1 - a.f1;
-        if (b.precision !== a.precision) return b.precision - a.precision;
-        return b.mrr - a.mrr;
+        switch (rankMetric) {
+          case "mrr":
+            if (b.mrr !== a.mrr) return b.mrr - a.mrr;
+            if (b.precision !== a.precision) return b.precision - a.precision;
+            return b.f1 - a.f1;
+          case "precision":
+            if (b.precision !== a.precision)
+              return b.precision - a.precision;
+            if (b.f1 !== a.f1) return b.f1 - a.f1;
+            return b.mrr - a.mrr;
+          case "f1":
+            if (b.f1 !== a.f1) return b.f1 - a.f1;
+            if (b.precision !== a.precision) return b.precision - a.precision;
+            return b.mrr - a.mrr;
+          case "total":
+          default:
+            if (b.total !== a.total) return b.total - a.total;
+            if (b.f1 !== a.f1) return b.f1 - a.f1;
+            if (b.precision !== a.precision) return b.precision - a.precision;
+            return b.mrr - a.mrr;
+        }
       });
-  }, [matcherAnalysis]);
+  }, [matcherAnalysis, rankMetric]);
 
   const rankedMetricDataWithRank = useMemo(() => {
     return rankedMetricData.map((row, idx) => ({
@@ -423,7 +459,7 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
                   color: alpha("#ffffff", 0.92),
                 }}
               >
-                Ranked Breakdown (MRR + Precision + F1)
+                Ranked Breakdown (sorted by {rankingLabel})
               </Typography>
               <Typography
                 variant="caption"
@@ -504,41 +540,60 @@ const MatcherView = ({ matcherAnalysis }: MatcherViewProps) => {
             </Box>
 
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, pt: 0.5 }}>
-              {[
-                { label: "MRR", color: metricColors.mrr },
-                { label: "Precision", color: metricColors.precision },
-                { label: "F1", color: metricColors.f1 },
-              ].map((item) => (
-                <Box
-                  key={`metric-${item.label}`}
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 0.75,
-                    px: 1,
-                    py: 0.5,
-                    borderRadius: 999,
-                    border: `1px solid ${alpha("#ffffff", 0.12)}`,
-                    backgroundColor: alpha(item.color, 0.16),
-                  }}
-                >
+              {rankingOptions.map((item) => {
+                const isActive = rankMetric === item.key;
+                return (
                   <Box
+                    key={`metric-${item.label}`}
+                    component="button"
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setRankMetric(item.key)}
                     sx={{
-                      width: 10,
-                      height: 10,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.75,
+                      px: 1,
+                      py: 0.5,
                       borderRadius: 999,
-                      backgroundColor: item.color,
-                      boxShadow: `0 0 0 3px ${alpha(item.color, 0.22)}`,
+                      border: `1px solid ${alpha(
+                        item.color,
+                        isActive ? 0.6 : 0.3
+                      )}`,
+                      backgroundColor: alpha(
+                        item.color,
+                        isActive ? 0.28 : 0.16
+                      ),
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      textTransform: "none",
+                      outline: "none",
+                      "&:hover": {
+                        backgroundColor: alpha(
+                          item.color,
+                          isActive ? 0.35 : 0.22
+                        ),
+                      },
                     }}
-                  />
-                  <Typography
-                    variant="caption"
-                    sx={{ color: alpha("#ffffff", 0.92) }}
                   >
-                    {item.label}
-                  </Typography>
-                </Box>
-              ))}
+                    <Box
+                      sx={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 999,
+                        backgroundColor: item.color,
+                        boxShadow: `0 0 0 3px ${alpha(item.color, 0.22)}`,
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{ color: alpha("#ffffff", 0.92) }}
+                    >
+                      {item.label}
+                    </Typography>
+                  </Box>
+                );
+              })}
             </Box>
           </Box>
 
