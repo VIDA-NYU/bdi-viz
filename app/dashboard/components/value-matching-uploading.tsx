@@ -54,20 +54,6 @@ const ValueMatchingUploading: React.FC<ValueMatchingUploadingProps> = ({
   const { setTaskStateFor } = useContext(SettingsGlobalContext);
   const [isVisible, setIsVisible] = useState(false);
 
-  const readFileAsync = (file: File | null): Promise<string | null> => {
-    return new Promise((resolve) => {
-      if (!file) {
-        resolve(null);
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = (e) => {
-        resolve(e.target?.result as string | null);
-      };
-      reader.readAsText(file);
-    });
-  };
-
   const handleOnSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -98,30 +84,18 @@ const ValueMatchingUploading: React.FC<ValueMatchingUploadingProps> = ({
         logs: [],
       } as TaskState);
 
-      const [sourceCsv, targetCsv, groundtruthCsv] = await Promise.all([
-        readFileAsync(sourceFile),
-        readFileAsync(targetCsvFile),
-        readFileAsync(groundtruthCsvFile),
-      ]);
+      uploadData.append("source_csv", sourceFile, sourceFile.name);
+      if (sourceFile?.name)
+        uploadData.append("source_csv_name", sourceFile.name);
+      if (sourceFile.size)
+        uploadData.append(
+          "source_csv_size",
+          `${(sourceFile.size / 1024).toFixed(2)} KB`
+        );
+      uploadData.append("source_csv_timestamp", new Date().toISOString());
 
-      if (!groundtruthCsv) {
-        toastify("error", "Failed to read ground truth CSV.");
-        return;
-      }
-
-      if (sourceCsv) {
-        uploadData.append("source_csv", sourceCsv);
-        if (sourceFile?.name)
-          uploadData.append("source_csv_name", sourceFile.name);
-        if (sourceFile.size)
-          uploadData.append(
-            "source_csv_size",
-            `${(sourceFile.size / 1024).toFixed(2)} KB`
-          );
-        uploadData.append("source_csv_timestamp", new Date().toISOString());
-      }
-      if (targetCsv) {
-        uploadData.append("target_csv", targetCsv);
+      if (targetCsvFile) {
+        uploadData.append("target_csv", targetCsvFile, targetCsvFile.name);
         if (targetCsvFile?.name)
           uploadData.append("target_csv_name", targetCsvFile.name);
         if (targetCsvFile?.size)
@@ -132,10 +106,17 @@ const ValueMatchingUploading: React.FC<ValueMatchingUploadingProps> = ({
         uploadData.append("target_csv_timestamp", new Date().toISOString());
       }
 
-      if (groundtruthCsv) {
-        uploadData.append("groundtruth_csv", groundtruthCsv);
+      if (groundtruthCsvFile) {
+        uploadData.append(
+          "groundtruth_csv",
+          groundtruthCsvFile,
+          groundtruthCsvFile.name
+        );
         if (groundtruthCsvFile?.name)
-          uploadData.append("groundtruth_csv_name", groundtruthCsvFile.name);
+          uploadData.append(
+            "groundtruth_csv_name",
+            groundtruthCsvFile.name
+          );
         if (groundtruthCsvFile?.size)
           uploadData.append(
             "groundtruth_csv_size",

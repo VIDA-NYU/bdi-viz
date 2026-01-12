@@ -29,6 +29,7 @@ from .utils import (
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
+
 # JSON serializer for numpy/pandas types used in cached results.
 def _json_default(value: Any) -> Any:
     if isinstance(value, np.integer):
@@ -45,13 +46,13 @@ def _json_default(value: Any) -> Any:
         return list(value)
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
+
 # Default matcher names
 DEFAULT_MATCHER_NAMES = [
     "magneto_ft",
     "magneto_zs",
     # "ct_learning",
-    # "jaccard_distance_matcher",
-    # "valentine",
+    "jaccard_distance",
 ]
 
 

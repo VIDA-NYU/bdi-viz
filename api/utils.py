@@ -7,7 +7,7 @@ import re
 import subprocess
 import sys
 import time
-from io import StringIO
+from io import StringIO, TextIOWrapper
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -88,54 +88,107 @@ def extract_data_from_request(request):
     groundtruth_mappings = None
 
     if request.form is None:
-        return None
+        return None, None, None, None, None
 
     form = request.form
 
-    type = form["type"]
-    if type == "csv_input":
-        source_csv = form["source_csv"]
-        source_csv_string_io = StringIO(source_csv)
-        source_df = pd.read_csv(source_csv_string_io, sep=",")
+    request_type = form.get("type")
+    if request_type == "csv_input":
+        files = request.files or {}
 
-        if "target_csv" in form:
-            target_csv = form["target_csv"]
-            target_csv_string_io = StringIO(target_csv)
-            target_df = pd.read_csv(target_csv_string_io, sep=",")
+        def _read_csv_field(field_name: str) -> Optional[pd.DataFrame]:
+            file_obj = files.get(field_name)
+            if file_obj and getattr(file_obj, "filename", ""):
+                try:
+                    file_obj.stream.seek(0)
+                except Exception:
+                    pass
+                text_stream = TextIOWrapper(
+                    file_obj.stream, encoding="utf-8", errors="replace"
+                )
+                return pd.read_csv(text_stream, sep=",")
+            if field_name in form:
+                csv_text = form[field_name]
+                return pd.read_csv(StringIO(csv_text), sep=",")
+            return None
 
-        if "target_json" in form:
-            target_json = form["target_json"]
-            target_json_string_io = StringIO(target_json)
-            target_raw = json.load(target_json_string_io)
-            valid, err = validate_flat_ontology_json(target_raw)
-            if valid:
-                target_json = target_raw
+        def _read_json_field(field_name: str) -> Optional[dict]:
+            file_obj = files.get(field_name)
+            if file_obj and getattr(file_obj, "filename", ""):
+                try:
+                    file_obj.stream.seek(0)
+                except Exception:
+                    pass
+                text_stream = TextIOWrapper(
+                    file_obj.stream, encoding="utf-8", errors="replace"
+                )
+                return json.load(text_stream)
+            if field_name in form:
+                raw_text = form[field_name]
+                return json.loads(raw_text)
+            return None
+
+        source_df = _read_csv_field("source_csv")
+        target_df = _read_csv_field("target_csv")
+
+        if "target_json" in form or ("target_json" in files):
+            try:
+                target_raw = _read_json_field("target_json")
+            except Exception as exc:
+                logger.error(f"Invalid target JSON schema: {exc}")
+                target_raw = None
+
+            if isinstance(target_raw, dict):
+                valid, err = validate_flat_ontology_json(target_raw)
+                if valid:
+                    target_json = target_raw
+                else:
+                    logger.error(f"Invalid target JSON schema: {err}")
+                    target_json = None
             else:
-                logger.error(f"Invalid target JSON schema: {err}")
                 target_json = None
+
             # If no target CSV was provided, synthesize a DataFrame from ontology JSON
             logger.critical("Synthesizing target DataFrame from ontology JSON")
             if target_df is None and isinstance(target_json, dict):
                 target_df = build_dataframe_from_ontology_json(target_json)
 
-        if "groundtruth_csv" in form:
-            groundtruth_csv = form["groundtruth_csv"]
-            groundtruth_csv_string_io = StringIO(groundtruth_csv)
-            # Preserve blanks as empty strings; avoid automatic NA parsing
-            groundtruth_df = pd.read_csv(
-                groundtruth_csv_string_io,
-                sep=",",
-                dtype=str,
-                keep_default_na=False,
-            )
-            # Prefer 4-column value mappings if present; otherwise fall back to 2-column pairs
-            try:
-                groundtruth_mappings = parse_ground_truth_mappings(groundtruth_df)
-                # Derive pairs from mappings for candidate generation
-                gt_pairs_set = set((s, t) for s, t, _, _ in groundtruth_mappings)
-                groundtruth_pairs = list(gt_pairs_set)
-            except Exception:
-                groundtruth_pairs = parse_ground_truth_pairs(groundtruth_df)
+        if "groundtruth_csv" in form or ("groundtruth_csv" in files):
+            file_obj = files.get("groundtruth_csv")
+            if file_obj and getattr(file_obj, "filename", ""):
+                try:
+                    file_obj.stream.seek(0)
+                except Exception:
+                    pass
+                text_stream = TextIOWrapper(
+                    file_obj.stream, encoding="utf-8", errors="replace"
+                )
+                # Preserve blanks as empty strings; avoid automatic NA parsing
+                groundtruth_df = pd.read_csv(
+                    text_stream, sep=",", dtype=str, keep_default_na=False
+                )
+            else:
+                groundtruth_csv = form.get("groundtruth_csv")
+                groundtruth_df = (
+                    pd.read_csv(
+                        StringIO(groundtruth_csv),
+                        sep=",",
+                        dtype=str,
+                        keep_default_na=False,
+                    )
+                    if groundtruth_csv
+                    else None
+                )
+
+            if groundtruth_df is not None:
+                # Prefer 4-column value mappings if present; otherwise fall back to 2-column pairs
+                try:
+                    groundtruth_mappings = parse_ground_truth_mappings(groundtruth_df)
+                    # Derive pairs from mappings for candidate generation
+                    gt_pairs_set = set((s, t) for s, t, _, _ in groundtruth_mappings)
+                    groundtruth_pairs = list(gt_pairs_set)
+                except Exception:
+                    groundtruth_pairs = parse_ground_truth_pairs(groundtruth_df)
 
     return source_df, target_df, target_json, groundtruth_pairs, groundtruth_mappings
 
