@@ -1,46 +1,73 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Box,
+  Button,
   Checkbox,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   FormGroup,
+  IconButton,
   Stack,
   Slider,
   Typography,
+  Tooltip,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 interface Matcher {
   name: string;
   weight: number;
   enabled?: boolean;
+  code?: string;
 }
 
 interface MatcherSelectionProps {
   matchers: Matcher[];
   onSlide: (matchers: Matcher[]) => void;
   onDefaultChange?: (matchers: Matcher[]) => void;
+  onMatcherDelete?: (matcherName: string) => Promise<void>;
 }
+
+const DEFAULT_MATCHER_NAMES = new Set([
+  "magneto_ft",
+  "magneto_zs",
+  "jaccard_distance",
+]);
 
 const MatcherSliders: React.FC<MatcherSelectionProps> = ({
   matchers,
   onSlide,
   onDefaultChange,
+  onMatcherDelete,
 }) => {
   const [sliderValues, setSliderValues] = useState<number[]>(
     matchers.map((matcher) => matcher.weight)
   );
   const lastEnabledWeightsRef = useRef<Map<string, number>>(new Map());
+  const [deleteTarget, setDeleteTarget] = useState<Matcher | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const totalWeight = sliderValues.reduce((sum, value) => sum + value, 0);
   const enabledCount = matchers.filter(
     (matcher) => matcher.enabled ?? true
   ).length;
   const CARD_BG = "#1a2332";
   const ACCENT = "#5f9cff";
+
+  const canDeleteMatcher = useMemo(() => {
+    return (matcher: Matcher) =>
+      Boolean(onMatcherDelete) &&
+      Boolean(matcher.code) &&
+      !DEFAULT_MATCHER_NAMES.has(matcher.name);
+  }, [onMatcherDelete]);
 
   useEffect(() => {
     setSliderValues(matchers.map((matcher) => matcher.weight));
@@ -115,7 +142,7 @@ const MatcherSliders: React.FC<MatcherSelectionProps> = ({
       return;
     }
 
-    const normalizedValues = newValues.map((v) => v / sum);
+      const normalizedValues = newValues.map((v) => v / sum);
 
     setSliderValues(normalizedValues);
     const newMatchers = matchers.map((matcher, i) => ({
@@ -123,6 +150,21 @@ const MatcherSliders: React.FC<MatcherSelectionProps> = ({
       weight: normalizedValues[i],
     }));
     onSlide(newMatchers);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget || !onMatcherDelete) return;
+    setIsDeleting(true);
+    setDeleteError("");
+    try {
+      await onMatcherDelete(deleteTarget.name);
+      lastEnabledWeightsRef.current.delete(deleteTarget.name);
+      setDeleteTarget(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -278,18 +320,49 @@ const MatcherSliders: React.FC<MatcherSelectionProps> = ({
                           />
                         }
                         label={
-                          <Typography
+                          <Box
                             sx={{
-                              fontSize: "0.75rem",
-                              color: alpha("#ffffff", 0.86),
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              maxWidth: 180,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 1,
+                              width: "100%",
                             }}
                           >
-                            {matcher.name}
-                          </Typography>
+                            <Typography
+                              sx={{
+                                fontSize: "0.75rem",
+                                color: alpha("#ffffff", 0.86),
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                maxWidth: 160,
+                              }}
+                            >
+                              {matcher.name}
+                            </Typography>
+                            {canDeleteMatcher(matcher) && (
+                              <Tooltip title="Delete custom matcher">
+                                <IconButton
+                                  size="small"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    event.preventDefault();
+                                    setDeleteError("");
+                                    setDeleteTarget(matcher);
+                                  }}
+                                  sx={{
+                                    color: alpha("#ffffff", 0.55),
+                                    "&:hover": {
+                                      color: "#ff6b6b",
+                                    },
+                                  }}
+                                >
+                                  <DeleteOutlineIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
                         }
                         sx={{
                           marginRight: 0,
@@ -361,11 +434,11 @@ const MatcherSliders: React.FC<MatcherSelectionProps> = ({
                         >
                           {matcher.name}
                         </Typography>
-                        <Slider
-                          value={sliderValues[index]}
-                          onChange={(e, value) =>
-                            handleSliderChange(index, value)
-                          }
+                          <Slider
+                            value={sliderValues[index]}
+                            onChange={(e, value) =>
+                              handleSliderChange(index, value)
+                            }
                           disabled={!(matcher.enabled ?? true)}
                           aria-labelledby="matcher-weights-label"
                           valueLabelDisplay="auto"
@@ -420,6 +493,61 @@ const MatcherSliders: React.FC<MatcherSelectionProps> = ({
           )}
         </Box>
       </FormControl>
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onClose={() => {
+          if (isDeleting) return;
+          setDeleteTarget(null);
+          setDeleteError("");
+        }}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ backgroundColor: CARD_BG, color: "#ffffff" }}>
+          Delete Custom Matcher
+        </DialogTitle>
+        <DialogContent sx={{ backgroundColor: CARD_BG, color: "#ffffff", pt: 2 }}>
+          <Typography sx={{ fontSize: "0.85rem", color: alpha("#ffffff", 0.9) }}>
+            This will remove the matcher{" "}
+            <strong>{deleteTarget?.name}</strong> from the session and drop its
+            cached candidates. This cannot be undone.
+          </Typography>
+          {deleteError ? (
+            <Typography
+              sx={{
+                mt: 1.5,
+                fontSize: "0.75rem",
+                color: "#ff6b6b",
+              }}
+            >
+              {deleteError}
+            </Typography>
+          ) : null}
+        </DialogContent>
+        <DialogActions sx={{ backgroundColor: CARD_BG }}>
+          <Button
+            onClick={() => {
+              setDeleteTarget(null);
+              setDeleteError("");
+            }}
+            disabled={isDeleting}
+            sx={{ color: alpha("#ffffff", 0.8) }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            disabled={isDeleting}
+            sx={{
+              color: "#ffffff",
+              backgroundColor: "#ff6b6b",
+              "&:hover": { backgroundColor: "#ff4d4d" },
+            }}
+          >
+            {isDeleting ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

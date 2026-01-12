@@ -75,6 +75,19 @@ def _create_default_matcher_metadata(weight: float = 1.0) -> Dict[str, Dict[str,
     }
 
 
+def _normalize_matcher_weights(matchers: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    total_weight = sum(matcher.get("weight", 0) for matcher in matchers.values())
+    if total_weight > 0:
+        for matcher in matchers.values():
+            matcher["weight"] = matcher.get("weight", 0) / total_weight
+        return matchers
+
+    n = len(matchers)
+    for matcher in matchers.values():
+        matcher["weight"] = 1.0 / n if n else 1.0
+    return matchers
+
+
 class MatchingTask:
     def __init__(
         self,
@@ -1965,6 +1978,52 @@ class MatchingTask:
             self._export_cache_to_json(self.cached_candidates)
 
         return self.get_matchers()
+
+    def delete_matcher(
+        self, name: str
+    ) -> Tuple[Optional[str], Optional[List[Dict[str, Any]]]]:
+        if name in DEFAULT_MATCHER_NAMES:
+            return f"Matcher '{name}' is a default matcher and cannot be deleted.", None
+
+        with self.lock:
+            if not self.cached_candidates or "matchers" not in self.cached_candidates:
+                return "Matcher cache not initialized.", None
+
+            if name not in self.cached_candidates["matchers"]:
+                return f"Matcher '{name}' not found.", None
+            matcher_info = self.cached_candidates["matchers"].get(name, {})
+            matcher_code = self.cached_candidates.get("matcher_code", {}).get(name)
+            if not matcher_info.get("code") and not matcher_code:
+                return f"Matcher '{name}' is not a custom matcher.", None
+
+            self.cached_candidates["matchers"].pop(name, None)
+            if "matcher_code" in self.cached_candidates:
+                self.cached_candidates["matcher_code"].pop(name, None)
+            self.matcher_objs.pop(name, None)
+
+            candidates = self.cached_candidates.get("candidates", [])
+            if candidates:
+                self.cached_candidates["candidates"] = [
+                    candidate
+                    for candidate in candidates
+                    if candidate.get("matcher") != name
+                ]
+
+            if self.weight_updater:
+                self.weight_updater.matchers = self.cached_candidates["matchers"]
+                self.weight_updater.candidates = self.weight_updater._preprocess_candidates(
+                    self.cached_candidates.get("candidates", [])
+                )
+                self.weight_updater._normalize_weights()
+                self.cached_candidates["matchers"] = self.weight_updater.matchers
+            else:
+                self.cached_candidates["matchers"] = _normalize_matcher_weights(
+                    self.cached_candidates["matchers"]
+                )
+
+            self._export_cache_to_json(self.cached_candidates)
+
+        return None, self.get_matchers()
 
     def new_matcher(
         self,

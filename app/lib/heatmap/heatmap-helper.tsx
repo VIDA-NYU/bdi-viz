@@ -336,6 +336,26 @@ const updateMatchers = (prop: updateMatchersProps) => {
     );
 };
 
+interface deleteMatcherProps {
+    name: string;
+    callback: (matchers: Matcher[]) => void;
+    signal?: AbortSignal;
+}
+
+const deleteMatcher = (prop: deleteMatcherProps) => {
+    return makeApiRequest<void>(
+        "/api/matcher/delete",
+        { name: prop.name, session_name: getSessionName() },
+        prop.signal,
+        (data) => {
+            const matchers = parseArray<Matcher>(data?.matchers, "Matcher");
+            console.log("deleteMatcher finished!", matchers);
+            prop.callback(matchers);
+            return;
+        }
+    );
+};
+
 interface getUniqueValuesProps {
     callback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     signal?: AbortSignal;
@@ -927,6 +947,7 @@ export {
     getCachedResults, 
     getMatchers,
     updateMatchers,
+    deleteMatcher,
     getValueBins, 
     getValueMatches, 
     getUserOperationHistory, 
