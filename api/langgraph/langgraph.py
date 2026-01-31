@@ -607,8 +607,8 @@ class LangGraphAgent:
            - **If preview is not satisfactory, refine inputs (mapping or lambda) and preview again.**
 
         4. **Apply**
-           - Categorical: Call `apply_value_map` to mutate the source column and sync caches.
-           - Numeric: Call `apply_numeric_lambda` to mutate the source column.
+           - Categorical: Call `apply_value_map` to update target mappings and record the change in history.
+           - Numeric: Call `apply_numeric_lambda` to update target mappings and record the change in history.
 
         RESPONSE FORMAT (STRICT):
         Return ONLY a single JSON object conforming to the AgentState schema.

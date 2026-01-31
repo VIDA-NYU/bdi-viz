@@ -7,7 +7,8 @@ import re
 import subprocess
 import sys
 import time
-from io import StringIO, TextIOWrapper
+import tempfile
+from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -96,17 +97,45 @@ def extract_data_from_request(request):
     if request_type == "csv_input":
         files = request.files or {}
 
+        def _save_uploaded_file(file_obj) -> str:
+            stream = getattr(file_obj, "stream", file_obj)
+            try:
+                stream.seek(0)
+            except Exception:
+                pass
+            tmp = tempfile.NamedTemporaryFile(delete=False)
+            tmp_path = tmp.name
+            tmp.close()
+            if hasattr(file_obj, "save"):
+                try:
+                    file_obj.save(tmp_path)
+                    return tmp_path
+                except Exception:
+                    pass
+            with open(tmp_path, "wb") as f:
+                while True:
+                    try:
+                        chunk = stream.read(1024 * 1024)
+                    except Exception:
+                        chunk = None
+                    if not chunk:
+                        break
+                    if isinstance(chunk, str):
+                        chunk = chunk.encode("utf-8", errors="replace")
+                    f.write(chunk)
+            return tmp_path
+
         def _read_csv_field(field_name: str) -> Optional[pd.DataFrame]:
             file_obj = files.get(field_name)
             if file_obj and getattr(file_obj, "filename", ""):
+                tmp_path = _save_uploaded_file(file_obj)
                 try:
-                    file_obj.stream.seek(0)
-                except Exception:
-                    pass
-                text_stream = TextIOWrapper(
-                    file_obj.stream, encoding="utf-8", errors="replace"
-                )
-                return pd.read_csv(text_stream, sep=",")
+                    return pd.read_csv(tmp_path, sep=",")
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
             if field_name in form:
                 csv_text = form[field_name]
                 return pd.read_csv(StringIO(csv_text), sep=",")
@@ -115,14 +144,15 @@ def extract_data_from_request(request):
         def _read_json_field(field_name: str) -> Optional[dict]:
             file_obj = files.get(field_name)
             if file_obj and getattr(file_obj, "filename", ""):
+                tmp_path = _save_uploaded_file(file_obj)
                 try:
-                    file_obj.stream.seek(0)
-                except Exception:
-                    pass
-                text_stream = TextIOWrapper(
-                    file_obj.stream, encoding="utf-8", errors="replace"
-                )
-                return json.load(text_stream)
+                    with open(tmp_path, "r", encoding="utf-8", errors="replace") as f:
+                        return json.load(f)
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
             if field_name in form:
                 raw_text = form[field_name]
                 return json.loads(raw_text)
@@ -156,17 +186,17 @@ def extract_data_from_request(request):
         if "groundtruth_csv" in form or ("groundtruth_csv" in files):
             file_obj = files.get("groundtruth_csv")
             if file_obj and getattr(file_obj, "filename", ""):
+                tmp_path = _save_uploaded_file(file_obj)
                 try:
-                    file_obj.stream.seek(0)
-                except Exception:
-                    pass
-                text_stream = TextIOWrapper(
-                    file_obj.stream, encoding="utf-8", errors="replace"
-                )
-                # Preserve blanks as empty strings; avoid automatic NA parsing
-                groundtruth_df = pd.read_csv(
-                    text_stream, sep=",", dtype=str, keep_default_na=False
-                )
+                    # Preserve blanks as empty strings; avoid automatic NA parsing
+                    groundtruth_df = pd.read_csv(
+                        tmp_path, sep=",", dtype=str, keep_default_na=False
+                    )
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
             else:
                 groundtruth_csv = form.get("groundtruth_csv")
                 groundtruth_df = (
