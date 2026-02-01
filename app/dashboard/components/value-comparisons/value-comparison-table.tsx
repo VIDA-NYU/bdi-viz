@@ -9,6 +9,11 @@ import { updateSourceValue, updateTargetMatchValue, getGDCAttribute, getValueMat
 import { BasicChip, HighlightedChip } from "../../layout/components";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 
+const DEFAULT_COLUMN_WIDTH = 180;
+const SOURCE_COLUMN_WIDTH = 240;
+const TARGET_COLUMN_WIDTH = 220;
+const MIN_COLUMN_WIDTH = 120;
+
 interface ValueComparisonTableProps {
     valueMatches: ValueMatch[];
     weightedAggregatedCandidates: AggregatedCandidate[];
@@ -61,6 +66,8 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     const [columnsAnchorEl, setColumnsAnchorEl] = useState<HTMLElement | null>(null);
     const [columnsSearch, setColumnsSearch] = useState<string>("");
     const [columnVisibilityModel, setColumnVisibilityModel] = useState<Record<string, boolean>>({});
+    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+    const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
     const candidate = useMemo(() => {
         let candidate = selectedCandidate;
@@ -71,6 +78,11 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         }
         return candidate;
     }, [selectedCandidate, globalCandidateHighlight]);
+
+    const sourceKey = useMemo(() => {
+        if (!candidate) return null as string | null;
+        return `${candidate.sourceColumn}(source)`.replace(/\./g, "");
+    }, [candidate]);
 
     const rows = useMemo(() => {
         if (!candidate) return [];
@@ -125,6 +137,24 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
         });
     }, [dynamicColumnKeys.join("|")]);
 
+    useEffect(() => {
+        if (!dynamicColumnKeys.length) return;
+        setColumnWidths((prev) => {
+            const next = { ...prev };
+            dynamicColumnKeys.forEach((k) => {
+                if (k in next) return;
+                if (sourceKey && k === sourceKey) {
+                    next[k] = SOURCE_COLUMN_WIDTH;
+                } else if (candidate?.targetColumn && k === candidate.targetColumn) {
+                    next[k] = TARGET_COLUMN_WIDTH;
+                } else {
+                    next[k] = DEFAULT_COLUMN_WIDTH;
+                }
+            });
+            return next;
+        });
+    }, [dynamicColumnKeys.join("|"), sourceKey, candidate?.targetColumn]);
+
     // fetch enums lazily when opening the editor for a specific target column
 
     const openEnumsPopover = useCallback((row: any, targetColumn: string, anchor: HTMLElement) => {
@@ -158,7 +188,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
 
     useLayoutEffect(() => {
         updateStickyOffsets();
-    }, [rows, dynamicColumnKeys, updateStickyOffsets]);
+    }, [rows, dynamicColumnKeys, columnWidths, updateStickyOffsets]);
 
     useEffect(() => {
         const onResize = () => updateStickyOffsets();
@@ -171,6 +201,38 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
     const [editingTarget, setEditingTarget] = useState<{ rowId: number; key: string } | null>(null);
     const [editingTargetValue, setEditingTargetValue] = useState<string>("");
     const [showOnlyEdited, setShowOnlyEdited] = useState<boolean>(false);
+
+    const getColumnWidth = useCallback((key: string) => {
+        if (columnWidths[key]) return columnWidths[key];
+        if (sourceKey && key === sourceKey) return SOURCE_COLUMN_WIDTH;
+        if (candidate?.targetColumn && key === candidate.targetColumn) return TARGET_COLUMN_WIDTH;
+        return DEFAULT_COLUMN_WIDTH;
+    }, [columnWidths, sourceKey, candidate?.targetColumn]);
+
+    const startResize = useCallback((key: string, event: React.MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const headerCell = (event.currentTarget as HTMLElement).parentElement;
+        const measuredWidth = headerCell?.getBoundingClientRect().width ?? DEFAULT_COLUMN_WIDTH;
+        const startWidth = columnWidths[key] ?? measuredWidth;
+        resizingRef.current = { key, startX: event.clientX, startWidth };
+
+        const onMove = (ev: MouseEvent) => {
+            if (!resizingRef.current) return;
+            const delta = ev.clientX - resizingRef.current.startX;
+            const nextWidth = Math.max(MIN_COLUMN_WIDTH, resizingRef.current.startWidth + delta);
+            setColumnWidths((prev) => ({ ...prev, [key]: nextWidth }));
+        };
+
+        const onUp = () => {
+            resizingRef.current = null;
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+        };
+
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+    }, [columnWidths]);
 
     const filteredEnums = useMemo(() => {
         if (!gdcAttribute?.enum) return [] as string[];
@@ -189,11 +251,6 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
             userOperationHistoryCallback: handleUserOperationsUpdate,
         });
     }, [candidate, selectedEnumContext, handleValueMatches]);
-
-    const sourceKey = useMemo(() => {
-        if (!candidate) return null as string | null;
-        return `${candidate.sourceColumn}(source)`.replace(/\./g, "");
-    }, [candidate]);
 
     const displayedColumnKeys = useMemo(() => {
         if (!rows.length) return [] as string[];
@@ -259,6 +316,16 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                     .value-comparison-root tbody tr:hover td { background-color: rgba(0,0,0,0.03); }
                     .value-comparison-root .cell-btn { opacity: 0; transition: opacity 160ms ease; }
                     .value-comparison-root td:hover .cell-btn { opacity: 1; }
+                    .value-comparison-root .col-resizer {
+                        position: absolute;
+                        top: 0;
+                        right: 0;
+                        width: 8px;
+                        height: 100%;
+                        cursor: col-resize;
+                        user-select: none;
+                        touch-action: none;
+                    }
                 `}
             </style>
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1, px: 2 }}>
@@ -308,6 +375,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                 const isTarget = candidate?.targetColumn && key === candidate.targetColumn;
                                 const stickyClass = isSource ? "sticky-source" : isTarget ? "sticky-target" : "";
                                 const refProp = isSource ? { ref: thSourceRef } : {};
+                                const columnWidth = getColumnWidth(key);
                                 return (
                                     <th
                                         key={key}
@@ -317,6 +385,9 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                             background: theme.palette.background.paper,
                                             fontWeight: 600,
                                             color: theme.palette.text.primary,
+                                            width: columnWidth,
+                                            minWidth: columnWidth,
+                                            maxWidth: columnWidth,
                                         }}
                                     >
                                         {isSource ? (
@@ -330,6 +401,13 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                         ) : (
                                             key
                                         )}
+                                        <div
+                                            className="col-resizer"
+                                            role="separator"
+                                            aria-label={`Resize column ${key}`}
+                                            aria-orientation="vertical"
+                                            onMouseDown={(e) => startResize(key, e)}
+                                        />
                                     </th>
                                 );
                             })}
@@ -343,6 +421,7 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                     const isTarget = candidate?.targetColumn && key === candidate.targetColumn;
                                     const stickyClass = isSource ? "sticky-source" : isTarget ? "sticky-target" : "";
                                     const cellValue = row[key];
+                                    const columnWidth = getColumnWidth(key);
 
                                     let backgroundColor: string | undefined = undefined;
                                     if (isSource) {
@@ -357,6 +436,9 @@ const ValueComparisonTable: React.FC<ValueComparisonTableProps> = ({
                                         color: emphasize ? theme.palette.primary.main : undefined,
                                         fontWeight: isSource || isTarget ? "bold" as const : undefined,
                                         cursor: isSource ? "text" : "pointer",
+                                        width: columnWidth,
+                                        minWidth: columnWidth,
+                                        maxWidth: columnWidth,
                                     };
 
                                     if (isSource) {
