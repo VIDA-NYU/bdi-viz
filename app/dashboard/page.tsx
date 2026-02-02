@@ -261,6 +261,14 @@ export default function Dashboard() {
         }
     }, [setSelectedCandidate, generateExplanations, setGdcAttribute, explain, setIsMatch]);
 
+    useEffect(() => {
+        if (!selectedCandidate) return;
+        if (sourceColumns.length === 0) return;
+        if (!sourceColumns.includes(selectedCandidate.sourceColumn)) {
+            setSelectedCandidateCallback(undefined);
+        }
+    }, [selectedCandidate, sourceColumns, setSelectedCandidateCallback]);
+
     const setSelectedCandidateByTargetColumnCallback = useCallback((sourceColumn: string, targetColumn: string) => {
         console.log("Selected Candidate: ", sourceColumn, targetColumn);
         const candidate = weightedAggregatedCandidates.find((c) => c.sourceColumn === sourceColumn && c.targetColumn === targetColumn);
