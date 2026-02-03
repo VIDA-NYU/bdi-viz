@@ -93,16 +93,45 @@ export const {
         // useWhatChanged([filters.sourceColumn, filters.selectedMatchers, filters.similarSources, filters.candidateThreshold, filters.candidateType]);
 
         const weightedCandidates = useMemo(() => {
-            const aggregatedCandidates = Array.from(d3.group(candidates, d => d.sourceColumn + d.targetColumn), ([_, items]) => {
-                const score = d3.sum(items, d => d.score * (matchers.find(m => m.name === d.matcher)?.weight ?? 1));
-                return {
-                    sourceColumn: items[0].sourceColumn,
-                    targetColumn: items[0].targetColumn,
-                    matchers: items.map(d => d.matcher).filter((m): m is string => m !== undefined),
-                    score: score > 1 ? 1 : score,
-                    status: items.some(item => item.status === 'accepted') ? 'accepted' : items.some(item => item.status === 'rejected') ? 'rejected' : (items.every(item => item.status === 'discarded') ? 'discarded' : 'idle'),
-                };
-            }).flat().sort((a, b) => b.score - a.score);
+            const matcherState = new Map(
+                matchers.map((matcher) => [
+                    matcher.name,
+                    { enabled: matcher.enabled ?? true, weight: matcher.weight },
+                ])
+            );
+
+            const aggregatedCandidates = Array.from(
+                d3.group(candidates, d => d.sourceColumn + d.targetColumn),
+                ([_, items]) => {
+                    const activeItems = items.filter((item) => {
+                        if (!item.matcher) return true;
+                        return matcherState.get(item.matcher)?.enabled ?? true;
+                    });
+                    if (activeItems.length === 0) {
+                        return null;
+                    }
+                    const score = d3.sum(
+                        activeItems,
+                        d => d.score * (matcherState.get(d.matcher ?? "")?.weight ?? 1)
+                    );
+                    return {
+                        sourceColumn: activeItems[0].sourceColumn,
+                        targetColumn: activeItems[0].targetColumn,
+                        matchers: activeItems
+                            .map(d => d.matcher)
+                            .filter((m): m is string => m !== undefined),
+                        score: score > 1 ? 1 : score,
+                        status: activeItems.some(item => item.status === 'accepted')
+                            ? 'accepted'
+                            : activeItems.some(item => item.status === 'rejected')
+                                ? 'rejected'
+                                : (activeItems.every(item => item.status === 'discarded') ? 'discarded' : 'idle'),
+                    };
+                }
+            )
+                .flat()
+                .filter((item): item is AggregatedCandidate => item !== null)
+                .sort((a, b) => b.score - a.score);
 
             return aggregatedCandidates;
         }, [candidates, matchers]);

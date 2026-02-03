@@ -23,6 +23,8 @@ interface ControlPanelProps {
   onCandidateTypeSelect: (dataType: string) => void;
   onCandidateThresholdSelect: (num: number) => void;
   onMatchersSelect: (matchers: Matcher[]) => void;
+  onDefaultMatchersUpdate: (matchers: Matcher[]) => void;
+  onMatcherDelete?: (matcherName: string) => Promise<void>;
 
   state: {
     sourceColumns: string[];
@@ -72,6 +74,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 <MatcherSliders 
                   matchers={props.matchers} 
                   onSlide={props.onMatchersSelect}
+                  onDefaultChange={props.onDefaultMatchersUpdate}
+                  onMatcherDelete={props.onMatcherDelete}
                 />
               )}
       </Box>

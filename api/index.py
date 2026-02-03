@@ -29,6 +29,7 @@ from .utils import (
     load_property,
     load_source_df,
     load_target_df,
+    parse_mapping_payload,
     parse_llm_generated_ontology,
     read_cached_ontology,
     read_candidate_explanation_json,
@@ -84,6 +85,7 @@ def create_app() -> Flask:
     app.config.from_prefixed_env()
     celery_init_app(app)
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
+    app.config["MAX_FORM_MEMORY_SIZE"] = 1024 * 1024 * 1024
     app.logger.setLevel(logging.INFO)
     # Constrain thread pools for numerical/BLAS libs to reduce CPU/memory spikes
     try:
@@ -222,12 +224,6 @@ def session_create():
     except Exception:
         pass
 
-    # Pre-warm: ensure embeddings are loaded and Chroma collections created.
-    try:
-        _ = get_memory_retriever(session)
-    except Exception:
-        pass
-
     # If a shared schema chroma_db exists, copy it into the new session to avoid first-time build
     try:
         from .utils import get_session_dir
@@ -237,29 +233,56 @@ def session_create():
         dest_dir = os.path.join(get_session_dir(session, create=True), "chroma_db")
         if os.path.isdir(shared_chroma):
             if not os.path.exists(dest_dir) or not os.listdir(dest_dir):
-                import shutil as _sh
-
-                # copytree requires dest to not exist; emulate copy if it does
-                if not os.path.exists(dest_dir):
-                    _sh.copytree(shared_chroma, dest_dir)
-                else:
-                    # copy files recursively
-                    for root, dirs, files in os.walk(shared_chroma):
-                        rel = os.path.relpath(root, shared_chroma)
-                        tgt_root = (
-                            os.path.join(dest_dir, rel) if rel != "." else dest_dir
+                copy_allowed = False
+                config_path = os.path.join(shared_chroma, "embedding_config.json")
+                if os.path.exists(config_path):
+                    try:
+                        with open(config_path, "r") as f:
+                            config = json.load(f)
+                    except Exception:
+                        config = None
+                    if isinstance(config, dict):
+                        current_model = os.getenv(
+                            "EMBED_MODEL_NAME",
+                            "sentence-transformers/all-MiniLM-L6-v2",
                         )
-                        os.makedirs(tgt_root, exist_ok=True)
-                        for d in dirs:
-                            os.makedirs(os.path.join(tgt_root, d), exist_ok=True)
-                        for f in files:
-                            src_f = os.path.join(root, f)
-                            dst_f = os.path.join(tgt_root, f)
-                            try:
-                                if not os.path.exists(dst_f):
-                                    _sh.copy2(src_f, dst_f)
-                            except Exception:
-                                pass
+                        config_model = config.get("embedding_model")
+                        if config_model and config_model == current_model:
+                            copy_allowed = True
+                if not copy_allowed:
+                    app.logger.info(
+                        "Skipping shared chroma_db copy due to missing/mismatched embedding config."
+                    )
+                else:
+                    import shutil as _sh
+
+                    # copytree requires dest to not exist; emulate copy if it does
+                    if not os.path.exists(dest_dir):
+                        _sh.copytree(shared_chroma, dest_dir)
+                    else:
+                        # copy files recursively
+                        for root, dirs, files in os.walk(shared_chroma):
+                            rel = os.path.relpath(root, shared_chroma)
+                            tgt_root = (
+                                os.path.join(dest_dir, rel) if rel != "." else dest_dir
+                            )
+                            os.makedirs(tgt_root, exist_ok=True)
+                            for d in dirs:
+                                os.makedirs(os.path.join(tgt_root, d), exist_ok=True)
+                            for f in files:
+                                src_f = os.path.join(root, f)
+                                dst_f = os.path.join(tgt_root, f)
+                                try:
+                                    if not os.path.exists(dst_f):
+                                        _sh.copy2(src_f, dst_f)
+                                except Exception:
+                                    pass
+    except Exception:
+        pass
+
+    # Pre-warm: ensure embeddings are loaded and Chroma collections created.
+    try:
+        _ = get_memory_retriever(session)
     except Exception:
         pass
 
@@ -461,7 +484,7 @@ def infer_source_ontology_task(self, session):
 
         agent = get_agent(session)
         properties = []
-        total_batches = len(source.columns) // 5 + 1
+        total_batches = max(1, (len(source.columns) + 4) // 5)
         for i, (_slice, ontology) in enumerate(agent.infer_ontology(source)):
             ontology = ontology.model_dump()
             properties += ontology.get("properties", [])
@@ -561,7 +584,7 @@ def infer_target_ontology_task(self, session):
 
         agent = get_agent(session)
         properties = []
-        total_batches = len(target.columns) // 5 + 1
+        total_batches = max(1, (len(target.columns) + 4) // 5)
         for i, (_slice, ontology) in enumerate(agent.infer_ontology(target)):
             ontology = ontology.model_dump()
             properties += ontology.get("properties", [])
@@ -814,6 +837,13 @@ def matching_status():
             "taskState": task_state,
         }
     elif task.state == "SUCCESS":
+        if isinstance(task.result, dict) and task.result.get("status") == "failed":
+            response = {
+                "status": "failed",
+                "message": task.result.get("message", "Task failed"),
+                "taskState": task_state,
+            }
+            return response
         source = load_source_df(session)
         target = load_target_df(session)
         matching_task.update_dataframe(source_df=source, target_df=target)
@@ -1113,6 +1143,47 @@ def get_candidates_results():
         return {"message": "failure", "results": None}
 
 
+@app.route("/api/mappings/import", methods=["POST"])
+def import_mappings():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+
+    # Ensure dataframes are loaded before applying mappings
+    if matching_task.source_df is None or matching_task.target_df is None:
+        try:
+            if os.path.exists(
+                get_session_file(session, "source.csv", create_dir=False)
+            ):
+                source_df = load_source_df(session)
+                if os.path.exists(
+                    get_session_file(session, "target.csv", create_dir=False)
+                ):
+                    target_df = load_target_df(session)
+                else:
+                    target_df = pd.read_csv(GDC_DATA_PATH)
+                matching_task.update_dataframe(source_df=source_df, target_df=target_df)
+        except Exception as e:
+            return {
+                "message": "failure",
+                "error": f"Failed to load session data: {str(e)}",
+            }, 400
+
+    data = request.json or {}
+    content = data.get("content", "")
+    fmt = data.get("format", "json")
+
+    try:
+        mappings = parse_mapping_payload(content, fmt)
+    except Exception as e:
+        return {"message": "failure", "error": str(e)}, 400
+
+    try:
+        summary = matching_task.import_mappings(mappings)
+        return {"message": "success", "summary": summary}
+    except Exception as e:
+        return {"message": "failure", "error": str(e)}, 500
+
+
 @app.route("/api/matchers", methods=["POST"])
 def get_matchers():
     session = extract_session_name(request)
@@ -1130,6 +1201,18 @@ def get_matchers():
             matching_task.update_dataframe(source_df=source, target_df=target)
     matchers = matching_task.get_matchers()
     return {"message": "success", "matchers": matchers}
+
+
+@app.route("/api/matchers/update", methods=["POST"])
+def update_matchers():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+    data = request.json or {}
+    matchers = data.get("matchers")
+    if not isinstance(matchers, list):
+        return {"message": "failure", "error": "Invalid matchers payload"}, 400
+    updated = matching_task.update_matchers(matchers)
+    return {"message": "success", "matchers": updated}
 
 
 @celery.task(bind=True, name="api.index.run_new_matcher_task", queue="new_matcher")
@@ -1184,6 +1267,20 @@ def new_matcher():
 
     task = run_new_matcher_task.delay(session, name, code, params)
     return {"task_id": task.id}
+
+
+@app.route("/api/matcher/delete", methods=["POST"])
+def delete_matcher():
+    session = extract_session_name(request)
+    matching_task = SESSION_MANAGER.get_session(session).matching_task
+    data = request.json or {}
+    name = data.get("name")
+    if not name:
+        return {"message": "failure", "error": "Matcher name is required."}, 400
+    error, matchers = matching_task.delete_matcher(name)
+    if error:
+        return {"message": "failure", "error": error}, 400
+    return {"message": "success", "matchers": matchers}
 
 
 # ----------------------
@@ -1329,12 +1426,14 @@ def matcher_status():
         response = {
             "status": "pending",
             "message": "Task is pending",
+            "error": None,
             "taskState": task_state.get_task_state(),
         }
     elif task.state == "FAILURE":
         response = {
             "status": "failed",
             "message": str(task.info),
+            "error": str(task.info),
             "taskState": task_state.get_task_state(),
         }
     elif task.state == "SUCCESS":
@@ -1342,10 +1441,12 @@ def matcher_status():
         app.logger.info(f"Result: {result}")
         if result["status"] == "completed":
             _ = matching_task.get_candidates(task_state=task_state)
+        error = result.get("error") if result.get("status") == "failed" else None
 
         response = {
             "status": result["status"],
             "message": (result["error"] if result["status"] == "failed" else "success"),
+            "error": error,
             "taskState": task_state.get_task_state(),
             "matchers": matching_task.get_matchers(),
         }
@@ -1353,6 +1454,7 @@ def matcher_status():
         response = {
             "status": task.state,
             "message": "Task is in progress",
+            "error": None,
             "taskState": task_state.get_task_state(),
         }
 
@@ -1383,8 +1485,6 @@ def agent_explanation():
 
     source_col = data["sourceColumn"]
     target_col = data["targetColumn"]
-    source_values = matching_task.get_source_unique_values(source_col)
-    target_values = matching_task.get_target_unique_values(target_col)
 
     cached_explanation = read_candidate_explanation_json(source_col, target_col)
     if cached_explanation:
@@ -1392,6 +1492,13 @@ def agent_explanation():
             f"Returning cached explanation for {source_col} and {target_col}"
         )
         return cached_explanation
+
+    cache_only = bool(data.get("cache_only", False))
+    if cache_only:
+        return {"message": "cached explanation not found"}, 404
+
+    source_values = matching_task.get_source_unique_values(source_col)
+    target_values = matching_task.get_target_unique_values(target_col)
 
     agent = get_agent(session)
     response = agent.explain(
@@ -1411,6 +1518,86 @@ def agent_explanation():
     app.logger.info(f"Response: {response}")
     write_candidate_explanation_json(source_col, target_col, response)
     return response
+
+
+@app.route("/api/agent/explain/cached-types", methods=["POST"])
+def agent_explanation_cached_types():
+    extract_session_name(request)
+    data = request.json or {}
+
+    candidates = data.get("candidates", [])
+    if not isinstance(candidates, list):
+        return {"message": "candidates must be a list"}, 400
+
+    cached_types = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        source_col = candidate.get("sourceColumn")
+        target_col = candidate.get("targetColumn")
+        if not source_col or not target_col:
+            continue
+
+        cached_explanation = read_candidate_explanation_json(source_col, target_col)
+        if not cached_explanation:
+            continue
+
+        explanations = cached_explanation.get("explanations", [])
+        if not isinstance(explanations, list):
+            continue
+
+        def _coerce_bool(value):
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            if isinstance(value, str):
+                lower = value.strip().lower()
+                if lower in ("true", "1", "yes", "y"):
+                    return True
+                if lower in ("false", "0", "no", "n"):
+                    return False
+            return None
+
+        def _coerce_float(value):
+            try:
+                return float(value)
+            except Exception:
+                return None
+
+        types = []
+        summary_explanations = []
+        for explanation in explanations:
+            if not isinstance(explanation, dict):
+                continue
+            explanation_type = explanation.get("type")
+            if explanation_type:
+                types.append(explanation_type)
+                is_match = _coerce_bool(
+                    explanation.get("is_match", explanation.get("isMatch"))
+                )
+                confidence = _coerce_float(explanation.get("confidence"))
+                if confidence is None:
+                    confidence = 0
+                summary_explanations.append(
+                    {
+                        "type": explanation_type,
+                        "isMatch": (is_match if is_match is not None else False),
+                        "confidence": confidence,
+                    }
+                )
+
+        unique_types = list(dict.fromkeys(types))
+        cached_types.append(
+            {
+                "sourceColumn": source_col,
+                "targetColumn": target_col,
+                "types": unique_types,
+                "explanations": summary_explanations,
+            }
+        )
+
+    return {"message": "success", "results": {"cachedExplanationTypes": cached_types}}
 
 
 # @app.route("/api/agent/explore", methods=["POST"])

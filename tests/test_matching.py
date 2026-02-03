@@ -390,7 +390,7 @@ class RapidFuzzMatcher():
             matcher_name, matcher_code, matcher_params
         )
         assert error is None
-        assert len(matchers) == 3
+        assert "RapidFuzzMatcher" in matchers
 
         matchers = matching_task.get_matchers()
         for matcher in matchers:

@@ -1,7 +1,8 @@
 'use client';
-import { useContext, useState, useCallback, useMemo } from "react";
+import { useContext, useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Box, Typography, Switch } from "@mui/material";
 import { toastify } from "@/app/lib/toastify/toastify-helper";
+import { getSessionName } from "@/app/lib/settings/session";
 
 import SearchMenu from "./components/search/searchMenu";
 import SessionMenu from "./components/session-menu/sessionMenu";
@@ -15,7 +16,13 @@ import PaginationGlobalContext from "../lib/pagination/pagination-context";
 import LoadingPopup from "./components/loading-popup/loadingPopup";
 import NewMatcherDialog from "./components/matcher-card/newMatcher";
 import OntologySearchPopup from "./components/ontology-search/ontologySearchPopup";
-import { createCandidate, deleteCandidate, getCachedResults } from '@/app/lib/heatmap/heatmap-helper';
+import {
+    createCandidate,
+    deleteCandidate,
+    getCachedResults,
+    deleteMatcher,
+    updateMatchers,
+} from '@/app/lib/heatmap/heatmap-helper';
 
 import { useSchemaExplanations } from "./components/explanation/useSchemaExplanations";
 import { useDashboardCandidates } from "./hooks/useDashboardCandidates";
@@ -34,6 +41,10 @@ import { useMatcherAnalysis } from "./hooks/useMatcherAnalysis";
 
 export default function Dashboard() {
     const [openNewMatcherDialog, setOpenNewMatcherDialog] = useState(false);
+    const DEFAULT_RIGHT_PANEL_WIDTH = 300;
+    const RIGHT_PANEL_WIDTH_KEY_PREFIX = "bdiviz_right_panel_width_";
+    const [rightPanelWidth, setRightPanelWidth] = useState<number>(DEFAULT_RIGHT_PANEL_WIDTH);
+    const rightPanelWidthRef = useRef<number>(rightPanelWidth);
     const {
         isLoadingGlobal,
         setIsLoadingGlobal,
@@ -127,7 +138,7 @@ export default function Dashboard() {
     });
 
 
-    const { matcherMetrics } = useMatcherAnalysis({ candidates, matchers, enabled: developerMode });
+    const { matcherMetrics } = useMatcherAnalysis({ candidates, matchers });
 
     const {
         groupedSourceColumns,
@@ -155,6 +166,79 @@ export default function Dashboard() {
         updateHighlightedTargetColumns
     } = useDashboardHighlight({candidates, searchResults});
 
+    const clampRightPanelWidth = useCallback((width: number) => {
+        const min = 260;
+        const max = typeof window !== 'undefined'
+            ? Math.max(
+                min,
+                Math.min(900, Math.floor(window.innerWidth - 300 - 520 - 48))
+            )
+            : 900;
+        return Math.min(max, Math.max(min, width));
+    }, []);
+
+    useEffect(() => {
+        rightPanelWidthRef.current = rightPanelWidth;
+    }, [rightPanelWidth]);
+
+    useEffect(() => {
+        try {
+            const session = (typeof window !== 'undefined' ? getSessionName() : undefined) || 'default';
+            const raw = typeof window !== 'undefined'
+                ? window.localStorage.getItem(`${RIGHT_PANEL_WIDTH_KEY_PREFIX}${session}`)
+                : null;
+            if (!raw) return;
+            const parsed = parseInt(raw, 10);
+            if (Number.isNaN(parsed)) return;
+            const clamped = clampRightPanelWidth(parsed);
+            setRightPanelWidth(clamped);
+            rightPanelWidthRef.current = clamped;
+        } catch {
+            // ignore storage errors
+        }
+    }, [clampRightPanelWidth]);
+
+    const onRightPanelResizeMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+
+        const startX = e.clientX;
+        const startWidth = rightPanelWidthRef.current;
+
+        const onMove = (ev: MouseEvent) => {
+            const delta = startX - ev.clientX; // dragging left increases width
+            const next = clampRightPanelWidth(startWidth + delta);
+            rightPanelWidthRef.current = next;
+            setRightPanelWidth(next);
+        };
+
+        const onUp = () => {
+            try {
+                const session = (typeof window !== 'undefined' ? getSessionName() : undefined) || 'default';
+                if (typeof window !== 'undefined') {
+                    window.localStorage.setItem(
+                        `${RIGHT_PANEL_WIDTH_KEY_PREFIX}${session}`,
+                        String(rightPanelWidthRef.current)
+                    );
+                }
+            } catch {
+                // ignore storage errors
+            }
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            try {
+                document.body.style.cursor = '';
+                (document.body.style as any).userSelect = '';
+            } catch {}
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        try {
+            document.body.style.cursor = 'col-resize';
+            (document.body.style as any).userSelect = 'none';
+        } catch {}
+    }, [clampRightPanelWidth]);
+
     function handleUserOperationsUpdate(userOperations: UserOperation[]) {
         setUserOperations(userOperations);
         generateExplanations();
@@ -176,6 +260,14 @@ export default function Dashboard() {
             setIsMatch(true);
         }
     }, [setSelectedCandidate, generateExplanations, setGdcAttribute, explain, setIsMatch]);
+
+    useEffect(() => {
+        if (!selectedCandidate) return;
+        if (sourceColumns.length === 0) return;
+        if (!sourceColumns.includes(selectedCandidate.sourceColumn)) {
+            setSelectedCandidateCallback(undefined);
+        }
+    }, [selectedCandidate, sourceColumns, setSelectedCandidateCallback]);
 
     const setSelectedCandidateByTargetColumnCallback = useCallback((sourceColumn: string, targetColumn: string) => {
         console.log("Selected Candidate: ", sourceColumn, targetColumn);
@@ -238,6 +330,31 @@ export default function Dashboard() {
     const matchersSelectHandler = useCallback((matchers: Matcher[]) => {
         handleMatchers(matchers);
     }, [handleMatchers]);
+
+    const defaultMatchersUpdateHandler = useCallback((nextMatchers: Matcher[]) => {
+        handleMatchers(nextMatchers);
+        updateMatchers({
+            matchers: nextMatchers,
+            callback: handleMatchers,
+        }).catch((error) => {
+            console.error("Failed to update default matchers:", error);
+        });
+    }, [handleMatchers]);
+
+    const deleteMatcherHandler = useCallback(async (matcherName: string) => {
+        try {
+            await deleteMatcher({
+                name: matcherName,
+                callback: handleMatchers,
+            });
+            toastify("success", <p>Matcher deleted successfully!</p>);
+            getCachedResults({ callback: handleFileUpload });
+        } catch (error) {
+            console.error("Failed to delete matcher:", error);
+            toastify("error", <p>Failed to delete matcher.</p>);
+            throw error;
+        }
+    }, [handleMatchers, handleFileUpload]);
 
     const handleCreateCandidate = useCallback((candidate: Candidate) => {
         createCandidate({
@@ -339,7 +456,7 @@ export default function Dashboard() {
                 {headerContent}
             </Header>
 
-            <MainContent>
+            <MainContent sx={{ gridTemplateColumns: `300px minmax(0, 2fr) ${rightPanelWidth}px` }}>
                 <LeftPanel
                     containerStyle={{ marginBottom: 0, flexGrow: 0 }}
                     sourceColumns={groupedSourceColumns}
@@ -354,6 +471,7 @@ export default function Dashboard() {
                     redo={redo}
                     exportMatchingResults={exportMatchingResults}
                     onMatchersSelect={matchersSelectHandler}
+                    onMatcherDelete={deleteMatcherHandler}
                     state={{ sourceColumns, candidateType, candidateThreshold }}
                     userOperations={userOperations}
                     handleFileUpload={handleNewMatchingTask}
@@ -361,7 +479,9 @@ export default function Dashboard() {
                     handleSourceOntology={handleSourceOntology}
                     handleUniqueValues={handleUniqueValues}
                     handleValueMatches={handleValueMatches}
+                    handleUserOperationsUpdate={handleUserOperationsUpdate}
                     setOpenNewMatcherDialog={setOpenNewMatcherDialog}
+                    onDefaultMatchersUpdate={defaultMatchersUpdateHandler}
                 />
 
                 {/* Middle Column - Main Visualizations */}
@@ -396,7 +516,7 @@ export default function Dashboard() {
                         valueMatches={valueMatches}
                         metaData={metaData}
                     />
-                    <Box sx={{ position: 'absolute', right: 320, display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ position: 'absolute', right: rightPanelWidth + 20, display: 'flex', alignItems: 'center' }}>
                         <Typography sx={{ fontSize: "0.7rem", fontWeight: "300", marginRight: 0 }}>Expand On Hover</Typography>
                         <Switch
                             checked={hoverMode}
@@ -427,6 +547,7 @@ export default function Dashboard() {
                     gdcAttribute={gdcAttribute}
                     relatedOuterSources={relatedOuterSources}
                     matcherAnalysis={matcherMetrics}
+                    onResizeMouseDown={onRightPanelResizeMouseDown}
                 />
             </MainContent>
 

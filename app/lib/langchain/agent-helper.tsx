@@ -62,6 +62,65 @@ const candidateExplanationRequest = async (candidate: Candidate): Promise<Candid
     }
 };
 
+type CachedExplanationItem = {
+    type: string;
+    isMatch: boolean;
+    confidence: number;
+};
+
+type CachedExplanationSummary = {
+    sourceColumn: string;
+    targetColumn: string;
+    types: string[];
+    explanations: CachedExplanationItem[];
+};
+
+const cachedExplanationSummariesRequest = async (
+    candidates: Array<Pick<Candidate, "sourceColumn" | "targetColumn">>
+): Promise<CachedExplanationSummary[]> => {
+    if (!candidates.length) return [];
+
+    try {
+        const httpAgent = new http.Agent({ keepAlive: true });
+        const httpsAgent = new https.Agent({ keepAlive: true });
+
+        const resp = await axios.post(
+            "/api/agent/explain/cached-types",
+            {
+                session_name: getSessionName(),
+                candidates,
+            },
+            {
+                httpAgent,
+                httpsAgent,
+                timeout: 10000000,
+            }
+        );
+
+        const list = resp.data?.results?.cachedExplanationTypes;
+        if (!Array.isArray(list)) return [];
+        return list.map((item: any) => {
+            const sourceColumn = String(item?.sourceColumn ?? "");
+            const targetColumn = String(item?.targetColumn ?? "");
+            const types = Array.isArray(item?.types) ? item.types.map(String) : [];
+            const explanations: CachedExplanationItem[] = Array.isArray(item?.explanations)
+                ? item.explanations
+                      .map((e: any) => ({
+                          type: String(e?.type ?? ""),
+                          isMatch: Boolean(e?.isMatch),
+                          confidence: Number(e?.confidence ?? 0),
+                      }))
+                      .filter((e: CachedExplanationItem) => Boolean(e.type))
+                : [];
+
+            return { sourceColumn, targetColumn, types, explanations };
+        });
+    } catch (error) {
+        console.error("Error fetching cached explanation summaries:", error);
+        return [];
+    }
+};
+
 const agentSuggestValueMappings = async (candidate: Candidate): Promise<SuggestedValueMappings | undefined> => {
 
     try {
@@ -243,6 +302,7 @@ const agentStream = (
 
 export { 
     candidateExplanationRequest,
+    cachedExplanationSummariesRequest,
     agentSuggestValueMappings,
     agentThumbRequest,
     agentGetRelatedSources,

@@ -225,6 +225,14 @@ class Agent:
         pd.set_option("display.max_columns", None)
         columns = target_df.columns.tolist()
         pd.reset_option("display.max_columns")
+        session_id = getattr(self.store, "session_id", "default")
+        preview_cols = columns[:5]
+        logger.info(
+            "[infer_ontology] Target ontology request start: session=%s columns=%s preview=%s",
+            session_id,
+            len(columns),
+            preview_cols,
+        )
 
         # Phase 1: Generate high-level ontology structure for all columns
         structure_prompt = f"""
@@ -259,6 +267,11 @@ Important:
 """
 
         # Get high-level structure first
+        logger.info(
+            "[infer_ontology] Target ontology structure request: session=%s columns=%s",
+            session_id,
+            len(columns),
+        )
         agent_executor = create_react_agent(self.llm, tools=[])
         structure_responses = []
         for chunk in agent_executor.stream(
@@ -312,6 +325,15 @@ Important:
             else:
                 column_slice = columns[idx : idx + 5]
             col_data = target_df[column_slice]
+            batch_index = (idx // 5) + 1
+            total_batches = (len(columns) + 4) // 5
+            logger.info(
+                "[infer_ontology] Target ontology batch request: session=%s batch=%s/%s columns=%s",
+                session_id,
+                batch_index,
+                total_batches,
+                column_slice,
+            )
 
             # Build detailed prompt using the structure
             batch_structure = {
@@ -342,7 +364,7 @@ Create an Ontology object for the columns with the following information:
 
 Important:
 - Use the provided category and node assignments from the structure
-- For "enum" types, include all observed values plus likely additional values
+- For "enum" types, include up to 50 values total; if there are more, sample a representative subset
 - Return ONLY a valid JSON object following the Ontology schema with no additional text
 """
             response = self.invoke(
@@ -560,11 +582,10 @@ def get_agent(memory_retriever: MemoryRetriever, session_id: str = "default") ->
         if llm_provider == "portkey":
             portkey_headers = createHeaders(
                 api_key=os.getenv("PORTKEY_API_KEY"),
-                virtual_key=os.getenv("PROVIDER_API_KEY"),
                 metadata={"_user": "yfw215"},
             )
             llm_model = ChatOpenAI(
-                model="gemini-2.5-flash",
+                model="@vertexai/gemini-2.5-flash",
                 temperature=0,
                 base_url=(
                     "https://portkey-lb.rt.nyu.edu/v1/"

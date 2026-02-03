@@ -194,8 +194,8 @@ class ValueTools:
         ) -> str:
             """
             Apply an exact categorical mapping:
-            - Mutate the source dataframe column in-place.
             - Update value_matches for the given (source, target) pair.
+            - Record the change in the user operation history (Timeline).
             """
             try:
                 mt = SESSION_MANAGER.get_session(self.session_id).matching_task
@@ -209,16 +209,19 @@ class ValueTools:
                     for source_val, target_val in mapping.items()
                 ]
 
-                # 1) Mutate source dataframe and keep source_mapped_values in sync
-                #    by reusing MatchingTask.set_source_value
-                for from_val, to_val in normalized_items:
-                    mt.set_source_value(source_column, from_val, to_val)
-
-                # 2) Update value_matches for the specific source/target pair
-                for from_val, to_val in normalized_items:
-                    mt.set_target_value_match(
-                        source_column, from_val, target_column, to_val
-                    )
+                # Update target value mappings via the operation system so Timeline is updated.
+                mt.apply_operation(
+                    operation="map_target_value",
+                    candidate={
+                        "sourceColumn": source_column,
+                        "targetColumn": target_column,
+                    },
+                    references=[],
+                    value_mappings=[
+                        {"from": from_val, "to": to_val}
+                        for from_val, to_val in normalized_items
+                    ],
+                )
 
                 logger.info(
                     (
@@ -257,8 +260,8 @@ class ValueTools:
                 - mapping (Dict[str, Any]): Exact string->value mapping. Keys match str(cell).
 
                 Effects:
-                - Mutates the source dataframe column in-place with mapped values.
-                - Synchronizes MatchingTask.value_matches[column].source_mapped_values and persists cache.
+                - Updates MatchingTask.value_matches for the given (source, target) pair.
+                - Records a map_target_value operation in history so Timeline can display it.
 
                 Returns (JSON string):
                 {"status": "ok", "source_column": str, "target_column": str}

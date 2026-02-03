@@ -121,6 +121,7 @@ declare interface Matcher {
     weight: number;
     params?: object;
     code?: string;
+    enabled?: boolean;
 }
 
 declare interface GDCAttribute {
@@ -175,6 +176,17 @@ declare interface MatcherAnalysis {
     falseNegatives: Candidate[];
     params?: object;
     code?: string;
+    explanationBreakdown?: MatcherExplanationBreakdown;
+}
+
+declare interface MatcherExplanationBreakdown {
+    exactMatchScore: number;
+    coveredGroundTruthScore: number;
+    coveredGroundTruthCount: number;
+    explainedGroundTruthCount: number;
+    missingExplanationCount: number;
+    explanationTypeSupportScores: Partial<Record<ExplanationType, number>>;
+    explanationTypeContradictScores: Partial<Record<ExplanationType, number>>;
 }
 
 declare interface AgentState {

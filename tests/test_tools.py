@@ -464,10 +464,7 @@ class TestValueTools:
         data = json.loads(out)
         assert data["status"] == "ok"
 
-        # Source dataframe values should be updated
-        df = self.mt.get_source_df()
-        assert set(df["Gender"].astype(str).tolist()) == {"male", "female"}
-
+        # Source dataframe values should NOT be updated
         # Value matches for the pair should reflect the mapping
         vm = self.mt.get_value_matches()["Gender"]["targets"]["gender"]
         assert set(vm) >= {"male", "female"}
@@ -511,3 +508,109 @@ class TestValueTools:
         # Value matches updated for the pair
         vm = self.mt.get_value_matches()["Age"]["targets"]["age"]
         assert set(map(str, vm)) >= {"71.0", "84.0"}
+
+    def test_compile_numeric_lambda_validation(self):
+        vt = ValueTools("test_session")
+        with pytest.raises(ValueError):
+            vt._compile_numeric_lambda("x + 1")
+        with pytest.raises(ValueError):
+            vt._compile_numeric_lambda("lambda y: y + 1")
+        with pytest.raises(ValueError):
+            vt._compile_numeric_lambda("lambda x: x ** 2")
+        with pytest.raises(ValueError):
+            vt._compile_numeric_lambda("lambda x: max(x)")
+
+    def test_preview_value_map_missing_column(self):
+        vt = ValueTools("test_session")
+        out = vt.preview_value_map_tool.invoke(
+            {
+                "source_column": "DoesNotExist",
+                "target_column": "gender",
+                "mapping": {"a": "b"},
+                "sample_n": 1,
+            }
+        )
+        data = json.loads(out)
+        assert "error" in data
+
+    def test_apply_value_map_error_path(self, monkeypatch):
+        vt = ValueTools("test_session")
+        mt = self.mt
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(mt, "apply_operation", _raise, raising=True)
+        out = vt.apply_value_map_tool.invoke(
+            {
+                "source_column": "Gender",
+                "target_column": "gender",
+                "mapping": {"Male": "male"},
+            }
+        )
+        data = json.loads(out)
+        assert "error" in data
+
+    def test_preview_numeric_lambda_missing_column(self):
+        vt = ValueTools("test_session")
+        out = vt.preview_numeric_lambda_tool.invoke(
+            {
+                "source_column": "DoesNotExist",
+                "target_column": "age",
+                "lambda_code": "lambda x: x + 1",
+                "sample_n": 1,
+            }
+        )
+        data = json.loads(out)
+        assert "error" in data
+
+    def test_apply_numeric_lambda_missing_column(self):
+        vt = ValueTools("test_session")
+        out = vt.apply_numeric_lambda_tool.invoke(
+            {
+                "source_column": "DoesNotExist",
+                "target_column": "age",
+                "lambda_code": "lambda x: x + 1",
+            }
+        )
+        data = json.loads(out)
+        assert "error" in data
+
+    def test_apply_numeric_lambda_non_numeric_and_errors(self, monkeypatch):
+        vt = ValueTools("test_session")
+        df = self.mt.get_source_df()
+        df.loc[df.index[0], "Age"] = "unknown"
+
+        out = vt.apply_numeric_lambda_tool.invoke(
+            {
+                "source_column": "Age",
+                "target_column": "age",
+                "lambda_code": "lambda x: x / 0",
+            }
+        )
+        data = json.loads(out)
+        assert data["status"] == "ok"
+        assert df.loc[df.index[0], "Age"] == "unknown"
+
+        monkeypatch.setattr(self.mt, "get_value_matches", lambda: {}, raising=True)
+        out = vt.apply_numeric_lambda_tool.invoke(
+            {
+                "source_column": "Age",
+                "target_column": "age",
+                "lambda_code": "lambda x: x + 1",
+            }
+        )
+        data = json.loads(out)
+        assert "error" in data
+
+    def test_apply_numeric_lambda_invalid_lambda_returns_error(self):
+        vt = ValueTools("test_session")
+        out = vt.apply_numeric_lambda_tool.invoke(
+            {
+                "source_column": "Age",
+                "target_column": "age",
+                "lambda_code": "not a lambda",
+            }
+        )
+        data = json.loads(out)
+        assert "error" in data

@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import time
+import tempfile
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -88,54 +89,136 @@ def extract_data_from_request(request):
     groundtruth_mappings = None
 
     if request.form is None:
-        return None
+        return None, None, None, None, None
 
     form = request.form
 
-    type = form["type"]
-    if type == "csv_input":
-        source_csv = form["source_csv"]
-        source_csv_string_io = StringIO(source_csv)
-        source_df = pd.read_csv(source_csv_string_io, sep=",")
+    request_type = form.get("type")
+    if request_type == "csv_input":
+        files = request.files or {}
 
-        if "target_csv" in form:
-            target_csv = form["target_csv"]
-            target_csv_string_io = StringIO(target_csv)
-            target_df = pd.read_csv(target_csv_string_io, sep=",")
+        def _save_uploaded_file(file_obj) -> str:
+            stream = getattr(file_obj, "stream", file_obj)
+            try:
+                stream.seek(0)
+            except Exception:
+                pass
+            tmp = tempfile.NamedTemporaryFile(delete=False)
+            tmp_path = tmp.name
+            tmp.close()
+            if hasattr(file_obj, "save"):
+                try:
+                    file_obj.save(tmp_path)
+                    return tmp_path
+                except Exception:
+                    pass
+            with open(tmp_path, "wb") as f:
+                while True:
+                    try:
+                        chunk = stream.read(1024 * 1024)
+                    except Exception:
+                        chunk = None
+                    if not chunk:
+                        break
+                    if isinstance(chunk, str):
+                        chunk = chunk.encode("utf-8", errors="replace")
+                    f.write(chunk)
+            return tmp_path
 
-        if "target_json" in form:
-            target_json = form["target_json"]
-            target_json_string_io = StringIO(target_json)
-            target_raw = json.load(target_json_string_io)
-            valid, err = validate_flat_ontology_json(target_raw)
-            if valid:
-                target_json = target_raw
+        def _read_csv_field(field_name: str) -> Optional[pd.DataFrame]:
+            file_obj = files.get(field_name)
+            if file_obj and getattr(file_obj, "filename", ""):
+                tmp_path = _save_uploaded_file(file_obj)
+                try:
+                    return pd.read_csv(tmp_path, sep=",")
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+            if field_name in form:
+                csv_text = form[field_name]
+                return pd.read_csv(StringIO(csv_text), sep=",")
+            return None
+
+        def _read_json_field(field_name: str) -> Optional[dict]:
+            file_obj = files.get(field_name)
+            if file_obj and getattr(file_obj, "filename", ""):
+                tmp_path = _save_uploaded_file(file_obj)
+                try:
+                    with open(tmp_path, "r", encoding="utf-8", errors="replace") as f:
+                        return json.load(f)
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+            if field_name in form:
+                raw_text = form[field_name]
+                return json.loads(raw_text)
+            return None
+
+        source_df = _read_csv_field("source_csv")
+        target_df = _read_csv_field("target_csv")
+
+        if "target_json" in form or ("target_json" in files):
+            try:
+                target_raw = _read_json_field("target_json")
+            except Exception as exc:
+                logger.error(f"Invalid target JSON schema: {exc}")
+                target_raw = None
+
+            if isinstance(target_raw, dict):
+                valid, err = validate_flat_ontology_json(target_raw)
+                if valid:
+                    target_json = target_raw
+                else:
+                    logger.error(f"Invalid target JSON schema: {err}")
+                    target_json = None
             else:
-                logger.error(f"Invalid target JSON schema: {err}")
                 target_json = None
+
             # If no target CSV was provided, synthesize a DataFrame from ontology JSON
             logger.critical("Synthesizing target DataFrame from ontology JSON")
             if target_df is None and isinstance(target_json, dict):
                 target_df = build_dataframe_from_ontology_json(target_json)
 
-        if "groundtruth_csv" in form:
-            groundtruth_csv = form["groundtruth_csv"]
-            groundtruth_csv_string_io = StringIO(groundtruth_csv)
-            # Preserve blanks as empty strings; avoid automatic NA parsing
-            groundtruth_df = pd.read_csv(
-                groundtruth_csv_string_io,
-                sep=",",
-                dtype=str,
-                keep_default_na=False,
-            )
-            # Prefer 4-column value mappings if present; otherwise fall back to 2-column pairs
-            try:
-                groundtruth_mappings = parse_ground_truth_mappings(groundtruth_df)
-                # Derive pairs from mappings for candidate generation
-                gt_pairs_set = set((s, t) for s, t, _, _ in groundtruth_mappings)
-                groundtruth_pairs = list(gt_pairs_set)
-            except Exception:
-                groundtruth_pairs = parse_ground_truth_pairs(groundtruth_df)
+        if "groundtruth_csv" in form or ("groundtruth_csv" in files):
+            file_obj = files.get("groundtruth_csv")
+            if file_obj and getattr(file_obj, "filename", ""):
+                tmp_path = _save_uploaded_file(file_obj)
+                try:
+                    # Preserve blanks as empty strings; avoid automatic NA parsing
+                    groundtruth_df = pd.read_csv(
+                        tmp_path, sep=",", dtype=str, keep_default_na=False
+                    )
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+            else:
+                groundtruth_csv = form.get("groundtruth_csv")
+                groundtruth_df = (
+                    pd.read_csv(
+                        StringIO(groundtruth_csv),
+                        sep=",",
+                        dtype=str,
+                        keep_default_na=False,
+                    )
+                    if groundtruth_csv
+                    else None
+                )
+
+            if groundtruth_df is not None:
+                # Prefer 4-column value mappings if present; otherwise fall back to 2-column pairs
+                try:
+                    groundtruth_mappings = parse_ground_truth_mappings(groundtruth_df)
+                    # Derive pairs from mappings for candidate generation
+                    gt_pairs_set = set((s, t) for s, t, _, _ in groundtruth_mappings)
+                    groundtruth_pairs = list(gt_pairs_set)
+                except Exception:
+                    groundtruth_pairs = parse_ground_truth_pairs(groundtruth_df)
 
     return source_df, target_df, target_json, groundtruth_pairs, groundtruth_mappings
 
@@ -348,6 +431,103 @@ def parse_ground_truth_mappings(df: pd.DataFrame) -> List[Tuple[str, str, str, s
         except Exception:
             t_val = (str(t_val_raw) if t_val_raw is not None else "").strip()
         mappings.append((s_attr, t_attr, s_val, t_val))
+    return mappings
+
+
+def parse_mapping_payload(
+    raw_content: str, fmt: str = "json"
+) -> List[Tuple[str, str, str, str]]:
+    """Parse uploaded mapping content (JSON or 4-column CSV) into a list of tuples.
+
+    Each tuple is (source_attribute, target_attribute, source_value, target_value).
+    JSON supports either:
+      - [{sourceColumn, targetColumn, valueMatches: [{from, to}]}]
+      - [{source_attribute, target_attribute, source_value, target_value}]
+    CSV must include the 4 required headers (case-insensitive).
+    """
+    if not raw_content:
+        raise ValueError("Mapping content is empty.")
+
+    fmt = (fmt or "json").lower()
+    if fmt == "csv":
+        df = pd.read_csv(StringIO(raw_content), dtype=str, keep_default_na=False)
+        return parse_ground_truth_mappings(df)
+    if fmt != "json":
+        raise ValueError(f"Unsupported mapping format: {fmt}")
+
+    try:
+        data = json.loads(raw_content)
+    except Exception as e:
+        raise ValueError(f"Invalid JSON mapping payload: {e}")
+
+    # Allow wrapper keys like { "mappings": [...] }
+    if isinstance(data, dict):
+        for key in ["mappings", "results", "data"]:
+            if key in data and isinstance(data[key], list):
+                data = data[key]
+                break
+
+    if not isinstance(data, list):
+        raise ValueError("Mapping JSON must be a list of mappings.")
+
+    mappings: List[Tuple[str, str, str, str]] = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+
+        source_attr = (
+            entry.get("sourceColumn")
+            or entry.get("source_attribute")
+            or entry.get("source")
+            or entry.get("sourceAttr")
+        )
+        target_attr = (
+            entry.get("targetColumn")
+            or entry.get("target_attribute")
+            or entry.get("target")
+            or entry.get("targetAttr")
+        )
+
+        if source_attr is None or target_attr is None:
+            continue
+
+        s_attr = str(source_attr).strip()
+        t_attr = str(target_attr).strip()
+        if s_attr == "" or t_attr == "":
+            continue
+
+        value_matches = entry.get("valueMatches") or entry.get("mappings") or []
+        appended = False
+        if isinstance(value_matches, list):
+            for vm in value_matches:
+                if not isinstance(vm, dict):
+                    continue
+                s_val = vm.get("from")
+                t_val = vm.get("to")
+                mappings.append(
+                    (
+                        s_attr,
+                        t_attr,
+                        ("" if s_val is None else str(s_val)).strip(),
+                        ("" if t_val is None else str(t_val)).strip(),
+                    )
+                )
+                appended = True
+
+        if not appended:
+            s_val = entry.get("source_value")
+            t_val = entry.get("target_value")
+            mappings.append(
+                (
+                    s_attr,
+                    t_attr,
+                    ("" if s_val is None else str(s_val)).strip(),
+                    ("" if t_val is None else str(t_val)).strip(),
+                )
+            )
+
+    if not mappings:
+        raise ValueError("No valid mappings found in JSON payload.")
     return mappings
 
 

@@ -795,19 +795,11 @@ class TestAPIEndpoints:
         import shutil
         import zipfile
         from api.utils import get_session_file
-        from api.index import SESSION_MANAGER
         
-        # Clean up any existing imported_session first
-        try:
-            imported_session_dir = get_session_file("imported_session", "dummy", create_dir=False)
-            imported_session_dir = os.path.dirname(imported_session_dir)
-            if os.path.exists(imported_session_dir):
-                shutil.rmtree(imported_session_dir, ignore_errors=True)
-            # Also remove from session manager if it exists
-            if "imported_session" in SESSION_MANAGER.sessions:
-                SESSION_MANAGER.delete_session("imported_session")
-        except Exception:
-            pass
+        session_name = "imported_session"
+        
+        # Ensure the session doesn't already exist from previous runs.
+        client.post("/api/session/delete", json={"session_name": session_name})
 
         # Create a zip file with session data
         zip_buffer = io.BytesIO()
@@ -816,32 +808,36 @@ class TestAPIEndpoints:
             zf.writestr("target.csv", sample_target_csv.to_csv(index=False))
         zip_buffer.seek(0)
 
-        response = client.post(
-            "/api/session/import",
-            data={
-                "file": (zip_buffer, "test_session.zip"),
-                "session_name": "imported_session",
-                "overwrite": "false"
-            },
-            content_type="multipart/form-data"
-        )
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["message"] == "success"
-        assert data["session"] == "imported_session"
-        assert "imported_session" in data["sessions"]
+        try:
+            response = client.post(
+                "/api/session/import",
+                data={
+                    "file": (zip_buffer, "test_session.zip"),
+                    "session_name": session_name,
+                    "overwrite": "false"
+                },
+                content_type="multipart/form-data"
+            )
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data["message"] == "success"
+            assert data["session"] == session_name
+            assert session_name in data["sessions"]
 
-        # Verify files were imported
-        imported_source = get_session_file("imported_session", "source.csv", create_dir=False)
-        imported_target = get_session_file("imported_session", "target.csv", create_dir=False)
-        assert os.path.exists(imported_source)
-        assert os.path.exists(imported_target)
-
-        # Clean up
-        if os.path.exists(imported_source):
-            os.remove(imported_source)
-        if os.path.exists(imported_target):
-            os.remove(imported_target)
+            # Verify files were imported
+            imported_source = get_session_file(session_name, "source.csv", create_dir=False)
+            imported_target = get_session_file(session_name, "target.csv", create_dir=False)
+            assert os.path.exists(imported_source)
+            assert os.path.exists(imported_target)
+        finally:
+            # Use the API delete endpoint so cleanup mirrors real behavior.
+            client.post("/api/session/delete", json={"session_name": session_name})
+            # Ensure the session directory is gone even if the delete endpoint fails.
+            imported_session_dir = os.path.dirname(
+                get_session_file(session_name, "dummy", create_dir=False)
+            )
+            if os.path.exists(imported_session_dir):
+                shutil.rmtree(imported_session_dir, ignore_errors=True)
 
     def test_session_import_missing_file(self, client):
         """Test session import without file."""

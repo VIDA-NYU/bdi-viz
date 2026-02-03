@@ -316,6 +316,46 @@ const getMatchers = (prop: getMatchersProps) => {
     );
 };
 
+interface updateMatchersProps {
+    matchers: Matcher[];
+    callback: (matchers: Matcher[]) => void;
+    signal?: AbortSignal;
+}
+
+const updateMatchers = (prop: updateMatchersProps) => {
+    return makeApiRequest<void>(
+        "/api/matchers/update",
+        { matchers: prop.matchers, session_name: getSessionName() },
+        prop.signal,
+        (data) => {
+            const matchers = parseArray<Matcher>(data?.matchers, "Matcher");
+            console.log("updateMatchers finished!", matchers);
+            prop.callback(matchers);
+            return;
+        }
+    );
+};
+
+interface deleteMatcherProps {
+    name: string;
+    callback: (matchers: Matcher[]) => void;
+    signal?: AbortSignal;
+}
+
+const deleteMatcher = (prop: deleteMatcherProps) => {
+    return makeApiRequest<void>(
+        "/api/matcher/delete",
+        { name: prop.name, session_name: getSessionName() },
+        prop.signal,
+        (data) => {
+            const matchers = parseArray<Matcher>(data?.matchers, "Matcher");
+            console.log("deleteMatcher finished!", matchers);
+            prop.callback(matchers);
+            return;
+        }
+    );
+};
+
 interface getUniqueValuesProps {
     callback: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     signal?: AbortSignal;
@@ -617,6 +657,29 @@ const getCandidatesResult = (prop: getCandidatesResultProps) => {
     );
 };
 
+interface importMappingsProps {
+    content: string;
+    format: 'json' | 'csv';
+    onSuccess?: (summary: Record<string, any>) => void;
+    signal?: AbortSignal;
+}
+
+const importMappings = (prop: importMappingsProps) => {
+    return makeApiRequest<Record<string, any>>(
+        "/api/mappings/import",
+        { content: prop.content, format: prop.format, session_name: getSessionName() },
+        prop.signal,
+        (data) => {
+            if (data && data.message === "success") {
+                prop.onSuccess?.(data.summary || {});
+                return data.summary;
+            } else {
+                throw new Error(data?.error || "Failed to import mappings");
+            }
+        }
+    );
+};
+
 interface updateSourceValueProps {
     column: string;
     value: any;
@@ -883,6 +946,8 @@ export {
     pollForMatchingStatus,
     getCachedResults, 
     getMatchers,
+    updateMatchers,
+    deleteMatcher,
     getValueBins, 
     getValueMatches, 
     getUserOperationHistory, 
@@ -893,6 +958,7 @@ export {
     redoUserOperation, 
     getGDCAttribute, 
     getCandidatesResult, 
+    importMappings,
     updateSourceValue,
     updateTargetMatchValue,
     newMatcher,

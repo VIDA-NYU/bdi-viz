@@ -18,6 +18,7 @@ interface LeftPanelProps {
     onCandidateTypeSelect: (dataType: string) => void;
     onCandidateThresholdSelect: (num: number) => void;
     onMatchersSelect: (matchers: Matcher[]) => void;
+    onMatcherDelete?: (matcherName: string) => Promise<void>;
     state: {
         sourceColumns: string[];
         candidateType: string;
@@ -42,7 +43,9 @@ interface LeftPanelProps {
     handleSourceOntology: (sourceOntologies: Ontology[]) => void;
     handleUniqueValues: (sourceUniqueValuesArray: SourceUniqueValues[], targetUniqueValuesArray: TargetUniqueValues[]) => void;
     handleValueMatches: (valueMatches: ValueMatch[]) => void;
+    handleUserOperationsUpdate: (userOperations: UserOperation[]) => void;
     setOpenNewMatcherDialog: (open: boolean) => void;
+    onDefaultMatchersUpdate: (matchers: Matcher[]) => void;
 }
 
 const ShortcutPanelMemo = memo(ShortcutPanel);
@@ -60,6 +63,7 @@ const LeftPanel = ({
     onCandidateTypeSelect,
     onCandidateThresholdSelect,
     onMatchersSelect,
+    onMatcherDelete,
     state,
     // DecisionPanel Props
     acceptMatch,
@@ -76,8 +80,10 @@ const LeftPanel = ({
     handleSourceOntology,
     handleUniqueValues,
     handleValueMatches,
+    handleUserOperationsUpdate,
     // New Matcher Props
     setOpenNewMatcherDialog,
+    onDefaultMatchersUpdate,
 }: LeftPanelProps) => {
 
     return (
@@ -88,6 +94,7 @@ const LeftPanel = ({
                 handleSourceOntology={handleSourceOntology}
                 handleUniqueValues={handleUniqueValues}
                 handleValueMatches={handleValueMatches}
+                handleUserOperationsUpdate={handleUserOperationsUpdate}
                 acceptMatch={acceptMatch}
                 rejectMatch={rejectMatch}
                 discardColumn={discardColumn}
@@ -106,6 +113,8 @@ const LeftPanel = ({
                 onCandidateTypeSelect={onCandidateTypeSelect}
                 onCandidateThresholdSelect={onCandidateThresholdSelect}
                 onMatchersSelect={onMatchersSelect}
+                onDefaultMatchersUpdate={onDefaultMatchersUpdate}
+                onMatcherDelete={onMatcherDelete}
                 state={state}
             />
             {/* <DecisionPanel

@@ -4,9 +4,10 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,65 @@ from .utils import (
 logger = logging.getLogger("bdiviz_flask.sub")
 
 
+# JSON serializer for numpy/pandas types used in cached results.
+def _json_default(value: Any) -> Any:
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (pd.Timestamp, np.datetime64)):
+        return str(value)
+    if isinstance(value, set):
+        return list(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+# Default matcher names
+DEFAULT_MATCHER_NAMES = [
+    "magneto_ft",
+    "magneto_zs",
+    # "ct_learning",
+    "jaccard_distance",
+]
+
+
+def _create_default_matcher_objs() -> Dict[str, BDIKitMatcher]:
+    """Create default matcher objects."""
+    return {name: BDIKitMatcher(name) for name in DEFAULT_MATCHER_NAMES}
+
+
+def _create_default_matcher_metadata(weight: float = 1.0) -> Dict[str, Dict[str, Any]]:
+    """Create default matcher metadata with specified weight."""
+    return {
+        name: {
+            "name": name,
+            "weight": weight,
+            "params": {},
+            "enabled": True,
+        }
+        for name in DEFAULT_MATCHER_NAMES
+    }
+
+
+def _normalize_matcher_weights(
+    matchers: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    total_weight = sum(matcher.get("weight", 0) for matcher in matchers.values())
+    if total_weight > 0:
+        for matcher in matchers.values():
+            matcher["weight"] = matcher.get("weight", 0) / total_weight
+        return matchers
+
+    n = len(matchers)
+    for matcher in matchers.values():
+        matcher["weight"] = 1.0 / n if n else 1.0
+    return matchers
+
+
 class MatchingTask:
     def __init__(
         self,
@@ -43,14 +103,7 @@ class MatchingTask:
 
         self.candidate_quadrants = None
         # Store matcher objects separately from matcher metadata
-        self.matcher_objs = {
-            # "jaccard_distance_matcher": ValentineMatcher(
-            #     "jaccard_distance_matcher"
-            # ),
-            # "ct_learning": BDIKitMatcher("ct_learning"),
-            "magneto_ft": BDIKitMatcher("magneto_ft"),
-            "magneto_zs": BDIKitMatcher("magneto_zs"),
-        }
+        self.matcher_objs = _create_default_matcher_objs()
 
         self.source_df = None
         self.target_df = None
@@ -89,9 +142,13 @@ class MatchingTask:
         # Try to load existing cache first
         cached_json = self._import_cache_from_json()
         if cached_json and "matchers" in cached_json:
+            normalized = self._normalize_cached_matchers(cached_json)
             self.cached_candidates = cached_json
             # Restore nodes from cache if they exist
             self.cached_candidates["nodes"] = cached_json.get("nodes", [])
+            self._ensure_default_matchers_in_cache(persist=True)
+            if normalized:
+                self._export_cache_to_json(self.cached_candidates)
         else:
             # Initialize with default matchers if no cache exists
             self.cached_candidates = {
@@ -99,58 +156,184 @@ class MatchingTask:
                 "target_hash": None,
                 "candidates": [],
                 "value_matches": {},
-                "matchers": {
-                    "magneto_ft": {
-                        "name": "magneto_ft",
-                        "weight": 0.5,  # Initialize with normalized weights
-                        "params": {},
-                    },
-                    "magneto_zs": {
-                        "name": "magneto_zs",
-                        "weight": 0.5,  # Initialize with normalized weights
-                        "params": {},
-                    },
-                },
+                "matchers": _create_default_matcher_metadata(
+                    weight=0.5
+                ),  # Initialize with normalized weights
                 "matcher_code": {},
                 "nodes": [],  # Initialize empty nodes list
             }
 
+    def _ensure_default_matchers_in_cache(self, persist: bool = False) -> None:
+        if not self.cached_candidates or "matchers" not in self.cached_candidates:
+            self.cached_candidates = {
+                "source_hash": None,
+                "target_hash": None,
+                "candidates": [],
+                "value_matches": {},
+                "matchers": _create_default_matcher_metadata(weight=0.5),
+                "matcher_code": {},
+                "nodes": [],
+            }
+            if persist:
+                self._export_cache_to_json(self.cached_candidates)
+            return
+
+        updated = False
+        for name in DEFAULT_MATCHER_NAMES:
+            if name not in self.cached_candidates["matchers"]:
+                self.cached_candidates["matchers"][name] = {
+                    "name": name,
+                    "weight": 1.0,
+                    "params": {},
+                    "enabled": True,
+                }
+                updated = True
+            else:
+                existing = self.cached_candidates["matchers"][name]
+                if "name" not in existing:
+                    existing["name"] = name
+                    updated = True
+                if "weight" not in existing:
+                    existing["weight"] = 1.0
+                    updated = True
+                if "params" not in existing:
+                    existing["params"] = {}
+                    updated = True
+                if "enabled" not in existing:
+                    existing["enabled"] = True
+                    updated = True
+
+        if updated and persist:
+            self._export_cache_to_json(self.cached_candidates)
+
+    def _normalize_cached_matchers(self, cached_json: Dict[str, Any]) -> bool:
+        matchers = cached_json.get("matchers")
+        if not matchers:
+            return False
+
+        matcher_code = cached_json.get("matcher_code", {})
+        alias_map: Dict[str, str] = {}
+        normalized = False
+
+        def code_defines_class(code: Optional[str], class_name: str) -> bool:
+            if not code:
+                return False
+            pattern = rf"^\s*class\s+{re.escape(class_name)}\b"
+            return re.search(pattern, code, re.MULTILINE) is not None
+
+        for matcher_name, matcher_info in matchers.items():
+            if matcher_name in DEFAULT_MATCHER_NAMES:
+                continue
+            stored_name = matcher_info.get("name")
+            if stored_name and stored_name != matcher_name:
+                if stored_name in DEFAULT_MATCHER_NAMES:
+                    logger.warning(
+                        "Custom matcher '%s' uses reserved name '%s'; keeping canonical key",
+                        matcher_name,
+                        stored_name,
+                    )
+                    continue
+                if stored_name in matchers and stored_name != matcher_name:
+                    alias_code = matchers.get(stored_name, {}).get(
+                        "code"
+                    ) or matcher_code.get(stored_name)
+                    if code_defines_class(alias_code, stored_name):
+                        logger.warning(
+                            "Name conflict for '%s'; keeping both matchers",
+                            stored_name,
+                        )
+                        continue
+                if stored_name not in alias_map:
+                    alias_map[stored_name] = matcher_name
+                else:
+                    logger.warning(
+                        "Multiple matchers share name '%s'; keeping '%s'",
+                        stored_name,
+                        alias_map[stored_name],
+                    )
+
+        if alias_map and cached_json.get("candidates"):
+            for candidate in cached_json["candidates"]:
+                matcher_name = candidate.get("matcher")
+                if matcher_name in alias_map:
+                    candidate["matcher"] = alias_map[matcher_name]
+                    normalized = True
+
+        for matcher_name, matcher_info in list(matchers.items()):
+            if matcher_name in DEFAULT_MATCHER_NAMES:
+                continue
+            if matcher_info.get("name") != matcher_name:
+                matcher_info["name"] = matcher_name
+                normalized = True
+            matcher_params = matcher_info.get("params", {}) or {}
+            if matcher_params.get("name") != matcher_name:
+                matcher_params = dict(matcher_params)
+                matcher_params["name"] = matcher_name
+                matcher_info["params"] = matcher_params
+                normalized = True
+
+        for alias, canonical in alias_map.items():
+            if alias in DEFAULT_MATCHER_NAMES:
+                continue
+            if alias in matchers and alias != canonical:
+                alias_info = matchers.get(alias, {})
+                canonical_info = matchers.get(canonical, {})
+                if alias_info.get("code") and not canonical_info.get("code"):
+                    canonical_info["code"] = alias_info["code"]
+                    matchers[canonical] = canonical_info
+                if alias in matcher_code and canonical not in matcher_code:
+                    matcher_code[canonical] = matcher_code[alias]
+                matchers.pop(alias, None)
+                matcher_code.pop(alias, None)
+                normalized = True
+
+        if normalized:
+            cached_json["matcher_code"] = matcher_code
+
+        return normalized
+
     def _load_cached_matchers_async(self, cached_json: Dict[str, Any]) -> None:
         """Start an asynchronous process to load cached matchers"""
         # Always start with default matcher objects
-        self.matcher_objs = {
-            "magneto_ft": BDIKitMatcher("magneto_ft"),
-            "magneto_zs": BDIKitMatcher("magneto_zs"),
-        }
+        self.matcher_objs = _create_default_matcher_objs()
         if cached_json and "matchers" in cached_json:
             # Load matcher metadata first (this was done by _load_cached_matchers)
             cached_matchers = cached_json["matchers"]
             cached_matcher_code = cached_json.get("matcher_code", {})
 
             # First load the default matchers
-            default_matchers = {
-                "magneto_ft": {
-                    "name": "magneto_ft",
-                    "weight": 1.0,
-                    "params": {},
-                },
-                "magneto_zs": {
-                    "name": "magneto_zs",
-                    "weight": 1.0,
-                    "params": {},
-                },
-            }
+            default_matchers = _create_default_matcher_metadata(weight=1.0)
             # Initialize matchers dictionaries with defaults
             matchers = default_matchers.copy()
-            # Load custom matchers from cache
+            # Load matchers from cache (defaults + custom)
             for matcher_name, matcher_info in cached_matchers.items():
-                # Skip default matchers as they're already loaded
-                if matcher_name in default_matchers:
+                if matcher_name in DEFAULT_MATCHER_NAMES:
+                    existing = matchers.get(
+                        matcher_name,
+                        {
+                            "name": matcher_name,
+                            "weight": 1.0,
+                            "params": {},
+                            "enabled": True,
+                        },
+                    )
+                    existing["name"] = matcher_info.get("name", existing["name"])
+                    existing["weight"] = matcher_info.get("weight", existing["weight"])
+                    existing["params"] = matcher_info.get("params", existing["params"])
+                    existing["enabled"] = matcher_info.get(
+                        "enabled", existing.get("enabled", True)
+                    )
+                    matchers[matcher_name] = existing
                     continue
+                matcher_params = matcher_info.get("params", {}) or {}
+                if matcher_params.get("name") != matcher_name:
+                    matcher_params = dict(matcher_params)
+                    matcher_params["name"] = matcher_name
                 matchers[matcher_name] = {
-                    "name": matcher_info.get("name", matcher_name),
+                    "name": matcher_name,
                     "weight": matcher_info.get("weight", 1.0),
-                    "params": matcher_info.get("params", {}),
+                    "params": matcher_params,
+                    "enabled": matcher_info.get("enabled", True),
                     "code": None,
                 }
                 # Get matcher code if available
@@ -172,17 +355,11 @@ class MatchingTask:
         self, cached_json: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Load matcher objects from cache asynchronously using multithreading"""
-        default_matcher_objs = {
-            # "ct_learning": BDIKitMatcher("ct_learning"),
-            "magneto_ft": BDIKitMatcher("magneto_ft"),
-            "magneto_zs": BDIKitMatcher("magneto_zs"),
-        }
-
         # Get matcher names that need to be loaded
         matcher_names = [
             matcher_name
             for matcher_name in cached_json["matchers"]
-            if matcher_name not in default_matcher_objs
+            if matcher_name not in DEFAULT_MATCHER_NAMES
         ]
 
         if not matcher_names:
@@ -203,12 +380,26 @@ class MatchingTask:
                         f"No code found for matcher '{matcher_name}'",
                     )
 
-                matcher_params = matcher_info.get("params", {})
+                matcher_params = matcher_info.get("params", {}) or {}
+                if matcher_params.get("name") != matcher_name:
+                    matcher_params = dict(matcher_params)
+                    matcher_params["name"] = matcher_name
 
                 # Recreate the matcher
                 error, matcher = verify_new_matcher(
                     matcher_name, matcher_code, matcher_params
                 )
+                if (
+                    not error
+                    and matcher
+                    and getattr(matcher, "name", None) != matcher_name
+                ):
+                    try:
+                        matcher.name = matcher_name
+                    except Exception:
+                        logger.warning(
+                            "Unable to override matcher.name for '%s'", matcher_name
+                        )
                 return matcher_name, matcher, error
             except Exception as e:
                 return matcher_name, None, str(e)
@@ -519,29 +710,38 @@ class MatchingTask:
     ) -> None:
         """Load matchers from cache, do not mutate input."""
         # First load the default matchers
-        default_matchers = {
-            "magneto_ft": {
-                "name": "magneto_ft",
-                "weight": 1.0,
-                "params": {},
-            },
-            "magneto_zs": {
-                "name": "magneto_zs",
-                "weight": 1.0,
-                "params": {},
-            },
-        }
+        default_matchers = _create_default_matcher_metadata(weight=1.0)
         # Initialize matchers dictionaries with defaults
         matchers = default_matchers.copy()
-        # Load custom matchers from cache
+        # Load matchers from cache (defaults + custom)
         for matcher_name, matcher_info in cached_matchers.items():
-            # Skip default matchers as they're already loaded
-            if matcher_name in default_matchers:
+            if matcher_name in DEFAULT_MATCHER_NAMES:
+                existing = matchers.get(
+                    matcher_name,
+                    {
+                        "name": matcher_name,
+                        "weight": 1.0,
+                        "params": {},
+                        "enabled": True,
+                    },
+                )
+                existing["name"] = matcher_info.get("name", existing["name"])
+                existing["weight"] = matcher_info.get("weight", existing["weight"])
+                existing["params"] = matcher_info.get("params", existing["params"])
+                existing["enabled"] = matcher_info.get(
+                    "enabled", existing.get("enabled", True)
+                )
+                matchers[matcher_name] = existing
                 continue
+            matcher_params = matcher_info.get("params", {}) or {}
+            if matcher_params.get("name") != matcher_name:
+                matcher_params = dict(matcher_params)
+                matcher_params["name"] = matcher_name
             matchers[matcher_name] = {
-                "name": matcher_info.get("name", matcher_name),
+                "name": matcher_name,
                 "weight": matcher_info.get("weight", 1.0),
-                "params": matcher_info.get("params", {}),
+                "params": matcher_params,
+                "enabled": matcher_info.get("enabled", True),
                 "code": None,
             }
             # Get matcher code if available
@@ -555,7 +755,7 @@ class MatchingTask:
         # Also load matcher objects for custom matchers
         loaded_matcher_objs = {}
         for matcher_name, matcher_info in matchers.items():
-            if matcher_name in default_matchers:
+            if matcher_name in DEFAULT_MATCHER_NAMES:
                 # Default matchers are already loaded in __init__
                 continue
 
@@ -662,23 +862,39 @@ class MatchingTask:
         task_state._update_task_state(
             current_step=generation_steps[2], log_message="Running matchers."
         )
-        total_matchers = len(self.matcher_objs)
+        matcher_config = self.cached_candidates.get("matchers", {})
+        enabled_matchers = [
+            (name, instance)
+            for name, instance in self.matcher_objs.items()
+            if matcher_config.get(name, {}).get("enabled", True)
+        ]
+        total_matchers = len(enabled_matchers)
 
         # Add candidates from matchers
-        for i, (matcher_name, matcher_instance) in enumerate(self.matcher_objs.items()):
-            matcher_candidates = matcher_instance.top_matches(
-                source=self.source_df,
-                target=self.target_df,
-                top_k=self.top_k,
-            )
-            layered_candidates.extend(matcher_candidates)
-            # Calculate progress based on matcher position
-            matcher_progress = 80 + ((i + 1) / total_matchers * 10)
+        if not enabled_matchers:
             task_state._update_task_state(
-                progress=matcher_progress,
-                current_step=f"Completed matcher: {matcher_name}",
-                log_message=f"Matcher {matcher_name} produced {len(matcher_candidates)} candidates.",
+                progress=90,
+                current_step="Running matchers",
+                log_message="All matchers are disabled; skipping matcher execution.",
             )
+        else:
+            for i, (matcher_name, matcher_instance) in enumerate(enabled_matchers):
+                matcher_candidates = matcher_instance.top_matches(
+                    source=self.source_df,
+                    target=self.target_df,
+                    top_k=self.top_k,
+                )
+                layered_candidates.extend(matcher_candidates)
+                # Calculate progress based on matcher position
+                matcher_progress = 80 + ((i + 1) / total_matchers * 10)
+                task_state._update_task_state(
+                    progress=matcher_progress,
+                    current_step=f"Completed matcher: {matcher_name}",
+                    log_message=(
+                        f"Matcher {matcher_name} produced {len(matcher_candidates)} "
+                        "candidates."
+                    ),
+                )
 
         task_state._update_task_state(
             progress=90, log_message="All matchers completed."
@@ -936,13 +1152,13 @@ class MatchingTask:
         return load_gdc_ontology(candidates)
 
     def _generate_target_ontology(self) -> Optional[List[Dict]]:
-        candidates = self.get_cached_candidates()
-        target_columns = set()
-        for candidate in candidates:
-            target_columns.add(candidate["targetColumn"])
-        return load_ontology(
-            dataset="target", columns=list(target_columns), session=self.session_name
-        )
+        if self.target_df is not None:
+            return load_ontology(
+                dataset="target",
+                columns=list(self.target_df.columns),
+                session=self.session_name,
+            )
+        return load_ontology(dataset="target", session=self.session_name)
 
     def _generate_source_ontology(self) -> Optional[List[Dict]]:
         return load_ontology(dataset="source", session=self.session_name)
@@ -1128,7 +1344,7 @@ class MatchingTask:
             # Acquire exclusive lock
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             try:
-                json.dump(json_obj, f, indent=4)
+                json.dump(json_obj, f, indent=4, default=_json_default)
                 # Ensure data is written to disk
                 f.flush()
                 os.fsync(f.fileno())
@@ -1197,8 +1413,13 @@ class MatchingTask:
     def sync_cache(self) -> None:
         """Sync the cache with the current state of the task."""
         cached_json = self._import_cache_from_json()
-        self.cached_candidates = cached_json
-        logger.info("Cache synced with current state of the task.")
+        if cached_json:
+            self.cached_candidates = cached_json
+            logger.info("Cache synced with current state of the task.")
+            return
+        logger.warning("Cache sync skipped; cached file missing or invalid.")
+        if not self.cached_candidates:
+            self._initialize_cache()
 
     def _bucket_column(self, df: pd.DataFrame, col: str) -> List[Dict[str, Any]]:
         col_obj = df[col].dropna()
@@ -1661,6 +1882,7 @@ class MatchingTask:
         self.set_cached_candidates(cached_candidates)
 
     def get_matchers(self) -> List[Dict[str, any]]:
+        self._ensure_default_matchers_in_cache(persist=True)
         matcher_list = []
         cached_matchers = self.cached_candidates["matchers"]
         for key, item in cached_matchers.items():
@@ -1668,6 +1890,7 @@ class MatchingTask:
                 "name": item["name"],
                 "weight": item["weight"],
                 "params": item["params"],
+                "enabled": item.get("enabled", True),
             }
             # Add code if it exists in the matcher or in the cached matcher code
             if "code" in item:
@@ -1684,6 +1907,128 @@ class MatchingTask:
     def set_matchers(self, matchers: Dict[str, object]) -> None:
         self.cached_candidates["matchers"] = matchers
 
+    def update_matchers(self, matchers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not isinstance(matchers, list):
+            return self.get_matchers()
+
+        with self.lock:
+            if not self.cached_candidates or "matchers" not in self.cached_candidates:
+                self.cached_candidates = {
+                    "source_hash": None,
+                    "target_hash": None,
+                    "candidates": [],
+                    "value_matches": {},
+                    "matchers": _create_default_matcher_metadata(weight=0.5),
+                    "matcher_code": {},
+                    "nodes": [],
+                }
+
+            matcher_code = self.cached_candidates.setdefault("matcher_code", {})
+
+            for incoming in matchers:
+                name = incoming.get("name") if isinstance(incoming, dict) else None
+                if not name:
+                    continue
+                cache_key = name
+                if cache_key not in self.cached_candidates["matchers"]:
+                    for key, item in self.cached_candidates["matchers"].items():
+                        if item.get("name") == name:
+                            cache_key = key
+                            break
+                existing = self.cached_candidates["matchers"].get(
+                    cache_key,
+                    {
+                        "name": cache_key,
+                        "weight": 1.0,
+                        "params": {},
+                        "enabled": True,
+                    },
+                )
+                if "weight" in incoming and incoming["weight"] is not None:
+                    existing["weight"] = incoming["weight"]
+                if "params" in incoming and isinstance(incoming["params"], dict):
+                    incoming_params = incoming["params"]
+                    if incoming_params.get("name") != cache_key:
+                        incoming_params = dict(incoming_params)
+                        incoming_params["name"] = cache_key
+                    existing["params"] = incoming_params
+                if "enabled" in incoming:
+                    existing["enabled"] = bool(incoming["enabled"])
+                if "code" in incoming and incoming["code"]:
+                    existing["code"] = incoming["code"]
+                    matcher_code[cache_key] = incoming["code"]
+                existing["name"] = cache_key
+                self.cached_candidates["matchers"][cache_key] = existing
+
+            # Ensure defaults exist and have an enabled flag.
+            for name in DEFAULT_MATCHER_NAMES:
+                self.cached_candidates["matchers"].setdefault(
+                    name,
+                    {
+                        "name": name,
+                        "weight": 1.0,
+                        "params": {},
+                        "enabled": True,
+                    },
+                )
+                self.cached_candidates["matchers"][name].setdefault("enabled", True)
+
+            # Invalidate cached hashes so the next matching task uses updated defaults.
+            self.cached_candidates["source_hash"] = None
+            self.cached_candidates["target_hash"] = None
+
+            self._export_cache_to_json(self.cached_candidates)
+
+        return self.get_matchers()
+
+    def delete_matcher(
+        self, name: str
+    ) -> Tuple[Optional[str], Optional[List[Dict[str, Any]]]]:
+        if name in DEFAULT_MATCHER_NAMES:
+            return f"Matcher '{name}' is a default matcher and cannot be deleted.", None
+
+        with self.lock:
+            if not self.cached_candidates or "matchers" not in self.cached_candidates:
+                return "Matcher cache not initialized.", None
+
+            if name not in self.cached_candidates["matchers"]:
+                return f"Matcher '{name}' not found.", None
+            matcher_info = self.cached_candidates["matchers"].get(name, {})
+            matcher_code = self.cached_candidates.get("matcher_code", {}).get(name)
+            if not matcher_info.get("code") and not matcher_code:
+                return f"Matcher '{name}' is not a custom matcher.", None
+
+            self.cached_candidates["matchers"].pop(name, None)
+            if "matcher_code" in self.cached_candidates:
+                self.cached_candidates["matcher_code"].pop(name, None)
+            self.matcher_objs.pop(name, None)
+
+            candidates = self.cached_candidates.get("candidates", [])
+            if candidates:
+                self.cached_candidates["candidates"] = [
+                    candidate
+                    for candidate in candidates
+                    if candidate.get("matcher") != name
+                ]
+
+            if self.weight_updater:
+                self.weight_updater.matchers = self.cached_candidates["matchers"]
+                self.weight_updater.candidates = (
+                    self.weight_updater._preprocess_candidates(
+                        self.cached_candidates.get("candidates", [])
+                    )
+                )
+                self.weight_updater._normalize_weights()
+                self.cached_candidates["matchers"] = self.weight_updater.matchers
+            else:
+                self.cached_candidates["matchers"] = _normalize_matcher_weights(
+                    self.cached_candidates["matchers"]
+                )
+
+            self._export_cache_to_json(self.cached_candidates)
+
+        return None, self.get_matchers()
+
     def new_matcher(
         self,
         name: str,
@@ -1697,7 +2042,12 @@ class MatchingTask:
                     task_type="new_matcher", task_id="api_call", new_task=True
                 )
 
-            if "name" not in params or params["name"] == "":
+            if params.get("name") != name:
+                if params.get("name"):
+                    logger.info(
+                        "Overriding matcher param 'name' to match class name '%s'",
+                        name,
+                    )
                 params["name"] = name
 
             matcher = {
@@ -1705,6 +2055,7 @@ class MatchingTask:
                 "weight": 1.0,
                 "code": code,
                 "params": params,
+                "enabled": True,
             }
             # Verify and create the new matcher
             error, matcher_obj = verify_new_matcher(name, code, params)
@@ -1716,6 +2067,12 @@ class MatchingTask:
                     log_message=f"Error verifying new matcher: {error}",
                 )
                 return error, None
+
+            if getattr(matcher_obj, "name", None) != name:
+                try:
+                    matcher_obj.name = name
+                except Exception:
+                    logger.warning("Unable to override matcher_obj.name for '%s'", name)
 
             # Add the new matcher to the matchers dictionary
             self.cached_candidates["matchers"][name] = matcher
@@ -1784,11 +2141,16 @@ class MatchingTask:
                 if "matchers" not in self.cached_candidates:
                     self.cached_candidates["matchers"] = {}
 
-                self.cached_candidates["matchers"][name] = {
-                    "name": matcher_obj.name,
-                    "weight": getattr(matcher_obj, "weight", 1.0),
-                    "params": params,
-                }
+                existing_matcher = self.cached_candidates["matchers"].get(name, {})
+                existing_matcher["name"] = name
+                existing_matcher["weight"] = getattr(
+                    matcher_obj, "weight", existing_matcher.get("weight", 1.0)
+                )
+                existing_matcher["params"] = params
+                existing_matcher.setdefault("enabled", True)
+                if code:
+                    existing_matcher["code"] = code
+                self.cached_candidates["matchers"][name] = existing_matcher
 
                 # Export updated cache to JSON
                 self._export_cache_to_json(self.cached_candidates)
@@ -1986,6 +2348,79 @@ class MatchingTask:
         self.source_df[column] = self.source_df[column].replace(from_val, to_val)
         self.set_source_mapped_values(column, from_val, to_val)
 
+    def _ensure_value_match_entry(self, source_col: str) -> Dict[str, Any]:
+        """
+        Ensure value_matches has an entry for the source column without resetting
+        existing mappings.
+        """
+        if "value_matches" not in self.cached_candidates:
+            self.cached_candidates["value_matches"] = {}
+
+        if source_col not in self.cached_candidates["value_matches"]:
+            uniques: List[str] = []
+            try:
+                if (
+                    self.source_df is not None
+                    and source_col in self.source_df.columns
+                    and pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype)
+                ):
+                    uniques = self.get_source_unique_values(source_col, n=300)
+                elif (
+                    self.source_df is not None and source_col in self.source_df.columns
+                ):
+                    uniques = self.get_source_unique_values(source_col)
+            except Exception:
+                uniques = []
+
+            self.cached_candidates["value_matches"][source_col] = {
+                "source_unique_values": list(uniques),
+                "source_mapped_values": list(uniques),
+                "targets": {},
+            }
+
+        return self.cached_candidates["value_matches"][source_col]
+
+    def _upsert_value_mapping(
+        self, source_col: str, target_col: str, source_val: str, target_val: str
+    ) -> None:
+        """
+        Add or update a single source->target value mapping, expanding caches as needed.
+        """
+        vm_entry = self._ensure_value_match_entry(source_col)
+        is_numeric_source = (
+            self.source_df is not None
+            and source_col in self.source_df.columns
+            and pd.api.types.is_numeric_dtype(self.source_df[source_col].dtype)
+        )
+
+        normalized_source = (
+            self._normalize_numeric_str(source_val)
+            if is_numeric_source
+            else ("" if source_val is None else str(source_val).strip())
+        )
+
+        source_uniques = vm_entry["source_unique_values"]
+        mapped_values = vm_entry["source_mapped_values"]
+
+        if normalized_source not in source_uniques:
+            source_uniques.append(normalized_source)
+            mapped_values.append(normalized_source)
+            for vals in vm_entry["targets"].values():
+                vals.append("")
+
+        targets_list = vm_entry["targets"].setdefault(
+            target_col, [""] * len(source_uniques)
+        )
+        if len(targets_list) < len(source_uniques):
+            targets_list.extend([""] * (len(source_uniques) - len(targets_list)))
+
+        try:
+            idx = source_uniques.index(normalized_source)
+        except ValueError:
+            return
+
+        targets_list[idx] = "" if target_val is None else str(target_val).strip()
+
     def set_target_value_match(
         self, source_col: str, source_val: str, target_col: str, new_target_val: str
     ) -> None:
@@ -2106,6 +2541,119 @@ class MatchingTask:
             return ""
 
         return str(targets_list[idx])
+
+    def import_mappings(
+        self, mappings: List[Tuple[str, str, str, str]]
+    ) -> Dict[str, int]:
+        """
+        Apply imported mappings by accepting column pairs and updating value maps.
+        """
+        if self.source_df is None or self.target_df is None:
+            raise ValueError(
+                "Source and target dataframes must be loaded before importing mappings."
+            )
+
+        if "value_matches" not in self.cached_candidates:
+            self._initialize_value_matches()
+
+        aggregated: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
+        skipped_rows = 0
+        accept_ops = 0
+        value_ops = 0
+
+        for s_attr, t_attr, s_val, t_val in mappings:
+            s = (s_attr or "").strip()
+            t = (t_attr or "").strip()
+            if not s or not t:
+                skipped_rows += 1
+                continue
+            aggregated.setdefault((s, t), []).append(
+                (
+                    "" if s_val is None else str(s_val),
+                    "" if t_val is None else str(t_val),
+                )
+            )
+
+        accepted_pairs: Set[Tuple[str, str]] = set()
+        seen_accept: Set[Tuple[str, str]] = set()
+
+        for (source_col, target_col), value_list in aggregated.items():
+            if (
+                source_col not in self.source_df.columns
+                or target_col not in self.target_df.columns
+            ):
+                skipped_rows += len(value_list)
+                continue
+
+            existing = next(
+                (
+                    c
+                    for c in self.get_cached_candidates()
+                    if c["sourceColumn"] == source_col
+                    and c["targetColumn"] == target_col
+                ),
+                None,
+            )
+            initial_status = (
+                existing["status"] if existing and "status" in existing else "idle"
+            )
+
+            candidate = {
+                "sourceColumn": source_col,
+                "targetColumn": target_col,
+                "score": 1.0,
+                "matcher": "import",
+                "status": initial_status,
+            }
+            if existing is None:
+                self.append_cached_candidate(candidate)
+
+            if (source_col, target_col) not in seen_accept:
+                try:
+                    refs = [
+                        c
+                        for c in self.get_cached_candidates()
+                        if c["sourceColumn"] == source_col
+                    ]
+                    self.apply_operation("accept", candidate, refs, False)
+                    accept_ops += 1
+                except Exception:
+                    self.accept_cached_candidate(candidate)
+                accepted_pairs.add((source_col, target_col))
+                seen_accept.add((source_col, target_col))
+
+            batch_value_mappings = [
+                {"from": s_val, "to": t_val}
+                for s_val, t_val in value_list
+                if str(s_val).strip() != "" or str(t_val).strip() != ""
+            ]
+            if batch_value_mappings:
+                try:
+                    self.apply_operation(
+                        "map_target_value",
+                        candidate,
+                        [],
+                        False,
+                        batch_value_mappings,
+                    )
+                except Exception:
+                    # Fallback: apply directly to preserve data even if history misses it
+                    for vm in batch_value_mappings:
+                        self._upsert_value_mapping(
+                            source_col, target_col, vm["from"], vm["to"]
+                        )
+                value_ops += len(batch_value_mappings)
+
+        self._export_cache_to_json(self.cached_candidates)
+        return {
+            "accepted_pairs": len(accepted_pairs),
+            "accept_operations": accept_ops,
+            "value_operations": value_ops,
+            "acceptedPairs": len(accepted_pairs),
+            "value_updates": value_ops,
+            "valueUpdates": value_ops,
+            "skipped_rows": skipped_rows,
+        }
 
 
 class UserOperationHistory:
