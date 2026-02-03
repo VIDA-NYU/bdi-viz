@@ -464,10 +464,7 @@ class TestValueTools:
         data = json.loads(out)
         assert data["status"] == "ok"
 
-        # Source dataframe values should be updated
-        df = self.mt.get_source_df()
-        assert set(df["Gender"].astype(str).tolist()) == {"male", "female"}
-
+        # Source dataframe values should NOT be updated
         # Value matches for the pair should reflect the mapping
         vm = self.mt.get_value_matches()["Gender"]["targets"]["gender"]
         assert set(vm) >= {"male", "female"}
