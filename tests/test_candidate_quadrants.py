@@ -83,3 +83,21 @@ def test_nan_source_skips_value_matches(monkeypatch):
 
     numeric_df = cq.get_potential_numeric_target_df()
     assert list(numeric_df.columns) == ["C_t"]
+
+
+def test_unrelated_and_no_potential_target_df(monkeypatch):
+    cq, _source, _target = _make_quadrant_fixture(monkeypatch)
+
+    # Unrelated columns live in the low/low quadrant (index 0).
+    cq._quadrants = {
+        "A": [
+            [("T1", 0.1, 0.1), ("T1", 0.2, 0.2), ("T2", 0.1, 0.1)],
+            [],
+            [],
+            [],
+        ]
+    }
+    assert cq.get_unrelated_columns("A") == ["T1", "T2"]
+
+    cq._quadrants = {"A": [[], [], [], []]}
+    assert cq.get_potential_target_df("A") is None
