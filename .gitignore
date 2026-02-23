@@ -110,3 +110,7 @@ api/sessions/default/task_state/*.json
 # But remove api/sessions/default/chroma_db
 api/sessions/default/chroma_db
 **/api/sessions/default/chroma_db
+
+# kubernetes
+.kube/config*
+.kube/secret*
