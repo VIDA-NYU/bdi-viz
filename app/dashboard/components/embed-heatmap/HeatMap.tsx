@@ -18,7 +18,7 @@ import SettingsGlobalContext from "@/app/lib/settings/settings-context";
 import HierarchicalColumnViz from "./axis/space-filling/HierarchyColumnViz";
 import SourceHierarchyColumnViz from "./axis/space-filling/SourceHierarchyColumnViz";
 import CellCommentDialog, { CellComment } from "../comments/CellCommentDialog";
-import { listAllCellCommentsMap, listCellComments, addCellComment, clearCellComments as apiClearCellComments, setCellComments as apiSetCellComments } from "@/app/lib/heatmap/heatmap-helper";
+import { listAllCellCommentsMap, addCellComment, clearCellComments as apiClearCellComments, setCellComments as apiSetCellComments } from "@/app/lib/heatmap/heatmap-helper";
 import { useSession } from "@/app/lib/settings/session";
 
 interface HeatMapProps {
@@ -82,6 +82,32 @@ const HeatMap: React.FC<HeatMapProps> = ({
   }, [globalCandidateHighlight, selectedCandidate, hoverMode]);
 
   const { svgHeight, svgWidth, ref: svgRef } = useResizedSVGRef();
+
+  const getChartPointFromClient = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return undefined;
+
+    // Prefer proper SVG coordinate transforms to avoid brittle layout offsets.
+    try {
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      const ctm = svg.getScreenCTM();
+      if (ctm) {
+        const svgPoint = pt.matrixTransform(ctm.inverse());
+        return { x: svgPoint.x - MARGIN.left, y: svgPoint.y - MARGIN.top };
+      }
+    } catch {
+      // fall back below
+    }
+
+    try {
+      const rect = svg.getBoundingClientRect();
+      return { x: clientX - rect.left - MARGIN.left, y: clientY - rect.top - MARGIN.top };
+    } catch {
+      return undefined;
+    }
+  }, [svgRef]);
 
   const dimensions = useMemo(() => ({
     width: svgWidth,
@@ -154,7 +180,6 @@ const HeatMap: React.FC<HeatMapProps> = ({
   const openCommentFor = useCallback((data: AggregatedCandidate) => {
     setActiveCell(data);
     const key = getCellKey(data.sourceColumn, data.targetColumn);
-    const arr = cellComments[key] || [];
     setCommentDraft("");
     setCommentOpen(true);
   }, [cellComments, getCellKey]);
@@ -162,7 +187,7 @@ const HeatMap: React.FC<HeatMapProps> = ({
   const handleSaveComment = useCallback(() => {
     if (!activeCell) return;
     const trimmed = commentDraft.trim();
-    if (!trimmed) { setCommentOpen(false); return; }
+    if (!trimmed) return;
     (async () => {
       try {
         const updated = await addCellComment(activeCell.sourceColumn, activeCell.targetColumn, trimmed);
@@ -250,8 +275,9 @@ const HeatMap: React.FC<HeatMapProps> = ({
           onMouseMove={(e) => {
             hideTooltip();
             setGlobalCandidateHighlight(undefined);
-            const xCol = getXColumn(e.clientX);
-            const yCol = getYColumn(e.clientY);
+            const p = getChartPointFromClient(e.clientX, e.clientY);
+            const xCol = p ? getXColumn(p.x) : undefined;
+            const yCol = p ? getYColumn(p.y) : undefined;
             setHoveredTargetColumn(xCol);
             setHoveredSourceColumn(yCol);
           }}
@@ -260,10 +286,9 @@ const HeatMap: React.FC<HeatMapProps> = ({
             setHoveredSourceColumn(undefined);
           }}
           onClick={(e) => {
-            const mousePositionX = e.clientX;
-            const mousePositionY = e.clientY;
-            const xColumn = getXColumn(mousePositionX);
-            const yColumn = getYColumn(mousePositionY);
+            const p = getChartPointFromClient(e.clientX, e.clientY);
+            const xColumn = p ? getXColumn(p.x) : undefined;
+            const yColumn = p ? getYColumn(p.y) : undefined;
             if (xColumn && yColumn) {
               createCandidate({ sourceColumn: yColumn, targetColumn: xColumn, score: 1 });
             }
@@ -404,6 +429,15 @@ const HeatMap: React.FC<HeatMapProps> = ({
           arrow
           placement="top"
           describeChild
+          disableInteractive
+          slotProps={{
+            popper: {
+              sx: { pointerEvents: "none" },
+            },
+            tooltip: {
+              sx: { pointerEvents: "none" },
+            },
+          }}
           title={
             <Box
               sx={{

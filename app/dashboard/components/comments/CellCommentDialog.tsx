@@ -1,10 +1,9 @@
 "use client";
 
 import React from "react";
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Box, Chip, IconButton, InputAdornment, Paper, Typography } from "@mui/material";
+import { Dialog, DialogTitle, DialogContent, Button, TextField, Box, Chip, IconButton, Divider, List, ListItem, ListItemText, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import SendIcon from "@mui/icons-material/Send";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
@@ -48,106 +47,153 @@ const CellCommentDialog: React.FC<CellCommentDialogProps> = ({
           justifyContent: "space-between",
           gap: 1,
           borderBottom: 1,
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
+          borderColor: "divider",
+          bgcolor: "background.paper",
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 500 }}>
-            Comment
-          </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" sx={{ fontSize: "1rem", fontWeight: 600, lineHeight: 1.2 }}>
+              Comments
+            </Typography>
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              {comments.length} {comments.length === 1 ? "comment" : "comments"}
+            </Typography>
+          </Box>
           {sourceColumn && targetColumn && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0, flexWrap: "wrap" }}>
               <Chip size="small" color="primary" label={sourceColumn} />
-              <ArrowForwardIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+              <ArrowForwardIcon sx={{ fontSize: 16, color: "text.secondary" }} />
               <Chip size="small" color="secondary" label={targetColumn} />
             </Box>
           )}
         </Box>
+        <Tooltip title="Close">
+          <IconButton aria-label="Close comments" onClick={onCancel} size="small">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </DialogTitle>
-      <DialogContent sx={{ py: 0, px: 1 }}>
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <Box sx={{
-            maxHeight: 260,
-            overflowY: 'auto',
-            p: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-          }}>
-            {comments.length === 0 ? (
-              <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+      <DialogContent
+        sx={{
+          p: 0,
+          display: "flex",
+          flexDirection: "column",
+          height: 480,
+          bgcolor: theme.palette.background.paper,
+        }}
+      >
+        <Box
+          sx={{
+            flex: 1,
+            overflowY: "auto",
+            px: 2,
+            py: 1.5,
+            bgcolor: theme.palette.background.default,
+          }}
+        >
+          {comments.length === 0 ? (
+            <Box
+              sx={{
+                border: `1px dashed ${theme.palette.divider}`,
+                borderRadius: 2,
+                p: 3,
+                textAlign: "center",
+                color: "text.secondary",
+                bgcolor: theme.palette.background.paper,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
                 No comments yet
               </Typography>
-            ) : (
-              comments.map((c, idx) => (
-                <Box key={idx} sx={{ display: 'flex' }}>
-                  <Paper elevation={0} sx={{ p: 1.25, backgroundColor: 'action.hover', borderRadius: 1.5, width: '100%', position: 'relative' }}>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', pr: 4 }}>{c.text}</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {new Date(c.createdAt).toLocaleString()}
-                    </Typography>
-                    {onDeleteComment && (
-                      <IconButton
-                        size="small"
-                        aria-label="Delete comment"
-                        onClick={() => onDeleteComment(idx)}
-                        sx={{ position: 'absolute', top: 4, right: 4 }}
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    )}
-                  </Paper>
-                </Box>
-              ))
-            )}
-          </Box>
+              <Typography variant="caption">Add the first comment below.</Typography>
+            </Box>
+          ) : (
+            <List disablePadding sx={{ bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 2 }}>
+              {comments.map((c, idx) => (
+                <React.Fragment key={idx}>
+                  <ListItem
+                    alignItems="flex-start"
+                    sx={{
+                      py: 1.25,
+                      px: 1.5,
+                      gap: 1,
+                    }}
+                    secondaryAction={
+                      onDeleteComment ? (
+                        <Tooltip title="Delete">
+                          <IconButton edge="end" aria-label="Delete comment" size="small" onClick={() => onDeleteComment(idx)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : undefined
+                    }
+                  >
+                    <ListItemText
+                      primary={
+                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                          {c.text}
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                          {new Date(c.createdAt).toLocaleString()}
+                        </Typography>
+                      }
+                      sx={{ m: 0, pr: onDeleteComment ? 4 : 0 }}
+                    />
+                  </ListItem>
+                  {idx !== comments.length - 1 && <Divider component="li" />}
+                </React.Fragment>
+              ))}
+            </List>
+          )}
+        </Box>
+
+        <Divider />
+
+        <Box sx={{ px: 2, py: 1.5, bgcolor: theme.palette.background.paper }}>
+          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+            Add a comment
+          </Typography>
           <TextField
             autoFocus
-            margin="dense"
-            label="Add a comment"
-            type="text"
             fullWidth
             multiline
             minRows={3}
+            placeholder="Write a comment…"
             value={draft}
             onChange={(e) => onDraftChange(e.target.value)}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    onClick={onClear}
-                    disabled={!draft.trim()}
-                    aria-label="Clear comment"
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    color="primary"
-                    onClick={onSave}
-                    disabled={!draft.trim()}
-                  >
-                    <SendIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ),
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") onSave();
             }}
           />
+          <Box sx={{ mt: 1, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              Press Ctrl/⌘ + Enter to post
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1 }}>
+              {onClearAll && comments.length > 0 && (
+                <Button color="error" variant="text" onClick={onClearAll}>
+                  Clear all
+                </Button>
+              )}
+              <Button onClick={onClear} disabled={!draft.trim()}>
+                Clear
+              </Button>
+              <Button onClick={onCancel} variant="outlined">
+                Close
+              </Button>
+              <Button onClick={onSave} variant="contained" disabled={!draft.trim()}>
+                Post
+              </Button>
+            </Box>
+          </Box>
         </Box>
       </DialogContent>
-      <DialogActions>
-        {onClearAll && comments.length > 0 && (
-          <Button color="error" onClick={onClearAll}>Clear all</Button>
-        )}
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button onClick={onSave} variant="contained">Save</Button>
-      </DialogActions>
     </Dialog>
   );
 };
 
 export default CellCommentDialog;
-
 
