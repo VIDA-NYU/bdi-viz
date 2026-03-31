@@ -43,8 +43,11 @@ npm run build && LLM_PROVIDER=openai npm run start
 - User manual: [Read the Docs](https://vida-nyu.github.io/bdi-viz-manual/)
 - Published paper: [IEEE Computer Society Digital Library](https://www.computer.org/csdl/journal/tg/2026/01/11299421/2cojjOAcRCo)
 - Repository docs and bundled assets: [`docs/`](docs/)
-- Camera-ready paper PDF: [`docs/2025_VIS_BDIViz_Camera_Ready.pdf`](docs/2025_VIS_BDIViz_Camera_Ready.pdf)
-- Demo video: [`docs/bdiviz_video.mp4`](docs/bdiviz_video.mp4)
+- TVCG camera-ready paper PDF: [`docs/2025_VIS_BDIViz_Camera_Ready.pdf`](docs/2025_VIS_BDIViz_Camera_Ready.pdf)
+- TVCG demo video: [`docs/bdiviz_video.mp4`](docs/bdiviz_video.mp4)
+- SIGMOD Demo 2026 paper PDF: [`docs/_SIGMOD_2026_Demo__BDIViz.pdf`](docs/_SIGMOD_2026_Demo__BDIViz.pdf)
+- SIGMOD Demo 2026 video: [`docs/bdiviz_sigmod_demo_2026_w_sub.mp4`](docs/bdiviz_sigmod_demo_2026_w_sub.mp4)
+- SIGMOD Demo 2026 video mirror: [Google Drive](https://drive.google.com/file/d/1gbyijnJfJMTqUJka081qtpet29Rt8hWS/view?usp=drive_link)
 
 ## :gear: Introduction
 
