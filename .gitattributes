@@ -1,1 +1,2 @@
 docs/bdiviz_video.mp4 filter=lfs diff=lfs merge=lfs -text
+docs/bdiviz_sigmod_demo_2026_w_sub.mp4 filter=lfs diff=lfs merge=lfs -text
