@@ -1,6 +1,6 @@
 <h1 align="center">BDIViz: An Interactive Visualization System for Biomedical Schema Matching with LLM-Powered Validation</h2>
 
-[![read-the-docs](https://img.shields.io/badge/User_Manual-Read_the_Docs-blue?style=for-the-badge&logo=read-the-docs)](https://vida-nyu.github.io/bdi-viz-manual/) [![paper-arxiv](https://img.shields.io/badge/Paper-IEEE_VIS_2025-brown?style=for-the-badge&logo=arxiv)](https://arxiv.org/abs/2507.16117)
+[![read-the-docs](https://img.shields.io/badge/User_Manual-Read_the_Docs-blue?style=for-the-badge&logo=read-the-docs)](https://vida-nyu.github.io/bdi-viz-manual/) [![paper-ieee](https://img.shields.io/badge/Paper-IEEE_TVCG_2026-brown?style=for-the-badge&logo=ieee)](https://www.computer.org/csdl/journal/tg/2026/01/11299421/2cojjOAcRCo)
 
 [![docker-amd64-portkey](https://img.shields.io/badge/docker-amd64_gemini-lightblue?style=for-the-badge&logo=docker)](https://hub.docker.com/layers/edenwu/bdi-viz-react/amd64/images/sha256-be8167ca3bb406e0d704a9805cb990e5cde04fd929ac23c51e13e5aed6c6d901) [![docker-arm64-portkey](https://img.shields.io/badge/docker-arm64_gemini-lightblue?style=for-the-badge&logo=docker)](https://hub.docker.com/layers/edenwu/bdi-viz-react/arm64/images/sha256-dfedf5a2c525182c65e3b30b31c0fe2e986a98cb9b17d1c9c876479bfee39800)
   
@@ -10,9 +10,11 @@
 ## Table of Contents
 
 * [1. Environment Setup](#gear-getting-started)
-* [2. Introduction](#gear-introduction)
-* [3. Features](#gear-features)
-* [4. Demo](#camera-demo)
+* [2. Documentation](#books-documentation)
+* [3. Introduction](#gear-introduction)
+* [4. Features](#gear-features)
+* [5. Demo](#camera-demo)
+* [6. Citation](#bookmark-citation)
 
 
 ## :gear: Getting Started
@@ -36,6 +38,13 @@ To run locally with GPT-4.1-mini, run:
 npm run build && LLM_PROVIDER=openai npm run start
 ```
 
+## :books: Documentation
+
+- User manual: [Read the Docs](https://vida-nyu.github.io/bdi-viz-manual/)
+- Published paper: [IEEE Computer Society Digital Library](https://www.computer.org/csdl/journal/tg/2026/01/11299421/2cojjOAcRCo)
+- Repository docs and bundled assets: [`docs/`](docs/)
+- Camera-ready paper PDF: [`docs/2025_VIS_BDIViz_Camera_Ready.pdf`](docs/2025_VIS_BDIViz_Camera_Ready.pdf)
+- Demo video: [`docs/bdiviz_video.mp4`](docs/bdiviz_video.mp4)
 
 ## :gear: Introduction
 
@@ -59,6 +68,29 @@ Video demo:
 
 Live Demo:
 https://bdiviz.users.hsrn.nyu.edu/dashboard/
+
+## :bookmark: Citation
+
+If you use BDIViz in academic work, please cite the following paper:
+
+```bibtex
+@ARTICLE{wu2026bdiviz,
+author={Wu, Eden and Turakhia, Dishita G and Wu, Guande and Koutras, Christos and Keegan, Sarah and Liu, Wenke and Szeitz, Beata and Fenyo, David and Silva, Claudio T. and Freire, Juliana},
+journal={ IEEE Transactions on Visualization \& Computer Graphics },
+title={{ BDIViz: An Interactive Visualization System for Biomedical Schema Matching with LLM-Powered Validation }},
+year={2026},
+volume={32},
+number={01},
+ISSN={1941-0506},
+pages={1208-1218},
+abstract={ Biomedical data harmonization is essential for enabling exploratory analyses and meta-studies, but the process of schema matching-identifying semantic correspondences between elements of disparate datasets (schemas)-remains a labor-intensive and error-prone task. Even state-of-the-art automated methods often yield low accuracy when applied to biomedical schemas due to the large number of attributes and nuanced semantic differences between them. We present BDIViz, a novel visual analytics system designed to streamline the schema matching process for biomedical data. Through formative studies with domain experts, we identified key requirements for an effective solution and developed interactive visualization techniques that address both scalability challenges and semantic ambiguity. BDIViz employs an ensemble approach that combines multiple matching methods with LLM-based validation, summarizes matches through interactive heatmaps, and provides coordinated views that enable users to quickly compare attributes and their values. Our method-agnostic design allows the system to integrate various schema matching algorithms and adapt to application-specific needs. Through two biomedical case studies and a within-subject user study with domain experts, we demonstrate that BDIViz significantly improves matching accuracy while reducing cognitive load and curation time compared to baseline approaches. },
+keywords={Semantics;Data visualization;Bioinformatics;Accuracy;Visual analytics;Scalability;Graphical user interfaces;Cancer;Space heating;User centered design},
+doi={10.1109/TVCG.2025.3634843},
+url = {https://doi.ieeecomputersociety.org/10.1109/TVCG.2025.3634843},
+publisher={IEEE Computer Society},
+address={Los Alamitos, CA, USA},
+month=jan}
+```
 
 
 <!-- ## :gear: Sequence Diagram
