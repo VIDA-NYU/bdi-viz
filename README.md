@@ -65,9 +65,12 @@ npm run build && LLM_PROVIDER=openai npm run start
 - 📤 **Export Curated Mappings** as JSON or CSV for downstream use
 
 ## :camera: Demo
-Video demo: 
+Video demo of VIS paper:: 
 [![BDIViz Demo](https://img.youtube.com/vi/1eAbDicO0oXIbbVg56m3H8xdNDDsBGBLI/0.jpg)](https://drive.google.com/file/d/1RY3XjRmLIkBNjcZWkUZhG3vA-ZvPc6Ug/view?usp=drive_link)
 <!-- [BDIViz Demo](https://drive.google.com/file/d/1eAbDicO0oXIbbVg56m3H8xdNDDsBGBLI/view?usp=drive_link) -->
+
+Video demo of SIGMOD demo paper: 
+[![BDIViz SIGMOD Demo](https://img.youtube.com/vi/1gbyijnJfJMTqUJka081qtpet29Rt8hWS/0.jpg)](https://drive.google.com/file/d/1gbyijnJfJMTqUJka081qtpet29Rt8hWS/view?usp=drive_link)
 
 Live Demo:
 https://bdiviz.users.hsrn.nyu.edu/dashboard/
