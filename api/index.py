@@ -1016,6 +1016,16 @@ def get_unique_values():
             else:
                 target = pd.read_csv(GDC_DATA_PATH)
             matching_task.update_dataframe(source_df=source, target_df=target)
+
+    if matching_task.source_df is None or matching_task.target_df is None:
+        return {
+            "message": "success",
+            "results": {
+                "sourceUniqueValues": [],
+                "targetUniqueValues": [],
+            },
+        }
+
     results = matching_task.unique_values_to_frontend_json()
 
     return {"message": "success", "results": results}

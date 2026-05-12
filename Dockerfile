@@ -1,5 +1,5 @@
 # ---- Production Stage ----
-FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.9-nodejs20 as prod
+FROM --platform=linux/amd64 nikolaik/python-nodejs:python3.11-nodejs20 as prod
 
 WORKDIR /home/bdi-viz-react/
 
@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     redis \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g pnpm
+RUN corepack prepare pnpm@9.14.4 --activate
 
 COPY package.json ./
 COPY pnpm-lock.yaml ./
@@ -47,6 +47,7 @@ RUN mkdir -p /home/bdi-viz-react/.cache/redis && chown -R yfw215:yfw215 /home/bd
 RUN touch /home/bdi-viz-react/celery.log && chown yfw215:yfw215 /home/bdi-viz-react/celery.log
 
 USER yfw215
+RUN corepack prepare pnpm@9.14.4 --activate
 
 ENV NODE_ENV=production \
     PATH="${PATH}:/home/yfw215/.local/bin" \
