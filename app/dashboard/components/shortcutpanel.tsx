@@ -40,7 +40,7 @@ const ShortcutGroup = styled(Box)(({ theme }) => ({
   gap: theme.spacing(0.2),
   backgroundColor: theme.palette.grey[300],
   padding: theme.spacing(0.5, 1),
-  borderRadius: theme.shape.borderRadius * 2,
+  borderRadius: Number(theme.shape.borderRadius) * 2,
   alignItems: "center",
   flexWrap: "wrap",
 }));

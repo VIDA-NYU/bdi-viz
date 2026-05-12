@@ -317,7 +317,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                   key={index}
                   sx={{ mb: index < paramItems.length - 1 ? 2 : 0 }}
                 >
-                  <Grid item xs={5}>
+                  <Grid size={5}>
                     <TextField
                       fullWidth
                       size="small"
@@ -339,7 +339,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                       }}
                     />
                   </Grid>
-                  <Grid item xs={5}>
+                  <Grid size={5}>
                     <TextField
                       fullWidth
                       size="small"
@@ -358,11 +358,7 @@ const NewMatcherDialog = forwardRef<HTMLDivElement, NewMatcherDialogProps>(
                       }}
                     />
                   </Grid>
-                  <Grid
-                    item
-                    xs={2}
-                    sx={{ display: "flex", alignItems: "center" }}
-                  >
+                  <Grid size={2} sx={{ display: "flex", alignItems: "center" }}>
                     <IconButton
                       onClick={() => handleRemoveParam(index)}
                       disabled={index === 0}
