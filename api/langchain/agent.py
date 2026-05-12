@@ -6,7 +6,6 @@ from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import pandas as pd
 from dotenv import load_dotenv
-from portkey_ai import createHeaders
 
 # Only set pandas display options when needed, not at module level
 # pd.set_option("display.max_columns", None)
@@ -33,6 +32,7 @@ from .pydantic import (
     Ontology,
     RelatedSources,
 )
+from .portkey_chat import build_portkey_chat_model
 
 logger = logging.getLogger("bdiviz_flask.sub")
 
@@ -46,6 +46,28 @@ try:
     _ONTOLOGY_LOADING_SESSIONS = set()
 except Exception:
     pass
+
+
+def _build_llm_model() -> BaseChatModel:
+    llm_provider = os.getenv("LLM_PROVIDER", "portkey").lower()
+
+    if llm_provider == "portkey":
+        return build_portkey_chat_model(max_retries=3)
+
+    if llm_provider == "openai":
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is required when LLM_PROVIDER=openai"
+            )
+
+        return ChatOpenAI(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            temperature=0,
+            api_key=openai_api_key,
+        )
+
+    raise ValueError(f"Invalid LLM provider: {llm_provider}")
 
 
 class Agent:
@@ -92,12 +114,8 @@ class Agent:
 
     @property
     def llm(self):
-        # Lazy initialization of LLM to save resources
         if self._llm is None:
-            if self._llm_model is not None:
-                self._llm = self._llm_model
-            else:
-                self._llm = ChatOpenAI(model="gpt-5-nano", temperature=0)
+            self._llm = self._llm_model or _build_llm_model()
         return self._llm
 
     def explain(
@@ -577,30 +595,9 @@ AGENTS: Dict[str, Agent] = {}
 def get_agent(memory_retriever: MemoryRetriever, session_id: str = "default") -> Agent:
     global AGENTS
     if session_id not in AGENTS:
-        llm_provider = os.getenv("LLM_PROVIDER", "portkey")
-        docker_env = os.getenv("DOCKER_ENV", "local")
-        if llm_provider == "portkey":
-            portkey_headers = createHeaders(
-                api_key=os.getenv("PORTKEY_API_KEY"),
-                metadata={"_user": "yfw215"},
-            )
-            llm_model = ChatOpenAI(
-                model="@vertexai/gemini-2.5-flash",
-                temperature=0,
-                base_url=(
-                    "https://portkey-lb.rt.nyu.edu/v1/"
-                    if docker_env == "hsrn"
-                    else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
-                ),
-                default_headers=portkey_headers,
-                timeout=1000,
-                max_retries=3,
-            )
-        elif llm_provider == "openai":
-            llm_model = ChatOpenAI(model="gpt-5-nano")
-        else:
-            raise ValueError(f"Invalid LLM provider: {llm_provider}")
         AGENTS[session_id] = Agent(
-            memory_retriever, llm_model=llm_model, session_id=session_id
+            memory_retriever,
+            llm_model=_build_llm_model(),
+            session_id=session_id,
         )
     return AGENTS[session_id]

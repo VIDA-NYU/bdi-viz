@@ -18,10 +18,10 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import create_react_agent
-from portkey_ai import createHeaders
 from pydantic import BaseModel, Field
 
 from ..langchain.memory import MemoryRetriever
+from ..langchain.portkey_chat import build_portkey_chat_model
 from ..tools.candidate_tools import CandidateTools
 from ..tools.query_tools import QueryTools
 from ..tools.task_tools import TaskTools
@@ -111,38 +111,15 @@ class LangGraphAgent:
     ):
         # Configurable timeout from environment or default to 1000 seconds
         llm_timeout = int(os.getenv("LLM_TIMEOUT", "1000"))
-        llm_provider = os.getenv("LLM_PROVIDER", "portkey")
-        docker_env = os.getenv("DOCKER_ENV", "local")
+        llm_provider = os.getenv("LLM_PROVIDER", "portkey").lower()
 
         if llm_provider == "portkey":
-            portkey_headers = createHeaders(
-                api_key=os.getenv("PORTKEY_API_KEY"),
-                metadata={"_user": "yfw215"},
-            )
-
-            self.master_llm = ChatOpenAI(
-                model="@vertexai/gemini-2.5-pro",
-                temperature=0,
-                # If env var is set to "hsrn" use https://portkey-lb.rt.nyu.edu/v1/, else use https://ai-gateway.apps.cloud.rt.nyu.edu/v1/
-                base_url=(
-                    "https://portkey-lb.rt.nyu.edu/v1/"
-                    if docker_env == "hsrn"
-                    else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
-                ),
-                default_headers=portkey_headers,
-                timeout=llm_timeout,
+            self.master_llm = build_portkey_chat_model(
+                request_timeout_seconds=llm_timeout,
                 max_retries=retries,
             )
-            self.worker_llm = ChatOpenAI(
-                model="@vertexai/gemini-2.5-flash",
-                temperature=0,
-                base_url=(
-                    "https://portkey-lb.rt.nyu.edu/v1/"
-                    if docker_env == "hsrn"
-                    else "https://ai-gateway.apps.cloud.rt.nyu.edu/v1/"
-                ),
-                default_headers=portkey_headers,
-                timeout=llm_timeout,
+            self.worker_llm = build_portkey_chat_model(
+                request_timeout_seconds=llm_timeout,
                 max_retries=retries,
             )
         elif llm_provider == "openai":
