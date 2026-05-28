@@ -15,11 +15,15 @@ from pydantic import Field, PrivateAttr
 
 load_dotenv()
 
-DEFAULT_PORTKEY_MODEL = "@vertexai/gemini-3-flash-preview"
+DEFAULT_PORTKEY_MODEL = "@vertexai/gemini-3.1-flash-lite"
 DEFAULT_PORTKEY_USER = "yfw215"
 
 
 def _portkey_base_url() -> str:
+    base_url = os.getenv("PORTKEY_BASE_URL")
+    if base_url is not None:
+        return base_url
+
     return (
         "https://portkey-lb.rt.nyu.edu/v1/"
         if os.getenv("DOCKER_ENV", "local").lower() == "hsrn"
