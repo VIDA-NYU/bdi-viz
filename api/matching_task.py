@@ -1805,8 +1805,13 @@ class MatchingTask:
         target_description = load_property(
             target_col, is_target=True, session=self.session_name
         )
-        if target_description and "enum" in target_description:
-            target_values = target_description["enum"] or []
+        # Only trust the ontology enum when it actually has values. LLM-inferred
+        # ontologies always include an "enum" key (null for non-categorical
+        # columns), so a key-presence check would wrongly suppress dataframe
+        # values and leave the value-oriented view with no target values.
+        enum_values = target_description.get("enum") if target_description else None
+        if enum_values:
+            target_values = enum_values
         elif self.target_df is not None and target_col in self.target_df.columns:
             target_values = self.target_df[target_col].dropna().unique().tolist()
         else:
